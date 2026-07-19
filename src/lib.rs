@@ -1,14 +1,19 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! Ergonomic, hard-to-misuse Rust API for macOS code signing.
+//!
+//! Signing actions are built with a fluent [`codesign::Codesign`] builder and
+//! executed by `.await`ing them:
+//!
+//! ```no_run
+//! # async fn run() -> Result<(), signers::Error> {
+//! use signers::codesign::Codesign;
+//!
+//! Codesign::sign("MyApp.app").force(true).identity("-").await?;
+//! # Ok(()) }
+//! ```
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub mod codesign;
+pub mod errors;
+pub mod target;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use errors::{Error, Result};
+pub use target::IntoTargets;

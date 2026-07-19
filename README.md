@@ -54,7 +54,7 @@ Not yet published on crates.io.
 
 Early development, built one feature at a time:
 
-- [ ] Project setup
+- [x] Project setup
 - [ ] `codesign` async API
 - [ ] `codesign` blocking API
 - [ ] `rcodesign` blocking API
