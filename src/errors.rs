@@ -40,8 +40,5 @@ pub enum Error {
     /// The `codesign` process ran but exited unsuccessfully; `stderr` holds its
     /// captured (trimmed) diagnostic output.
     #[error("`codesign` exited unsuccessfully ({status}): {stderr}")]
-    Codesign {
-        status: ExitStatus,
-        stderr: String,
-    },
+    Codesign { status: ExitStatus, stderr: String },
 }
