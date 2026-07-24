@@ -25,60 +25,31 @@ use std::path::{Path, PathBuf};
 /// empty resulting list into an error rather than acting on nothing.
 ///
 /// Note: array literals such as `&["a", "b"]` do not coerce to `&[T]` on their
-/// own — pass a `Vec` (`vec!["a", "b"]`) or slice them explicitly (`&["a", "b"][..]`).
+/// own — pass a `Vec` (`vec!["a", "b"]`) or slice them explicitly (`&["a", "b"][...]`).
 pub trait IntoTargets {
     fn into_targets(self) -> Vec<PathBuf>;
 }
 
-impl IntoTargets for &str {
-    fn into_targets(self) -> Vec<PathBuf> {
-        if self.is_empty() {
-            Vec::new()
-        } else {
-            vec![PathBuf::from(self)]
-        }
-    }
+/// Implements [`IntoTargets`] for a single-path type convertible into [`PathBuf`],
+/// dropping the result if it's empty instead of returning a one-element vector.
+macro_rules! impl_target {
+    ($($ty:ty),+ $(,)?) => {
+        $(
+            impl IntoTargets for $ty {
+                fn into_targets(self) -> Vec<PathBuf> {
+                    let path: PathBuf = self.into();
+                    if path.as_os_str().is_empty() {
+                        Vec::new()
+                    } else {
+                        vec![path]
+                    }
+                }
+            }
+        )+
+    };
 }
 
-impl IntoTargets for String {
-    fn into_targets(self) -> Vec<PathBuf> {
-        if self.is_empty() {
-            Vec::new()
-        } else {
-            vec![PathBuf::from(self)]
-        }
-    }
-}
-
-impl IntoTargets for OsString {
-    fn into_targets(self) -> Vec<PathBuf> {
-        if self.is_empty() {
-            Vec::new()
-        } else {
-            vec![PathBuf::from(self)]
-        }
-    }
-}
-
-impl IntoTargets for &Path {
-    fn into_targets(self) -> Vec<PathBuf> {
-        if self.as_os_str().is_empty() {
-            Vec::new()
-        } else {
-            vec![self.to_path_buf()]
-        }
-    }
-}
-
-impl IntoTargets for PathBuf {
-    fn into_targets(self) -> Vec<PathBuf> {
-        if self.as_os_str().is_empty() {
-            Vec::new()
-        } else {
-            vec![self]
-        }
-    }
-}
+impl_target!(&str, String, OsString, &Path, PathBuf);
 
 impl<T: Into<PathBuf>> IntoTargets for Vec<T> {
     fn into_targets(self) -> Vec<PathBuf> {
@@ -117,7 +88,10 @@ mod tests {
     fn collection_targets() {
         let expected = vec![PathBuf::from("a"), PathBuf::from("b")];
         assert_eq!(vec!["a", "b"].into_targets(), expected);
-        assert_eq!(vec![PathBuf::from("a"), PathBuf::from("b")].into_targets(), expected);
+        assert_eq!(
+            vec![PathBuf::from("a"), PathBuf::from("b")].into_targets(),
+            expected
+        );
 
         let slice: &[&str] = &["a", "b"];
         assert_eq!(slice.into_targets(), expected);

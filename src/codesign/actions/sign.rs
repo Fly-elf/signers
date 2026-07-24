@@ -1,259 +1,98 @@
 //! The signing action (`codesign --sign`).
 
-use std::collections::BTreeSet;
-use std::ffi::OsString;
+use std::borrow::Cow;
+use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
 
-use super::Action;
+use bitflags::{Flags, bitflags};
+
 use super::sealed::Sealed;
 use crate::codesign::Codesign;
 
-/// Timestamp policy embedded in the signature (`--timestamp`).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Timestamp {
-    /// `--timestamp` — request a trusted timestamp from Apple's default server.
-    Server,
-    /// `--timestamp=<url>` — request a timestamp from a specific server.
-    ServerUrl(String),
-    /// `--timestamp=none` — do not contact any timestamp server.
-    Disabled,
-}
-
-/// A CodeDirectory option flag (`--options`).
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum SigningFlag {
-    /// `runtime` — opt into the hardened runtime (required for notarization).
-    Runtime,
-    /// `library` — enforce library validation.
-    Library,
-    /// `kill` — kill the process if its signature ever becomes invalid.
-    Kill,
-    /// `hard` — refuse to load invalidly-signed pages into the process.
-    Hard,
-    /// `expires` — honour the signature's expiration.
-    Expires,
-    /// `restrict` — restrict what the signature permits (e.g. dyld environment).
-    Restrict,
-}
-
-impl SigningFlag {
-    fn token(self) -> &'static str {
-        match self {
-            Self::Runtime => "runtime",
-            Self::Library => "library",
-            Self::Kill => "kill",
-            Self::Hard => "hard",
-            Self::Expires => "expires",
-            Self::Restrict => "restrict",
-        }
-    }
-}
-
-/// Metadata to carry over from an existing signature when re-signing
-/// (`--preserve-metadata`).
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Metadata {
-    /// Keep the existing signing identifier.
-    Identifier,
-    /// Keep the existing entitlements.
-    Entitlements,
-    /// Keep the existing internal requirements.
-    Requirements,
-    /// Keep the existing option flags.
-    Flags,
-    /// Keep the existing hardened-runtime settings.
-    Runtime,
-}
-
-impl Metadata {
-    fn token(self) -> &'static str {
-        match self {
-            Self::Identifier => "identifier",
-            Self::Entitlements => "entitlements",
-            Self::Requirements => "requirements",
-            Self::Flags => "flags",
-            Self::Runtime => "runtime",
-        }
-    }
-}
-
-/// Digest (hash) algorithm sealed into the signature (`--digest-algorithm`).
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum DigestAlgorithm {
-    /// Legacy SHA-1 digest (compatibility with very old systems).
-    Sha1,
-    /// SHA-256 digest (the modern default).
-    Sha256,
-}
-
-impl DigestAlgorithm {
-    fn token(self) -> &'static str {
-        match self {
-            Self::Sha1 => "sha1",
-            Self::Sha256 => "sha256",
-        }
-    }
-}
-
 /// Options for the signing action (`codesign --sign`).
 ///
-/// Built through [`Codesign::sign`] and its chained setters; not constructible
-/// directly.
-#[derive(Debug, Clone)]
+/// Built through [`Codesign::sign`] and its chained setters. Every option
+/// defaults to `codesign`'s own default, so a builder with no setters applied
+/// runs `codesign --sign <identity> <targets>`.
+///
+/// [`Default`] leaves the identity empty — it exists as the base the crate's
+/// own constructors build on, filling the identity in.
+#[derive(Debug, Clone, Default)]
 pub struct Sign {
     identity: String,
+
+    // Identity and requirements
+    identifier: Option<String>,
+    requirements: Option<String>,
+    prefix: Option<String>,
+    keychain: Option<PathBuf>,
+
+    // Entitlements and security
+    entitlements: Option<PathBuf>,
+    force_library_entitlements: bool,
+    generate_entitlement_der: bool,
+    options: SigningFlags,
+    runtime_version: Option<String>,
+    launch_constraint_self: Option<PathBuf>,
+    launch_constraint_parent: Option<PathBuf>,
+    launch_constraint_responsible: Option<PathBuf>,
+    library_constraint: Option<PathBuf>,
+    enforce_constraint_validity: bool,
+
+    // Signing behaviour
     force: bool,
     deep: bool,
-    dry_run: bool,
-    identifier: Option<String>,
-    prefix: Option<String>,
-    entitlements: Option<PathBuf>,
-    requirements: Option<String>,
-    keychain: Option<PathBuf>,
-    runtime_version: Option<String>,
+    preserve_metadata: PreserveMetadata,
+    page_size: Option<u32>,
     timestamp: Option<Timestamp>,
-    flags: BTreeSet<SigningFlag>,
-    preserve_metadata: BTreeSet<Metadata>,
-    digest_algorithms: BTreeSet<DigestAlgorithm>,
+    bundle_version: Option<String>,
+    strip_disallowed_xattrs: bool,
+    single_threaded_signing: bool,
+    dry_run: bool,
+
+    // Output and collateral files
+    detached: Option<PathBuf>,
+    detached_database: bool,
+    file_list: Option<PathBuf>,
 }
 
-/// Defaults geared at re-signing patched binaries: ad-hoc identity (`-`),
-/// replacing any existing signature, non-recursive, everything else unset.
-impl Default for Sign {
-    fn default() -> Self {
+impl Sign {
+    /// Signing options for `identity`, everything else left at `codesign`'s
+    /// defaults.
+    pub(crate) fn new(identity: impl Into<String>) -> Self {
         Self {
-            identity: String::from("-"),
-            force: true,
-            deep: false,
-            dry_run: false,
-            identifier: None,
-            prefix: None,
-            entitlements: None,
-            requirements: None,
-            keychain: None,
-            runtime_version: None,
-            timestamp: None,
-            flags: BTreeSet::new(),
-            preserve_metadata: BTreeSet::new(),
-            digest_algorithms: BTreeSet::new(),
+            identity: identity.into(),
+            ..Self::default()
         }
     }
 }
-
-/// Comma-joins a set of tokens in its (deterministic) sorted order.
-fn joined<T: Copy>(set: &BTreeSet<T>, token: fn(T) -> &'static str) -> String {
-    set.iter().copied().map(token).collect::<Vec<_>>().join(",")
-}
-
-impl Sealed for Sign {
-    fn args(&self, targets: &[PathBuf]) -> Vec<OsString> {
-        let mut args: Vec<OsString> = Vec::new();
-
-        args.push("--sign".into());
-        args.push(self.identity.as_str().into());
-
-        if let Some(identifier) = &self.identifier {
-            args.push("--identifier".into());
-            args.push(identifier.into());
-        }
-        if let Some(prefix) = &self.prefix {
-            args.push("--prefix".into());
-            args.push(prefix.into());
-        }
-        if let Some(entitlements) = &self.entitlements {
-            args.push("--entitlements".into());
-            args.push(entitlements.as_os_str().to_os_string());
-        }
-        if let Some(requirements) = &self.requirements {
-            args.push("--requirements".into());
-            args.push(requirements.into());
-        }
-        if let Some(keychain) = &self.keychain {
-            args.push("--keychain".into());
-            args.push(keychain.as_os_str().to_os_string());
-        }
-        if let Some(runtime_version) = &self.runtime_version {
-            args.push("--runtime-version".into());
-            args.push(runtime_version.into());
-        }
-        if !self.flags.is_empty() {
-            args.push("--options".into());
-            args.push(joined(&self.flags, SigningFlag::token).into());
-        }
-        // `--preserve-metadata` / `--digest-algorithm` / `--timestamp` take an
-        // optional argument, so getopt only accepts the `=` form.
-        if !self.preserve_metadata.is_empty() {
-            let list = joined(&self.preserve_metadata, Metadata::token);
-            args.push(format!("--preserve-metadata={list}").into());
-        }
-        if !self.digest_algorithms.is_empty() {
-            let list = joined(&self.digest_algorithms, DigestAlgorithm::token);
-            args.push(format!("--digest-algorithm={list}").into());
-        }
-        match &self.timestamp {
-            Some(Timestamp::Server) => args.push("--timestamp".into()),
-            Some(Timestamp::ServerUrl(url)) => args.push(format!("--timestamp={url}").into()),
-            Some(Timestamp::Disabled) => args.push("--timestamp=none".into()),
-            None => {}
-        }
-        if self.force {
-            args.push("--force".into());
-        }
-        if self.deep {
-            args.push("--deep".into());
-        }
-        if self.dry_run {
-            args.push("--dryrun".into());
-        }
-
-        args.extend(targets.iter().map(|t| t.as_os_str().to_os_string()));
-        args
-    }
-}
-
-impl Action for Sign {}
 
 impl Codesign<Sign> {
-    /// Signing identity: a keychain identity name/hash, or `-` for ad-hoc
-    /// (the default).
-    pub fn identity(mut self, identity: impl Into<String>) -> Self {
-        self.action.identity = identity.into();
-        self
-    }
-
-    /// Replace an existing signature rather than failing when one is present
-    /// (default: `true`).
-    pub fn force(mut self, force: bool) -> Self {
-        self.action.force = force;
-        self
-    }
-
-    /// Recursively sign nested code — frameworks, helpers, ... (default: `false`).
-    pub fn deep(mut self, deep: bool) -> Self {
-        self.action.deep = deep;
-        self
-    }
-
-    /// Perform every step except writing the signature (`--dryrun`).
-    pub fn dry_run(mut self, dry_run: bool) -> Self {
-        self.action.dry_run = dry_run;
-        self
-    }
-
-    /// Explicit signing identifier, overriding the one inferred from the target
-    /// (`--identifier`).
+    /// Explicit signing identifier, overriding the one derived from the
+    /// target's `Info.plist` or filename (`--identifier`).
     pub fn identifier(mut self, identifier: impl Into<String>) -> Self {
         self.action.identifier = Some(identifier.into());
         self
     }
 
-    /// Prefix used to form a signing identifier from the target's name
-    /// (`--prefix`).
+    /// Internal requirements to embed, as a path to a requirements file or a
+    /// literal source string prefixed with `=` (`--requirements`).
+    pub fn requirements(mut self, requirements: impl Into<String>) -> Self {
+        self.action.requirements = Some(requirements.into());
+        self
+    }
+
+    /// Prefix prepended to an implicitly derived identifier that contains no
+    /// dot, e.g. `com.example.` (`--prefix`).
     pub fn prefix(mut self, prefix: impl Into<String>) -> Self {
         self.action.prefix = Some(prefix.into());
+        self
+    }
+
+    /// Restrict the search for the signing identity to this keychain
+    /// (`--keychain`).
+    pub fn keychain(mut self, path: impl Into<PathBuf>) -> Self {
+        self.action.keychain = Some(path.into());
         self
     }
 
@@ -263,22 +102,111 @@ impl Codesign<Sign> {
         self
     }
 
-    /// Internal requirements, as a requirement string or `=file`/`@file`
-    /// reference (`--requirements`).
-    pub fn requirements(mut self, requirements: impl Into<String>) -> Self {
-        self.action.requirements = Some(requirements.into());
+    /// Embed the entitlements in libraries too, not just in main executables
+    /// (`--force-library-entitlements`).
+    pub fn force_library_entitlements(mut self, force_library_entitlements: bool) -> Self {
+        self.action.force_library_entitlements = force_library_entitlements;
         self
     }
 
-    /// Keychain to search for the signing identity (`--keychain`).
-    pub fn keychain(mut self, path: impl Into<PathBuf>) -> Self {
-        self.action.keychain = Some(path.into());
+    /// Embed the entitlements as both XML and DER
+    /// (`--generate-entitlement-der`); already the default since macOS 12.
+    pub fn generate_entitlement_der(mut self, generate_entitlement_der: bool) -> Self {
+        self.action.generate_entitlement_der = generate_entitlement_der;
         self
     }
 
-    /// Hardened-runtime version to target (`--runtime-version`).
+    /// CodeDirectory option flags to seal into the signature (`--options`),
+    /// replacing any previously set flags.
+    ///
+    /// ```
+    /// # use signers::codesign::{Codesign, SigningFlags};
+    /// Codesign::sign("MyApp.app", "-").options(SigningFlags::RUNTIME | SigningFlags::KILL);
+    /// ```
+    pub fn options(mut self, options: SigningFlags) -> Self {
+        self.action.options = options;
+        self
+    }
+
+    /// Hardened-runtime version to store in the signature; only meaningful
+    /// together with [`SigningFlags::RUNTIME`] (`--runtime-version`).
     pub fn runtime_version(mut self, version: impl Into<String>) -> Self {
         self.action.runtime_version = Some(version.into());
+        self
+    }
+
+    /// Launch constraint plist for the executable itself
+    /// (`--launch-constraint-self`).
+    pub fn launch_constraint_self(mut self, path: impl Into<PathBuf>) -> Self {
+        self.action.launch_constraint_self = Some(path.into());
+        self
+    }
+
+    /// Launch constraint plist for the executable's parent process
+    /// (`--launch-constraint-parent`).
+    pub fn launch_constraint_parent(mut self, path: impl Into<PathBuf>) -> Self {
+        self.action.launch_constraint_parent = Some(path.into());
+        self
+    }
+
+    /// Launch constraint plist for the executable's responsible process
+    /// (`--launch-constraint-responsible`).
+    pub fn launch_constraint_responsible(mut self, path: impl Into<PathBuf>) -> Self {
+        self.action.launch_constraint_responsible = Some(path.into());
+        self
+    }
+
+    /// Constraint plist restricting the libraries the executable may load
+    /// (`--library-constraint`).
+    pub fn library_constraint(mut self, path: impl Into<PathBuf>) -> Self {
+        self.action.library_constraint = Some(path.into());
+        self
+    }
+
+    /// Require the supplied constraints to be structurally valid and to only
+    /// use keys known to this macOS version (`--enforce-constraint-validity`).
+    pub fn enforce_constraint_validity(mut self, enforce_constraint_validity: bool) -> Self {
+        self.action.enforce_constraint_validity = enforce_constraint_validity;
+        self
+    }
+
+    /// Replace an existing signature rather than failing when one is present
+    /// (`--force`).
+    pub fn force(mut self, force: bool) -> Self {
+        self.action.force = force;
+        self
+    }
+
+    /// Recursively sign nested code — frameworks, helpers, plug-ins (`--deep`).
+    ///
+    /// Deprecated by Apple for signing as of macOS 13: every option is applied
+    /// to the nested content as well, which is rarely what you want.
+    #[deprecated(
+        since = "0.1.0",
+        note = "Apple deprecated --deep for signing as of macOS 13.0; \
+                sign nested bundle content explicitly instead"
+    )]
+    pub fn deep(mut self, deep: bool) -> Self {
+        self.action.deep = deep;
+        self
+    }
+
+    /// Metadata to reuse from the existing signature when re-signing
+    /// (`--preserve-metadata`), replacing any previous selection.
+    ///
+    /// Requires [`force`](Codesign::force) to have any effect, and is ignored
+    /// altogether when the previous signature is linker-signed.
+    pub fn preserve_metadata(mut self, metadata: PreserveMetadata) -> Self {
+        self.action.preserve_metadata = metadata;
+        self
+    }
+
+    /// Granularity of code signing, in bytes (`--pagesize`).
+    ///
+    /// `codesign` requires a power of two; `0` signs the whole code as a single
+    /// page. Applies to the main executable only.
+    pub fn page_size(mut self, page_size: u32) -> Self {
+        self.action.page_size = Some(page_size);
         self
     }
 
@@ -288,28 +216,284 @@ impl Codesign<Sign> {
         self
     }
 
-    /// Add CodeDirectory option flags such as [`SigningFlag::Runtime`]
-    /// (`--options`). Accumulates across calls.
-    pub fn flags(mut self, flags: impl IntoIterator<Item = SigningFlag>) -> Self {
-        self.action.flags.extend(flags);
+    /// Version to operate on inside a versioned bundle, i.e. a name under its
+    /// `Versions` directory (`--bundle-version`).
+    pub fn bundle_version(mut self, version: impl Into<String>) -> Self {
+        self.action.bundle_version = Some(version.into());
         self
     }
 
-    /// Metadata to preserve from an existing signature when re-signing
-    /// (`--preserve-metadata`). Accumulates across calls.
-    pub fn preserve_metadata(mut self, metadata: impl IntoIterator<Item = Metadata>) -> Self {
-        self.action.preserve_metadata.extend(metadata);
+    /// Strip extended attributes that would otherwise break signing, such as
+    /// `com.apple.FinderInfo` (`--strip-disallowed-xattrs`).
+    pub fn strip_disallowed_xattrs(mut self, strip_disallowed_xattrs: bool) -> Self {
+        self.action.strip_disallowed_xattrs = strip_disallowed_xattrs;
         self
     }
 
-    /// Digest algorithms to seal into the signature (`--digest-algorithm`).
-    /// Accumulates across calls.
-    pub fn digest_algorithms(
-        mut self,
-        algorithms: impl IntoIterator<Item = DigestAlgorithm>,
-    ) -> Self {
-        self.action.digest_algorithms.extend(algorithms);
+    /// Build the resource seal on a single thread (`--single-threaded-signing`).
+    pub fn single_threaded_signing(mut self, single_threaded_signing: bool) -> Self {
+        self.action.single_threaded_signing = single_threaded_signing;
         self
+    }
+
+    /// Perform every signing step, including the cryptographic ones, but
+    /// discard the result instead of writing it (`--dryrun`).
+    pub fn dry_run(mut self, dry_run: bool) -> Self {
+        self.action.dry_run = dry_run;
+        self
+    }
+
+    /// Write the signature to this file instead of into the code, leaving the
+    /// target untouched (`--detached`).
+    pub fn detached(mut self, path: impl Into<PathBuf>) -> Self {
+        self.action.detached = Some(path.into());
+        self
+    }
+
+    /// Write the detached signature into the system database
+    /// (`--detached-database`); requires elevated privileges.
+    pub fn detached_database(mut self, detached_database: bool) -> Self {
+        self.action.detached_database = detached_database;
+        self
+    }
+
+    /// Append the list of files touched by the signing operation to this path,
+    /// or to standard output with `-` (`--file-list`).
+    pub fn file_list(mut self, path: impl Into<PathBuf>) -> Self {
+        self.action.file_list = Some(path.into());
+        self
+    }
+}
+
+impl Sealed for Sign {
+    fn args<'a>(&'a self, targets: &'a [PathBuf]) -> Vec<Cow<'a, OsStr>> {
+        let mut args: Vec<Cow<'a, OsStr>> = Vec::new();
+
+        // `codesign` follows a verb-noun rule: options given before `--sign`
+        // are silently ignored, so the operation always goes first.
+        args.option("--sign", &self.identity);
+
+        if let Some(identifier) = &self.identifier {
+            args.option("--identifier", identifier);
+        }
+        if let Some(requirements) = &self.requirements {
+            args.option("--requirements", requirements);
+        }
+        if let Some(prefix) = &self.prefix {
+            args.option("--prefix", prefix);
+        }
+        if let Some(keychain) = &self.keychain {
+            args.option("--keychain", keychain);
+        }
+
+        if let Some(entitlements) = &self.entitlements {
+            args.option("--entitlements", entitlements);
+        }
+        if self.force_library_entitlements {
+            args.flag("--force-library-entitlements");
+        }
+        if self.generate_entitlement_der {
+            args.flag("--generate-entitlement-der");
+        }
+        if !self.options.is_empty() {
+            args.flag("--options");
+            args.built(joined(self.options));
+        }
+        if let Some(runtime_version) = &self.runtime_version {
+            args.option("--runtime-version", runtime_version);
+        }
+        if let Some(path) = &self.launch_constraint_self {
+            args.option("--launch-constraint-self", path);
+        }
+        if let Some(path) = &self.launch_constraint_parent {
+            args.option("--launch-constraint-parent", path);
+        }
+        if let Some(path) = &self.launch_constraint_responsible {
+            args.option("--launch-constraint-responsible", path);
+        }
+        if let Some(path) = &self.library_constraint {
+            args.option("--library-constraint", path);
+        }
+        if self.enforce_constraint_validity {
+            args.flag("--enforce-constraint-validity");
+        }
+
+        if self.force {
+            args.flag("--force");
+        }
+        if self.deep {
+            args.flag("--deep");
+        }
+        // `--preserve-metadata` and `--timestamp` take an optional value, so
+        // getopt only accepts the `=` form for them.
+        if !self.preserve_metadata.is_empty() {
+            let list = joined(self.preserve_metadata);
+            args.built(format!("--preserve-metadata={list}"));
+        }
+        if let Some(page_size) = self.page_size {
+            args.flag("--pagesize");
+            args.built(page_size.to_string());
+        }
+        match &self.timestamp {
+            Some(Timestamp::Enabled) => args.flag("--timestamp"),
+            Some(Timestamp::ServerUrl(url)) => args.built(format!("--timestamp={url}")),
+            Some(Timestamp::Disabled) => args.flag("--timestamp=none"),
+            None => {}
+        }
+        if let Some(bundle_version) = &self.bundle_version {
+            args.option("--bundle-version", bundle_version);
+        }
+        if self.strip_disallowed_xattrs {
+            args.flag("--strip-disallowed-xattrs");
+        }
+        if self.single_threaded_signing {
+            args.flag("--single-threaded-signing");
+        }
+        if self.dry_run {
+            args.flag("--dryrun");
+        }
+
+        if let Some(detached) = &self.detached {
+            args.option("--detached", detached);
+        }
+        if self.detached_database {
+            args.flag("--detached-database");
+        }
+        if let Some(file_list) = &self.file_list {
+            args.option("--file-list", file_list);
+        }
+
+        args.targets(targets);
+        args
+    }
+}
+
+/// Argument-list vocabulary, so that each `codesign` option renders on one
+/// line and the arguments that have to allocate stay visible as such.
+trait PushArgs<'a> {
+    /// A standalone argument known at compile time: a bare flag such as
+    /// `--force`, or a whole `=`-form argument such as `--timestamp=none`.
+    fn flag(&mut self, name: &'static str);
+
+    /// A flag followed by its value, borrowed from the action for `'a`.
+    fn option<V: AsRef<OsStr> + ?Sized>(&mut self, name: &'static str, value: &'a V);
+
+    /// An argument that only exists once rendered — a joined token list, a
+    /// number, an interpolated `=`-form option — and so must be owned.
+    fn built(&mut self, value: impl Into<OsString>);
+
+    /// The paths the action operates on, which `codesign` expects last.
+    fn targets(&mut self, targets: &'a [PathBuf]);
+}
+
+impl<'a> PushArgs<'a> for Vec<Cow<'a, OsStr>> {
+    fn flag(&mut self, name: &'static str) {
+        self.push(Cow::Borrowed(OsStr::new(name)));
+    }
+
+    fn option<V: AsRef<OsStr> + ?Sized>(&mut self, name: &'static str, value: &'a V) {
+        self.flag(name);
+        self.push(Cow::Borrowed(value.as_ref()));
+    }
+
+    fn built(&mut self, value: impl Into<OsString>) {
+        self.push(Cow::Owned(value.into()));
+    }
+
+    fn targets(&mut self, targets: &'a [PathBuf]) {
+        self.extend(targets.iter().map(|t| Cow::Borrowed(t.as_os_str())));
+    }
+}
+
+/// Comma-joins the tokens of the flags set in `flags`, in declaration order.
+///
+/// Tokens come from each flag's `#[bitflags(flag_name)]`, so they are declared
+/// rather than derived. `bitflags`' own formatter can't be used here: it
+/// separates with ` | `, while `codesign` wants a bare comma-separated list.
+fn joined<F: Flags + Copy>(flags: F) -> String {
+    let mut tokens = String::new();
+    for flag in F::FLAGS.iter().filter(|flag| flags.contains(*flag.value())) {
+        if !tokens.is_empty() {
+            tokens.push(',');
+        }
+        tokens.push_str(flag.name());
+    }
+    tokens
+}
+
+/// Timestamp policy embedded in the signature (`--timestamp`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Timestamp {
+    /// `--timestamp` — request a trusted timestamp from Apple's default server.
+    Enabled,
+    /// `--timestamp=<url>` — request a timestamp from a specific server.
+    ServerUrl(String),
+    /// `--timestamp=none` — do not contact any timestamp server.
+    Disabled,
+}
+
+bitflags! {
+    /// CodeDirectory option flags sealed into the signature (`--options`).
+    ///
+    /// Values mirror `SecCodeSignatureFlags` from `Security/CSCommon.h`; names
+    /// are the tokens `codesign` accepts.
+    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+    pub struct SigningFlags: u32 {
+        /// Marks the code as able to host guest code.
+        #[bitflags(flag_name = "host")]
+        const HOST = 0x0001;
+        /// Hints that the code prefers being denied access to resources over
+        /// losing its identity.
+        #[bitflags(flag_name = "hard")]
+        const HARD = 0x0100;
+        /// Kills the process as soon as it becomes dynamically invalid.
+        #[bitflags(flag_name = "kill")]
+        const KILL = 0x0200;
+        /// Makes validation honour certificate expiration.
+        #[bitflags(flag_name = "expires")]
+        const EXPIRES = 0x0400;
+        /// Enforces library validation: only system libraries or libraries
+        /// sharing the same team identifier may be linked.
+        #[bitflags(flag_name = "library")]
+        const LIBRARY = 0x2000;
+        /// Opts into the hardened runtime (required for notarization).
+        #[bitflags(flag_name = "runtime")]
+        const RUNTIME = 0x1_0000;
+        /// Marks the signature as linker-generated: replaceable without
+        /// `--force` and never preserved.
+        #[bitflags(flag_name = "linker-signed")]
+        const LINKER_SIGNED = 0x2_0000;
+    }
+}
+
+bitflags! {
+    /// Metadata to reuse from an existing signature when re-signing
+    /// (`--preserve-metadata`). Names are the tokens `codesign` accepts.
+    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+    pub struct PreserveMetadata: u8 {
+        /// Keep the existing signing identifier.
+        #[bitflags(flag_name = "identifier")]
+        const IDENTIFIER = 1 << 0;
+        /// Keep the existing entitlements.
+        #[bitflags(flag_name = "entitlements")]
+        const ENTITLEMENTS = 1 << 1;
+        /// Keep the existing internal requirements, as a whole.
+        #[bitflags(flag_name = "requirements")]
+        const REQUIREMENTS = 1 << 2;
+        /// Keep the existing CodeDirectory option flags.
+        #[bitflags(flag_name = "flags")]
+        const FLAGS = 1 << 3;
+        /// Keep the existing hardened-runtime version.
+        #[bitflags(flag_name = "runtime")]
+        const RUNTIME = 1 << 4;
+        /// Keep the existing launch constraints. Ignored when any
+        /// `launch_constraint_*` option is supplied.
+        #[bitflags(flag_name = "launch-constraints")]
+        const LAUNCH_CONSTRAINTS = 1 << 5;
+        /// Keep the existing library load constraints. Ignored when
+        /// [`library_constraint`](Codesign::library_constraint) is supplied.
+        #[bitflags(flag_name = "library-constraints")]
+        const LIBRARY_CONSTRAINTS = 1 << 6;
     }
 }
 
@@ -317,26 +501,41 @@ impl Codesign<Sign> {
 mod tests {
     use super::*;
 
-    fn os(strs: &[&str]) -> Vec<OsString> {
-        strs.iter().map(OsString::from).collect()
+    fn os(strings: &[&str]) -> Vec<OsString> {
+        strings.iter().map(OsString::from).collect()
+    }
+
+    /// Renders the arguments, taking ownership so assertions can compare them
+    /// against plain `OsString`s.
+    fn args_of(builder: &Codesign<Sign>) -> Vec<OsString> {
+        builder
+            .action
+            .args(&builder.targets)
+            .into_iter()
+            .map(Cow::into_owned)
+            .collect()
     }
 
     #[test]
-    fn default_is_ad_hoc_and_forced() {
-        let args = Sign::default().args(&[PathBuf::from("app")]);
-        assert_eq!(args, os(&["--sign", "-", "--force", "app"]));
-    }
-
-    #[test]
-    fn scalar_setters_are_forwarded() {
-        let action = Codesign::sign("app")
-            .identity("Developer ID")
-            .force(false)
-            .deep(true)
-            .identifier("com.example.app")
-            .entitlements("app.entitlements");
+    fn bare_action_only_signs() {
         assert_eq!(
-            action.action.args(&action.targets),
+            args_of(&Codesign::sign("app", "-")),
+            os(&["--sign", "-", "app"])
+        );
+    }
+
+    #[test]
+    #[expect(deprecated, reason = "`--deep` is still rendered, deprecated or not")]
+    fn scalar_setters_are_forwarded() {
+        let action = Codesign::sign("app", "Developer ID")
+            .identifier("com.example.app")
+            .entitlements("app.entitlements")
+            .force(true)
+            .deep(true)
+            .page_size(4096)
+            .dry_run(true);
+        assert_eq!(
+            args_of(&action),
             os(&[
                 "--sign",
                 "Developer ID",
@@ -344,68 +543,116 @@ mod tests {
                 "com.example.app",
                 "--entitlements",
                 "app.entitlements",
+                "--force",
                 "--deep",
+                "--pagesize",
+                "4096",
+                "--dryrun",
                 "app",
             ]),
         );
     }
 
     #[test]
-    fn set_options_use_equals_form_and_sorted_tokens() {
-        let action = Codesign::sign("app")
-            .force(false)
-            .flags([SigningFlag::Library, SigningFlag::Runtime])
-            .preserve_metadata([Metadata::Entitlements, Metadata::Identifier])
-            .digest_algorithms([DigestAlgorithm::Sha256]);
+    fn flag_tokens_match_the_codesign_spelling() {
         assert_eq!(
-            action.action.args(&action.targets),
+            joined(SigningFlags::all()),
+            "host,hard,kill,expires,library,runtime,linker-signed"
+        );
+        assert_eq!(
+            joined(PreserveMetadata::all()),
+            "identifier,entitlements,requirements,flags,runtime,launch-constraints,library-constraints",
+        );
+    }
+
+    #[test]
+    fn flag_sets_render_in_declaration_order() {
+        let action = Codesign::sign("app", "-")
+            .options(SigningFlags::RUNTIME | SigningFlags::KILL)
+            .preserve_metadata(PreserveMetadata::ENTITLEMENTS | PreserveMetadata::IDENTIFIER);
+        assert_eq!(
+            args_of(&action),
             os(&[
                 "--sign",
                 "-",
                 "--options",
-                "runtime,library",
+                "kill,runtime",
                 "--preserve-metadata=identifier,entitlements",
-                "--digest-algorithm=sha256",
                 "app",
             ]),
+        );
+    }
+
+    #[test]
+    fn flag_sets_replace_rather_than_accumulate() {
+        let action = Codesign::sign("app", "-")
+            .options(SigningFlags::RUNTIME)
+            .options(SigningFlags::LIBRARY);
+        assert_eq!(
+            args_of(&action),
+            os(&["--sign", "-", "--options", "library", "app"])
         );
     }
 
     #[test]
     fn timestamp_variants() {
-        let base = || Codesign::sign("app").force(false);
+        let rendered = |timestamp| args_of(&Codesign::sign("app", "-").timestamp(timestamp));
+        assert!(rendered(Timestamp::Enabled).contains(&OsString::from("--timestamp")));
+        assert!(rendered(Timestamp::Disabled).contains(&OsString::from("--timestamp=none")));
         assert!(
-            base()
-                .timestamp(Timestamp::Server)
-                .action
-                .args(&[PathBuf::from("app")])
-                .contains(&OsString::from("--timestamp"))
-        );
-        assert!(
-            base()
-                .timestamp(Timestamp::Disabled)
-                .action
-                .args(&[PathBuf::from("app")])
-                .contains(&OsString::from("--timestamp=none"))
-        );
-        assert!(
-            base()
-                .timestamp(Timestamp::ServerUrl("http://ts.example".into()))
-                .action
-                .args(&[PathBuf::from("app")])
+            rendered(Timestamp::ServerUrl("http://ts.example".into()))
                 .contains(&OsString::from("--timestamp=http://ts.example"))
         );
     }
 
     #[test]
-    fn flags_accumulate_and_dedup() {
-        let action = Codesign::sign("app")
-            .force(false)
-            .flags([SigningFlag::Runtime])
-            .flags([SigningFlag::Runtime, SigningFlag::Kill]);
+    fn every_constraint_kind_is_emitted() {
+        let action = Codesign::sign("app", "-")
+            .library_constraint("library.plist")
+            .launch_constraint_self("self.plist")
+            .launch_constraint_parent("parent.plist")
+            .launch_constraint_responsible("responsible.plist");
         assert_eq!(
-            action.action.args(&action.targets),
-            os(&["--sign", "-", "--options", "runtime,kill", "app"]),
+            args_of(&action),
+            os(&[
+                "--sign",
+                "-",
+                "--launch-constraint-self",
+                "self.plist",
+                "--launch-constraint-parent",
+                "parent.plist",
+                "--launch-constraint-responsible",
+                "responsible.plist",
+                "--library-constraint",
+                "library.plist",
+                "app",
+            ]),
+        );
+    }
+
+    #[test]
+    fn repeating_a_constraint_kind_keeps_the_last_path() {
+        let action = Codesign::sign("app", "-")
+            .launch_constraint_self("first.plist")
+            .launch_constraint_self("third.plist");
+        assert_eq!(
+            args_of(&action),
+            os(&[
+                "--sign",
+                "-",
+                "--launch-constraint-self",
+                "third.plist",
+                "app"
+            ]),
+        );
+    }
+
+    #[test]
+    fn targets_come_last() {
+        let action = Codesign::sign(vec!["a.app", "b.app"], "-").force(true);
+        assert_eq!(
+            args_of(&action),
+            os(&["--sign", "-", "--force", "a.app", "b.app"])
         );
     }
 }

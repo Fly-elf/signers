@@ -9,9 +9,9 @@ use std::pin::Pin;
 use crate::errors::{Error, Result};
 use crate::target::IntoTargets;
 
-pub use actions::{Action, DigestAlgorithm, Metadata, Sign, SigningFlag, Timestamp};
+pub use actions::{Action, PreserveMetadata, Sign, SigningFlags, Timestamp};
 
-/// Fluent builder over a signing action, parameterised by the action type.
+/// Fluent builder over a signing action, parameterized by the action type.
 ///
 /// Create one with a constructor ([`Codesign::sign`], ...), chain the options
 /// that action supports, then `.await` it to run `codesign`.
@@ -22,24 +22,24 @@ pub struct Codesign<A> {
 }
 
 impl Codesign<()> {
-    /// Signs one or more targets with `codesign`.
+    /// Signs one or more targets with `codesign`, using `identity`.
     ///
-    /// Defaults to ad-hoc signing (`-`) while replacing any existing signature —
-    /// the common case when re-signing patched binaries. Override via
-    /// [`identity`](Codesign::identity), [`force`](Codesign::force) and
-    /// [`deep`](Codesign::deep).
+    /// `identity` is a keychain identity name, an identity preference, a
+    /// 40-digit certificate SHA-1 hash, or `-` for ad-hoc signing. Every option
+    /// keeps `codesign`'s own default, so re-signing a patched binary in place
+    /// needs [`force`](Codesign::force) just like on the command line.
     ///
     /// ```no_run
     /// # async fn run() -> Result<(), signers::Error> {
     /// use signers::codesign::Codesign;
     ///
-    /// Codesign::sign("MyApp.app").identity("-").deep(true).await?;
+    /// Codesign::sign("MyApp.app", "-").force(true).await?;
     /// # Ok(()) }
     /// ```
-    pub fn sign(target: impl IntoTargets) -> Codesign<Sign> {
+    pub fn sign(target: impl IntoTargets, identity: impl Into<String>) -> Codesign<Sign> {
         Codesign {
             targets: target.into_targets(),
-            action: Sign::default(),
+            action: Sign::new(identity),
         }
     }
 }
@@ -67,7 +67,13 @@ impl<A: Action + Send + 'static> IntoFuture for Codesign<A> {
             }
 
             let args = self.action.args(&self.targets);
-            tracing::debug!(?args, "running codesign");
+            tracing::trace!(
+                "running codesign {}",
+                args.iter()
+                    .map(|a| a.to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
 
             let output = tokio::process::Command::new("codesign")
                 .args(&args)

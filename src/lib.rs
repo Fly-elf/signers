@@ -7,7 +7,7 @@
 //! # async fn run() -> Result<(), signers::Error> {
 //! use signers::codesign::Codesign;
 //!
-//! Codesign::sign("MyApp.app").force(true).identity("-").await?;
+//! Codesign::sign("MyApp.app", "-").force(true).await?;
 //! # Ok(()) }
 //! ```
 
