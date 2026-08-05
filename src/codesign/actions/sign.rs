@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use bitflags::{Flags, bitflags};
 
-use super::sealed::Sealed;
+use super::sealed::ToArgs;
 use crate::codesign::Codesign;
 
 /// Options for the signing action (`codesign --sign`).
@@ -265,8 +265,8 @@ impl Codesign<Sign> {
     }
 }
 
-impl Sealed for Sign {
-    fn args<'a>(&'a self, targets: &'a [PathBuf]) -> Vec<Cow<'a, OsStr>> {
+impl ToArgs for Sign {
+    fn to_args<'a>(&'a self, targets: &'a [PathBuf]) -> Vec<Cow<'a, OsStr>> {
         let mut args: Vec<Cow<'a, OsStr>> = Vec::new();
 
         // `codesign` follows a verb-noun rule: options given before `--sign`
@@ -382,7 +382,8 @@ trait PushArgs<'a> {
     /// number, an interpolated `=`-form option — and so must be owned.
     fn built(&mut self, value: impl Into<OsString>);
 
-    /// The paths the action operates on, which `codesign` expects last.
+    /// The paths the action operates on, which `codesign` expects last,
+    /// introduced by the `--` end-of-options separator.
     fn targets(&mut self, targets: &'a [PathBuf]);
 }
 
@@ -401,6 +402,10 @@ impl<'a> PushArgs<'a> for Vec<Cow<'a, OsStr>> {
     }
 
     fn targets(&mut self, targets: &'a [PathBuf]) {
+        // Without the separator, `codesign`'s getopt reads a target whose name
+        // starts with `-` as options: `codesign --sign - -patched` fails with
+        // "unknown architecture name", having parsed `-patched` as `-p -a ...`.
+        self.flag("--");
         self.extend(targets.iter().map(|t| Cow::Borrowed(t.as_os_str())));
     }
 }
@@ -510,7 +515,7 @@ mod tests {
     fn args_of(builder: &Codesign<Sign>) -> Vec<OsString> {
         builder
             .action
-            .args(&builder.targets)
+            .to_args(&builder.targets)
             .into_iter()
             .map(Cow::into_owned)
             .collect()
@@ -520,7 +525,7 @@ mod tests {
     fn bare_action_only_signs() {
         assert_eq!(
             args_of(&Codesign::sign("app", "-")),
-            os(&["--sign", "-", "app"])
+            os(&["--sign", "-", "--", "app"])
         );
     }
 
@@ -548,13 +553,106 @@ mod tests {
                 "--pagesize",
                 "4096",
                 "--dryrun",
+                "--",
                 "app",
             ]),
         );
     }
 
+    /// Every option this action can render, so that adding one without
+    /// rendering it — or rendering it in the wrong form — fails here.
+    ///
+    /// The focused tests below explain individual behaviours; this one exists
+    /// to be exhaustive, and covers the several options whose effect nothing
+    /// can observe from outside (`--detached-database` needs root).
     #[test]
-    fn flag_tokens_match_the_codesign_spelling() {
+    #[expect(deprecated, reason = "`--deep` is still rendered, deprecated or not")]
+    fn every_option_renders_exactly_once() {
+        let action = Codesign::sign("app", "Developer ID")
+            .identifier("com.example.app")
+            .requirements("=designated => anchor apple")
+            .prefix("com.example.")
+            .keychain("build.keychain")
+            .entitlements("app.entitlements")
+            .force_library_entitlements(true)
+            .generate_entitlement_der(true)
+            .options(SigningFlags::RUNTIME)
+            .runtime_version("13.1")
+            .launch_constraint_self("self.plist")
+            .launch_constraint_parent("parent.plist")
+            .launch_constraint_responsible("responsible.plist")
+            .library_constraint("library.plist")
+            .enforce_constraint_validity(true)
+            .force(true)
+            .deep(true)
+            .preserve_metadata(PreserveMetadata::FLAGS)
+            .page_size(4096)
+            .timestamp(Timestamp::ServerUrl("http://ts.example".into()))
+            .bundle_version("A")
+            .strip_disallowed_xattrs(true)
+            .single_threaded_signing(true)
+            .dry_run(true)
+            .detached("app.sig")
+            .detached_database(true)
+            .file_list("signed.txt");
+
+        assert_eq!(
+            args_of(&action),
+            os(&[
+                "--sign",
+                "Developer ID",
+                "--identifier",
+                "com.example.app",
+                "--requirements",
+                "=designated => anchor apple",
+                "--prefix",
+                "com.example.",
+                "--keychain",
+                "build.keychain",
+                "--entitlements",
+                "app.entitlements",
+                "--force-library-entitlements",
+                "--generate-entitlement-der",
+                "--options",
+                "runtime",
+                "--runtime-version",
+                "13.1",
+                "--launch-constraint-self",
+                "self.plist",
+                "--launch-constraint-parent",
+                "parent.plist",
+                "--launch-constraint-responsible",
+                "responsible.plist",
+                "--library-constraint",
+                "library.plist",
+                "--enforce-constraint-validity",
+                "--force",
+                "--deep",
+                "--preserve-metadata=flags",
+                "--pagesize",
+                "4096",
+                "--timestamp=http://ts.example",
+                "--bundle-version",
+                "A",
+                "--strip-disallowed-xattrs",
+                "--single-threaded-signing",
+                "--dryrun",
+                "--detached",
+                "app.sig",
+                "--detached-database",
+                "--file-list",
+                "signed.txt",
+                "--",
+                "app",
+            ]),
+        );
+    }
+
+    /// That these are the tokens `codesign` *accepts* is settled against the
+    /// real binary in `tests/codesign_async/sign.rs`; here they only have to
+    /// stay comma-joined, in declaration order, with no separators of any kind.
+    #[test]
+    fn flag_tokens_are_joined_in_declaration_order() {
         assert_eq!(
             joined(SigningFlags::all()),
             "host,hard,kill,expires,library,runtime,linker-signed"
@@ -563,6 +661,15 @@ mod tests {
             joined(PreserveMetadata::all()),
             "identifier,entitlements,requirements,flags,runtime,launch-constraints,library-constraints",
         );
+    }
+
+    #[test]
+    fn empty_flag_sets_render_no_argument_at_all() {
+        // Not `--options ""`, which `codesign` rejects: the option is dropped.
+        let action = Codesign::sign("app", "-")
+            .options(SigningFlags::empty())
+            .preserve_metadata(PreserveMetadata::empty());
+        assert_eq!(args_of(&action), os(&["--sign", "-", "--", "app"]));
     }
 
     #[test]
@@ -578,6 +685,7 @@ mod tests {
                 "--options",
                 "kill,runtime",
                 "--preserve-metadata=identifier,entitlements",
+                "--",
                 "app",
             ]),
         );
@@ -590,18 +698,27 @@ mod tests {
             .options(SigningFlags::LIBRARY);
         assert_eq!(
             args_of(&action),
-            os(&["--sign", "-", "--options", "library", "app"])
+            os(&["--sign", "-", "--options", "library", "--", "app"])
         );
     }
 
+    /// Each variant is a single argument: `--timestamp` takes its value only in
+    /// the `=` form, so a stray `--timestamp none` would be read as a timestamp
+    /// request followed by a target named `none`.
     #[test]
-    fn timestamp_variants() {
+    fn timestamp_variants_each_render_as_one_argument() {
         let rendered = |timestamp| args_of(&Codesign::sign("app", "-").timestamp(timestamp));
-        assert!(rendered(Timestamp::Enabled).contains(&OsString::from("--timestamp")));
-        assert!(rendered(Timestamp::Disabled).contains(&OsString::from("--timestamp=none")));
-        assert!(
-            rendered(Timestamp::ServerUrl("http://ts.example".into()))
-                .contains(&OsString::from("--timestamp=http://ts.example"))
+        assert_eq!(
+            rendered(Timestamp::Enabled),
+            os(&["--sign", "-", "--timestamp", "--", "app"]),
+        );
+        assert_eq!(
+            rendered(Timestamp::Disabled),
+            os(&["--sign", "-", "--timestamp=none", "--", "app"]),
+        );
+        assert_eq!(
+            rendered(Timestamp::ServerUrl("http://ts.example".into())),
+            os(&["--sign", "-", "--timestamp=http://ts.example", "--", "app"]),
         );
     }
 
@@ -625,6 +742,7 @@ mod tests {
                 "responsible.plist",
                 "--library-constraint",
                 "library.plist",
+                "--",
                 "app",
             ]),
         );
@@ -642,6 +760,7 @@ mod tests {
                 "-",
                 "--launch-constraint-self",
                 "third.plist",
+                "--",
                 "app"
             ]),
         );
@@ -652,7 +771,7 @@ mod tests {
         let action = Codesign::sign(vec!["a.app", "b.app"], "-").force(true);
         assert_eq!(
             args_of(&action),
-            os(&["--sign", "-", "--force", "a.app", "b.app"])
+            os(&["--sign", "-", "--force", "--", "a.app", "b.app"])
         );
     }
 }

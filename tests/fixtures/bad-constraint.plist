@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Structurally valid plist, but not a valid launch constraint: `codesign`
+     only downgrades the unknown key to a warning unless
+     `--enforce-constraint-validity` is passed. -->
+<plist version="1.0">
+<dict>
+	<key>bogus-key-xyz</key>
+	<true/>
+</dict>
+</plist>
