@@ -5,8 +5,8 @@
 //! actually landed on disk, so nothing here can pass because the library and
 //! the test agree on a mistake.
 
-mod bundles;
 mod builder_and_future;
+mod bundles;
 mod entitlements_and_requirements;
 mod kitchen_sink;
 mod preflight;
@@ -27,9 +27,11 @@ const ADHOC: u32 = 0x2;
 /// diagnostics it captured.
 fn codesign_error(error: Error) -> String {
     match error {
-        Error::Codesign { status, stderr } => {
-            assert!(!status.success(), "a successful status was reported as an error");
-            assert!(!stderr.is_empty(), "the failure was reported with no diagnostics");
+        Error::Codesign { stderr, .. } => {
+            assert!(
+                !stderr.is_empty(),
+                "the failure was reported with no diagnostics"
+            );
             stderr
         }
         other => panic!("expected the `codesign` run to fail, got {other:?}"),

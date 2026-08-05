@@ -17,8 +17,14 @@ async fn entitlements_are_embedded() {
         .unwrap();
 
     let entitlements = inspect::entitlements(&target);
-    assert!(entitlements.contains("com.apple.security.cs.allow-jit"), "got {entitlements}");
-    assert!(entitlements.contains("com.apple.security.get-task-allow"), "got {entitlements}");
+    assert!(
+        entitlements.contains("com.apple.security.cs.allow-jit"),
+        "got {entitlements}"
+    );
+    assert!(
+        entitlements.contains("com.apple.security.get-task-allow"),
+        "got {entitlements}"
+    );
 }
 
 #[tokio::test]
@@ -88,5 +94,8 @@ async fn constraint_validity_is_only_enforced_on_request() {
         .unwrap_err();
 
     assert!(super::codesign_error(error).contains("bogus-key-xyz"));
-    assert!(!inspect::is_signed(&rejected), "the rejected target was signed anyway");
+    assert!(
+        !inspect::is_signed(&rejected),
+        "the rejected target was signed anyway"
+    );
 }

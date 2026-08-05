@@ -27,6 +27,8 @@ pub(crate) mod sealed {
     use std::ffi::OsStr;
     use std::path::PathBuf;
 
+    use crate::errors::Result;
+
     /// Renders an action, applied to `targets`, into a `codesign` argument list.
     ///
     /// This is what every action *is* — the options it holds only matter as the
@@ -38,6 +40,14 @@ pub(crate) mod sealed {
     /// `&'static str` and most option values already live in the action, so
     /// only the few arguments built at render time are owned.
     pub trait ToArgs {
+        /// Rejects an option combination this crate cannot honour, before any
+        /// target is looked at or `codesign` is ever spawned.
+        ///
+        /// Most actions have nothing to reject, hence the default no-op.
+        fn validate(&self) -> Result<()> {
+            Ok(())
+        }
+
         fn to_args<'a>(&'a self, targets: &'a [PathBuf]) -> Vec<Cow<'a, OsStr>>;
     }
 }

@@ -1,5 +1,6 @@
 //! What the builder rejects before it ever spawns `codesign`: empty targets,
-//! missing targets, and the access errors found while checking for them.
+//! missing targets, the access errors found while checking for them, and
+//! option values this crate cannot honour (`file_list("-")`).
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -20,7 +21,9 @@ async fn an_empty_target_is_rejected() {
 
 #[tokio::test]
 async fn an_empty_target_list_is_rejected() {
-    let error = Codesign::sign(Vec::<PathBuf>::new(), "-").await.unwrap_err();
+    let error = Codesign::sign(Vec::<PathBuf>::new(), "-")
+        .await
+        .unwrap_err();
     assert!(matches!(error, Error::NoTargets), "got {error:?}");
 }
 
@@ -87,6 +90,23 @@ async fn an_unreadable_parent_directory_is_an_access_error() {
         }
         other => panic!("expected TargetAccess, got {other:?}"),
     }
+}
+
+#[tokio::test]
+async fn a_file_list_of_standard_output_is_rejected() {
+    let workspace = Workspace::new();
+    let target = workspace.unsigned("hello");
+
+    let error = Codesign::sign(&target, "-")
+        .file_list("-")
+        .await
+        .unwrap_err();
+
+    assert!(matches!(error, Error::FileListToStdout), "got {error:?}");
+    assert!(
+        !inspect::is_signed(&target),
+        "the target was signed despite the rejected option"
+    );
 }
 
 #[tokio::test]

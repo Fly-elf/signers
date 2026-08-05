@@ -21,7 +21,11 @@ async fn re_signing_without_force_fails_and_changes_nothing() {
 
     assert!(super::codesign_error(error).contains("is already signed"));
     let after = Signature::of(&target);
-    assert_eq!(after.cd_hash(), before, "the existing signature was disturbed");
+    assert_eq!(
+        after.cd_hash(),
+        before,
+        "the existing signature was disturbed"
+    );
     assert_eq!(after.identifier(), "com.example.original");
 }
 
@@ -50,7 +54,11 @@ async fn a_linker_signature_is_replaced_without_force() {
     if !inspect::is_signed(&target) {
         return; // only the Apple Silicon linker signs what it links
     }
-    assert!(Signature::of(&target).flag_names().contains(&"linker-signed"));
+    assert!(
+        Signature::of(&target)
+            .flag_names()
+            .contains(&"linker-signed")
+    );
 
     Codesign::sign(&target, "-")
         .identifier("com.example.relinked")

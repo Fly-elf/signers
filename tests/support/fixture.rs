@@ -60,8 +60,7 @@ fn compile(name: &str, args: &[&str]) -> Result<PathBuf, String> {
     // `CARGO_TARGET_TMPDIR` is cargo's scratch directory for integration tests,
     // so the fixture is cleaned up by `cargo clean` like any other build output.
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("fixtures");
-    fs::create_dir_all(&dir)
-        .unwrap_or_else(|e| panic!("could not create {}: {e}", dir.display()));
+    fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("could not create {}: {e}", dir.display()));
 
     // Test binaries can run concurrently, so build under a private name and
     // move it into place: `rename` is atomic, leaving readers with either the

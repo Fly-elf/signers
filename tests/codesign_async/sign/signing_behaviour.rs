@@ -93,9 +93,15 @@ async fn a_detached_signature_leaves_the_target_untouched() {
     let target = workspace.unsigned("hello");
     let detached = workspace.join("hello.sig");
 
-    Codesign::sign(&target, "-").detached(&detached).await.unwrap();
+    Codesign::sign(&target, "-")
+        .detached(&detached)
+        .await
+        .unwrap();
 
-    assert!(!inspect::is_signed(&target), "the signature was embedded anyway");
+    assert!(
+        !inspect::is_signed(&target),
+        "the signature was embedded anyway"
+    );
     assert!(detached.is_file(), "no signature was written");
     inspect::verify_detached(&detached, &target).unwrap();
 }

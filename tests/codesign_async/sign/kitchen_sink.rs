@@ -48,7 +48,10 @@ async fn a_fully_loaded_builder_renders_a_command_codesign_accepts() {
     assert_eq!(signature.identifier(), "com.example.constrained");
     assert_eq!(
         signature.flags(),
-        super::ADHOC | SigningFlags::HARD.bits() | SigningFlags::KILL.bits() | SigningFlags::RUNTIME.bits(),
+        super::ADHOC
+            | SigningFlags::HARD.bits()
+            | SigningFlags::KILL.bits()
+            | SigningFlags::RUNTIME.bits(),
     );
     assert_eq!(signature.runtime_version(), Some("13.1.0"));
     assert_eq!(signature.page_size(), Some(4096));

@@ -63,7 +63,10 @@ async fn the_last_set_of_option_flags_wins() {
     // `codesign` takes `library` on the way in and prints `library-validation`
     // on the way out, so the bits are what settles it.
     let signature = Signature::of(&target);
-    assert_eq!(signature.flags(), super::ADHOC | SigningFlags::LIBRARY.bits());
+    assert_eq!(
+        signature.flags(),
+        super::ADHOC | SigningFlags::LIBRARY.bits()
+    );
     assert_eq!(signature.flag_names(), ["adhoc", "library-validation"]);
 }
 
