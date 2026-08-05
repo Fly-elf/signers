@@ -38,10 +38,9 @@ impl Run {
 /// let run = codesign(&["--remove-signature".as_ref(), path.as_ref()]);
 /// ```
 pub fn codesign(args: &[&OsStr]) -> Run {
-    let output = Command::new("codesign")
-        .args(args)
-        .output()
-        .expect("could not run `codesign`; the integration suite needs the Xcode Command Line Tools");
+    let output = Command::new("codesign").args(args).output().expect(
+        "could not run `codesign`; the integration suite needs the Xcode Command Line Tools",
+    );
 
     Run {
         success: output.status.success(),
@@ -269,13 +268,17 @@ impl Signature {
             .unwrap_or_default();
 
         // A flagless CodeDirectory prints `flags=0x0(none)`.
-        names.split(',').filter(|n| !n.is_empty() && *n != "none").collect()
+        names
+            .split(',')
+            .filter(|n| !n.is_empty() && *n != "none")
+            .collect()
     }
 
     /// How many code hashes the CodeDirectory holds (`hashes=9+2` → 9), i.e.
     /// how many pages the signed code was split into.
     pub fn code_hashes(&self) -> u32 {
-        let hashes = token(self.code_directory(), "hashes").expect("no hashes in the CodeDirectory");
+        let hashes =
+            token(self.code_directory(), "hashes").expect("no hashes in the CodeDirectory");
         let count = hashes.split_once('+').map_or(hashes, |(code, _)| code);
         count
             .parse()

@@ -93,7 +93,11 @@ mod tests {
         // Parenthesised, or the by-value `PathBuf` impl wins the method lookup.
         let owned = PathBuf::from("app");
         assert_eq!((&owned).into_targets(), expected);
-        assert_eq!(owned, PathBuf::from("app"), "the borrowed target was consumed");
+        assert_eq!(
+            owned,
+            PathBuf::from("app"),
+            "the borrowed target was consumed"
+        );
     }
 
     #[test]

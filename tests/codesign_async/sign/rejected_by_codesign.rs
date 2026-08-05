@@ -59,5 +59,8 @@ async fn a_failure_inside_codesign_is_surfaced_with_its_diagnostics() {
 
     fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
     let stderr = super::codesign_error(result.unwrap_err());
-    assert!(stderr.contains("hello"), "the diagnostics name no target: {stderr}");
+    assert!(
+        stderr.contains("hello"),
+        "the diagnostics name no target: {stderr}"
+    );
 }

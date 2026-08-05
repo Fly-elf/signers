@@ -18,7 +18,10 @@ async fn a_builder_that_is_never_awaited_does_nothing() {
         .identifier("com.example.never");
     tokio::task::yield_now().await;
 
-    assert!(!inspect::is_signed(&target), "the builder ran without being awaited");
+    assert!(
+        !inspect::is_signed(&target),
+        "the builder ran without being awaited"
+    );
 }
 
 #[tokio::test]
@@ -41,7 +44,9 @@ async fn a_cloned_builder_is_independent_of_the_original() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn many_signings_can_run_at_once() {
     let workspace = Workspace::new();
-    let targets: Vec<_> = (0..8).map(|i| workspace.unsigned(format!("hello-{i}"))).collect();
+    let targets: Vec<_> = (0..8)
+        .map(|i| workspace.unsigned(format!("hello-{i}")))
+        .collect();
 
     let running: Vec<_> = targets
         .iter()
@@ -58,10 +63,15 @@ async fn many_signings_can_run_at_once() {
         .collect();
 
     for task in running {
-        task.await.expect("a signing task panicked").expect("a signing task failed");
+        task.await
+            .expect("a signing task panicked")
+            .expect("a signing task failed");
     }
     for (i, target) in targets.iter().enumerate() {
         inspect::assert_valid(target);
-        assert_eq!(Signature::of(target).identifier(), format!("com.example.h{i}"));
+        assert_eq!(
+            Signature::of(target).identifier(),
+            format!("com.example.h{i}")
+        );
     }
 }

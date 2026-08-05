@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use bitflags::{Flags, bitflags};
 
@@ -257,8 +257,14 @@ impl Codesign<Sign> {
         self
     }
 
-    /// Append the list of files touched by the signing operation to this path,
-    /// or to standard output with `-` (`--file-list`).
+    /// Append the list of files touched by the signing operation to this path
+    /// (`--file-list`).
+    ///
+    /// `codesign` itself also accepts `-` here to mean "write to standard
+    /// output", but this crate captures the child process's stdout internally
+    /// with nowhere to relay it, so `-` fails at `.await` time with
+    /// [`Error::FileListToStdout`](crate::Error::FileListToStdout) instead of
+    /// silently discarding the list.
     pub fn file_list(mut self, path: impl Into<PathBuf>) -> Self {
         self.action.file_list = Some(path.into());
         self
@@ -266,6 +272,13 @@ impl Codesign<Sign> {
 }
 
 impl ToArgs for Sign {
+    fn validate(&self) -> crate::errors::Result<()> {
+        if self.file_list.as_deref() == Some(Path::new("-")) {
+            return Err(crate::errors::Error::FileListToStdout);
+        }
+        Ok(())
+    }
+
     fn to_args<'a>(&'a self, targets: &'a [PathBuf]) -> Vec<Cow<'a, OsStr>> {
         let mut args: Vec<Cow<'a, OsStr>> = Vec::new();
 
@@ -764,6 +777,22 @@ mod tests {
                 "app"
             ]),
         );
+    }
+
+    #[test]
+    fn a_file_list_of_stdout_fails_validation() {
+        let action = Codesign::sign("app", "-").file_list("-");
+        let error = action.action.validate().unwrap_err();
+        assert!(
+            matches!(error, crate::errors::Error::FileListToStdout),
+            "got {error:?}"
+        );
+    }
+
+    #[test]
+    fn a_file_list_pointing_at_a_real_path_passes_validation() {
+        let action = Codesign::sign("app", "-").file_list("signed.txt");
+        assert!(action.action.validate().is_ok());
     }
 
     #[test]

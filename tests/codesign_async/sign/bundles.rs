@@ -18,10 +18,25 @@ async fn an_app_bundle_is_signed_from_its_info_plist() {
     inspect::assert_valid(&bundle);
     let signature = Signature::of(&bundle);
     assert_eq!(signature.identifier(), "com.example.Hello");
-    assert!(signature.sealed_resources().starts_with("version="), "got {}", signature.sealed_resources());
-    assert!(signature.info_plist().starts_with("entries="), "got {}", signature.info_plist());
-    assert!(bundle.join("Contents/_CodeSignature/CodeResources").is_file());
-    assert_eq!(output_of(&bundle.join("Contents/MacOS/Hello")), "hello, signers");
+    assert!(
+        signature.sealed_resources().starts_with("version="),
+        "got {}",
+        signature.sealed_resources()
+    );
+    assert!(
+        signature.info_plist().starts_with("entries="),
+        "got {}",
+        signature.info_plist()
+    );
+    assert!(
+        bundle
+            .join("Contents/_CodeSignature/CodeResources")
+            .is_file()
+    );
+    assert_eq!(
+        output_of(&bundle.join("Contents/MacOS/Hello")),
+        "hello, signers"
+    );
 }
 
 #[tokio::test]
@@ -41,7 +56,10 @@ async fn a_signed_bundle_seals_its_resources() {
 }
 
 #[tokio::test]
-#[expect(deprecated, reason = "`deep` is deprecated by Apple but still has to work")]
+#[expect(
+    deprecated,
+    reason = "`deep` is deprecated by Apple but still has to work"
+)]
 async fn deep_signing_is_still_wired_up() {
     let workspace = Workspace::new();
     let bundle = workspace.app_bundle("Deep");
@@ -69,5 +87,9 @@ async fn a_bundle_version_selects_which_version_to_sign() {
 
     inspect::assert_valid(&bundle);
     assert_eq!(Signature::of(&bundle).identifier(), "com.example.versioned");
-    assert!(bundle.join("Versions/A/_CodeSignature/CodeResources").is_file());
+    assert!(
+        bundle
+            .join("Versions/A/_CodeSignature/CodeResources")
+            .is_file()
+    );
 }

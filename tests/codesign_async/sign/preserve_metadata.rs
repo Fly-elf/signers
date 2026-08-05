@@ -26,7 +26,12 @@ async fn every_preserve_metadata_token_is_accepted() {
 async fn preserved_metadata_survives_a_re_sign() {
     let workspace = Workspace::new();
     let entitlements = fixture_str("entitlements.plist");
-    let presign = ["-i", "com.example.original", "--entitlements", &entitlements];
+    let presign = [
+        "-i",
+        "com.example.original",
+        "--entitlements",
+        &entitlements,
+    ];
     let preserved = workspace.presigned("preserved", &presign);
     let discarded = workspace.presigned("discarded", &presign);
 
@@ -39,9 +44,15 @@ async fn preserved_metadata_survives_a_re_sign() {
     // Control: the same re-sign without the option keeps neither.
     Codesign::sign(&discarded, "-").force(true).await.unwrap();
 
-    assert_eq!(Signature::of(&preserved).identifier(), "com.example.original");
+    assert_eq!(
+        Signature::of(&preserved).identifier(),
+        "com.example.original"
+    );
     assert!(inspect::entitlements(&preserved).contains("allow-jit"));
 
-    assert_ne!(Signature::of(&discarded).identifier(), "com.example.original");
+    assert_ne!(
+        Signature::of(&discarded).identifier(),
+        "com.example.original"
+    );
     assert!(inspect::entitlements(&discarded).is_empty());
 }

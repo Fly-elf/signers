@@ -10,7 +10,10 @@ use crate::support::inspect::{self, Signature};
 async fn an_unsigned_binary_gets_a_valid_ad_hoc_signature() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
-    assert!(!inspect::is_signed(&target), "the fixture started out signed");
+    assert!(
+        !inspect::is_signed(&target),
+        "the fixture started out signed"
+    );
 
     Codesign::sign(&target, "-").await.unwrap();
 
@@ -19,7 +22,11 @@ async fn an_unsigned_binary_gets_a_valid_ad_hoc_signature() {
     assert_eq!(signature.signature(), "adhoc");
     assert_eq!(signature.flags(), super::ADHOC);
     assert_eq!(signature.flag_names(), ["adhoc"]);
-    assert!(signature.format().starts_with("Mach-O"), "got {}", signature.format());
+    assert!(
+        signature.format().starts_with("Mach-O"),
+        "got {}",
+        signature.format()
+    );
 }
 
 #[tokio::test]
@@ -50,10 +57,18 @@ async fn every_slice_of_a_universal_binary_is_signed() {
 
     inspect::assert_valid(&target);
     let signature = Signature::of(&target);
-    assert!(signature.format().starts_with("Mach-O universal"), "got {}", signature.format());
+    assert!(
+        signature.format().starts_with("Mach-O universal"),
+        "got {}",
+        signature.format()
+    );
     for arch in ["arm64", "x86_64"] {
         let slice = Signature::of_arch(&target, arch);
-        assert_eq!(slice.identifier(), "com.example.universal", "in the {arch} slice");
+        assert_eq!(
+            slice.identifier(),
+            "com.example.universal",
+            "in the {arch} slice"
+        );
         assert_eq!(slice.flags(), super::ADHOC, "in the {arch} slice");
     }
     assert_eq!(output_of(&target), "hello, signers");
@@ -127,15 +142,21 @@ async fn every_kind_of_target_argument_reaches_codesign() {
     let as_slice = workspace.unsigned("as_slice");
 
     Codesign::sign(as_str.to_str().unwrap(), "-").await.unwrap();
-    Codesign::sign(as_string.to_str().unwrap().to_owned(), "-").await.unwrap();
-    Codesign::sign(as_os_string.clone().into_os_string(), "-").await.unwrap();
+    Codesign::sign(as_string.to_str().unwrap().to_owned(), "-")
+        .await
+        .unwrap();
+    Codesign::sign(as_os_string.clone().into_os_string(), "-")
+        .await
+        .unwrap();
     Codesign::sign(as_path.as_path(), "-").await.unwrap();
     Codesign::sign(as_path_buf.clone(), "-").await.unwrap();
     // The one a caller reaches for most: a borrowed field, neither cloned nor
     // narrowed to `&Path` at the call site.
     Codesign::sign(&as_path_buf_ref, "-").await.unwrap();
     Codesign::sign(vec![as_vec.clone()], "-").await.unwrap();
-    Codesign::sign(std::slice::from_ref(&as_slice), "-").await.unwrap();
+    Codesign::sign(std::slice::from_ref(&as_slice), "-")
+        .await
+        .unwrap();
 
     for target in [
         as_str,
