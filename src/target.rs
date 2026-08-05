@@ -6,14 +6,18 @@ use std::path::{Path, PathBuf};
 /// Converts a single path, or a collection of paths, into the canonical target
 /// list every `Codesign` action operates on.
 ///
-/// Accepts the common path-like types directly, as well as a `Vec` or slice of
-/// anything convertible into a [`PathBuf`]:
+/// Accepts the common path-like types directly — [`str`], [`String`],
+/// [`OsString`], [`Path`] and [`PathBuf`], the latter two either owned or
+/// borrowed — as well as a `Vec` or slice of anything convertible into a
+/// [`PathBuf`]:
 ///
 /// ```
 /// use signers::target::IntoTargets;
 /// use std::path::PathBuf;
 ///
-/// assert_eq!("MyApp.app".into_targets(), vec![PathBuf::from("MyApp.app")]);
+/// let owned = PathBuf::from("MyApp.app");
+/// assert_eq!("MyApp.app".into_targets(), vec![owned.clone()]);
+/// assert_eq!((&owned).into_targets(), vec![owned.clone()]);
 /// assert_eq!(
 ///     vec!["a.app", "b.app"].into_targets(),
 ///     vec![PathBuf::from("a.app"), PathBuf::from("b.app")],
@@ -49,7 +53,10 @@ macro_rules! impl_target {
     };
 }
 
-impl_target!(&str, String, OsString, &Path, PathBuf);
+// `&PathBuf` is spelled out alongside `PathBuf`: a generic parameter takes the
+// argument as written, with no deref coercion to `&Path` on the way in, so
+// without this impl the common `sign(&self.path, ..)` would not compile.
+impl_target!(&str, String, OsString, &Path, PathBuf, &PathBuf);
 
 impl<T: Into<PathBuf>> IntoTargets for Vec<T> {
     fn into_targets(self) -> Vec<PathBuf> {
@@ -82,6 +89,11 @@ mod tests {
         assert_eq!(OsString::from("app").into_targets(), expected);
         assert_eq!(Path::new("app").into_targets(), expected);
         assert_eq!(PathBuf::from("app").into_targets(), expected);
+
+        // Parenthesised, or the by-value `PathBuf` impl wins the method lookup.
+        let owned = PathBuf::from("app");
+        assert_eq!((&owned).into_targets(), expected);
+        assert_eq!(owned, PathBuf::from("app"), "the borrowed target was consumed");
     }
 
     #[test]
@@ -95,6 +107,33 @@ mod tests {
 
         let slice: &[&str] = &["a", "b"];
         assert_eq!(slice.into_targets(), expected);
+
+        let paths: &[PathBuf] = &expected;
+        assert_eq!(paths.into_targets(), expected);
+    }
+
+    /// Order is what pairs a target with its diagnostics, and a repeated target
+    /// is the caller's business — neither is ours to tidy up.
+    #[test]
+    fn collections_keep_their_order_and_their_duplicates() {
+        assert_eq!(
+            vec!["b", "a", "b"].into_targets(),
+            vec![PathBuf::from("b"), PathBuf::from("a"), PathBuf::from("b")],
+        );
+    }
+
+    /// A path is bytes, not text: anything that round-trips through `PathBuf`
+    /// has to survive, or the target reaching `codesign` is not the one asked
+    /// for.
+    #[cfg(unix)]
+    #[test]
+    fn targets_that_are_not_utf8_survive_unchanged() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let raw = OsString::from_vec(vec![b'a', 0xff, b'b']);
+        let expected = vec![PathBuf::from(&raw)];
+        assert_eq!(raw.clone().into_targets(), expected);
+        assert_eq!(vec![PathBuf::from(&raw)].into_targets(), expected);
     }
 
     #[test]
@@ -104,6 +143,7 @@ mod tests {
         assert!(OsString::new().into_targets().is_empty());
         assert!(Path::new("").into_targets().is_empty());
         assert!(PathBuf::new().into_targets().is_empty());
+        assert!((&PathBuf::new()).into_targets().is_empty());
     }
 
     #[test]

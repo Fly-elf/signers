@@ -66,7 +66,7 @@ impl<A: Action + Send + 'static> IntoFuture for Codesign<A> {
                 }
             }
 
-            let args = self.action.args(&self.targets);
+            let args = self.action.to_args(&self.targets);
             tracing::trace!(
                 "running codesign {}",
                 args.iter()
