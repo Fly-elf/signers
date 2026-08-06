@@ -2,7 +2,8 @@
 //!
 //! This backend spawns `codesign` as a subprocess, so it runs on macOS only and
 //! needs the Xcode Command Line Tools installed — without them every action
-//! fails with [`Error::CodesignNotFound`], which names the fix.
+//! fails with [`CodesignError::NotFound`](crate::errors::CodesignError::NotFound),
+//! which names the fix.
 //!
 //! Everything starts at [`Codesign::sign`].
 
@@ -14,7 +15,7 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::process::Stdio;
 
-use crate::errors::{Error, Result};
+use crate::errors::{CodesignError, Error, Result};
 use crate::target::IntoTargets;
 
 pub use actions::{Action, PreserveMetadata, Sign, SigningFlags, Timestamp};
@@ -125,25 +126,25 @@ impl<A: Action + Send + 'static> IntoFuture for Codesign<A> {
                 .stderr(Stdio::piped())
                 .spawn()
                 .map_err(|source| match source.kind() {
-                    ErrorKind::NotFound => Error::CodesignNotFound,
-                    _ => Error::Spawn(source),
+                    ErrorKind::NotFound => CodesignError::NotFound,
+                    _ => CodesignError::Spawn(source),
                 })?;
 
-            let output = child.wait_with_output().await.map_err(Error::Run)?;
+            let output = child.wait_with_output().await.map_err(CodesignError::Run)?;
             if output.status.success() {
                 return Ok(());
             }
 
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-            Err(match output.status.code() {
-                Some(code) => Error::Codesign { code, stderr },
+            Err(Error::Codesign(match output.status.code() {
+                Some(code) => CodesignError::Failed { code, stderr },
                 // No exit code at all: the process was killed before it could
                 // exit, so this is not `codesign` rejecting anything.
-                None => Error::Terminated {
+                None => CodesignError::Terminated {
                     status: output.status,
                     stderr,
                 },
-            })
+            }))
         })
     }
 }
