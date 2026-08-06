@@ -8,9 +8,10 @@
 //!
 //! [`Codesign`] *is* the invocation, put together in three steps:
 //!
-//! 1. **Pick the action.** A constructor — [`Codesign::sign`] and, in time, its
-//!    siblings — takes the targets plus whatever that action cannot run
-//!    without, and hands back a builder specific to it.
+//! 1. **Pick the action.** A constructor — [`Codesign::sign`],
+//!    [`Codesign::remove_signature`] and, in time, their siblings — takes the
+//!    targets plus whatever that action cannot run without, and hands back a
+//!    builder specific to it.
 //! 2. **Configure it.** One setter per `codesign` option, each returning the
 //!    builder so they chain. Which setters exist follows from the action, so a
 //!    builder never offers an option its action doesn't support.
@@ -30,11 +31,13 @@
 //! # Actions
 //!
 //! An action is a type holding the options that action was configured with:
-//! [`Sign`] for [`Codesign::sign`]. You never build one yourself, but its page
-//! is where that action's options are documented and where the worked examples
+//! [`Sign`] for [`Codesign::sign`], [`RemoveSignature`] for
+//! [`Codesign::remove_signature`]. You never build one yourself, but its page is
+//! where that action's options are documented and where the worked examples
 //! live.
 
 mod actions;
+pub mod remove_signature;
 pub mod sign;
 
 use std::future::{Future, IntoFuture};
@@ -43,6 +46,7 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::process::Stdio;
 
+use remove_signature::RemoveSignature;
 use sign::Sign;
 
 use crate::errors::{CodesignError, Error, Result};
@@ -61,13 +65,14 @@ pub use actions::Action;
 /// This page holds both halves of the API:
 ///
 /// - **Constructors**, on `Codesign<()>` — one per action, each naming its
-///   targets and whatever that action cannot run without. For now
-///   [`sign`](Codesign::sign).
+///   targets and whatever that action cannot run without:
+///   [`sign`](Codesign::sign) and
+///   [`remove_signature`](Codesign::remove_signature).
 /// - **Options**, one `impl` block per action — one setter per `codesign` flag,
 ///   taking `self` and returning it so they chain.
 ///
 /// The action types are where those options are documented in context, with the
-/// examples that show them working together: [`Sign`].
+/// examples that show them working together: [`Sign`], [`RemoveSignature`].
 ///
 /// Nothing happens before the `.await`, which yields `Result<(), Error>` — see
 /// [`Error`] for what can go wrong on the way. Until then this is an ordinary
@@ -81,14 +86,9 @@ pub struct Codesign<A> {
 impl Codesign<()> {
     /// Signs `target` with `identity` (`codesign --sign`).
     ///
-    /// `target` is anything [`IntoTargets`] accepts: a path, or a collection of
-    /// them to sign as one batch. `identity` picks the signing certificate — a
+    /// `identity` picks the signing certificate — a
     /// keychain identity name, an identity preference, a 40-digit certificate
     /// SHA-1 hash, or `-` for an ad-hoc signature.
-    ///
-    /// Every option starts at `codesign`'s own default, so re-signing something
-    /// that's already signed needs [`force`](Codesign::force), just like on the
-    /// command line. See [`Sign`] for the rest of them, and for examples.
     pub fn sign(target: impl IntoTargets, identity: impl Into<String>) -> Codesign<Sign> {
         Codesign {
             targets: target.into_targets(),
@@ -98,11 +98,6 @@ impl Codesign<()> {
 
     /// Ad-hoc-signs `target`: no certificate, identity `-`
     /// (`codesign --sign -`).
-    ///
-    /// Shorthand for [`Codesign::sign`]`(target, "-")` — the common case of
-    /// re-signing a patched binary that doesn't need to trace back to a
-    /// developer identity.
-    ///
     /// ```no_run
     /// # async fn run() -> Result<(), signers::Error> {
     /// use signers::Codesign;
@@ -117,18 +112,8 @@ impl Codesign<()> {
         }
     }
 
-    /// Signs `target` with `identity`, pre-configured for distribution: the
-    /// hardened runtime notarization requires, and a trusted timestamp so the
-    /// signature outlives the certificate
+    /// Signs `target` with `identity`, pre-configured for distribution
     /// (`codesign --sign --options runtime --timestamp`).
-    ///
-    /// Shorthand for [`Codesign::sign`]`(target, identity)` with
-    /// [`options`](Codesign::options)([`SigningFlags::RUNTIME`](sign::SigningFlags::RUNTIME))
-    /// and [`timestamp`](Codesign::timestamp)([`Timestamp::Enabled`](sign::Timestamp::Enabled))
-    /// already applied. Add [`force`](Codesign::force) yourself when replacing
-    /// a signature that's already there — not every distribution build starts
-    /// unsigned.
-    ///
     /// ```no_run
     /// # async fn run() -> Result<(), signers::Error> {
     /// use signers::Codesign;
@@ -148,6 +133,21 @@ impl Codesign<()> {
         Codesign {
             targets: target.into_targets(),
             action: Sign::for_distribution(identity),
+        }
+    }
+
+    /// Strips the signature from `target` (`codesign --remove-signature`).
+    /// ```no_run
+    /// # async fn run() -> Result<(), signers::Error> {
+    /// use signers::Codesign;
+    ///
+    /// Codesign::remove_signature("patched.dylib").await?;
+    /// # Ok(()) }
+    /// ```
+    pub fn remove_signature(target: impl IntoTargets) -> Codesign<RemoveSignature> {
+        Codesign {
+            targets: target.into_targets(),
+            action: RemoveSignature::default(),
         }
     }
 }

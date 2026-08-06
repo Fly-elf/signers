@@ -6,8 +6,8 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
-use signers::Error;
 use signers::Codesign;
+use signers::Error;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect;

@@ -13,8 +13,8 @@ Built on top of two backends:
 | Requires       | Xcode Command Line Tools       | nothing extra                                                            |
 | Implementation | subprocess — the macOS [`codesign`](https://keith.github.io/xcode-man-pages/codesign.1.html) binary | native — the [`apple-codesign`](https://crates.io/crates/apple-codesign) crate |
 
-> 🚧 **Early development.** Signing works on the `codesign` backend; everything else is still
-> on the way. See [Status](#status).
+> 🚧 **Early development.** Signing and removing signatures work on the `codesign` backend;
+> everything else is still on the way. See [Status](#status).
 
 ## Installation
 
@@ -43,6 +43,10 @@ Codesign::sign("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
     .timestamp(Timestamp::Enabled)
     .force(true)
     .await?;
+
+// Stripping a signature, e.g. before patching the Mach-O it no longer matches.
+// Re-signing needs no removal first: `sign` with `force` replaces in one step.
+Codesign::remove_signature("MyApp.app").await?;
 ```
 
 ### Rcodesign
@@ -53,8 +57,8 @@ than the crate on its own.
 
 ## Status
 The project is in early development, so most of the features don't work yet.
-- [x] `codesign` async API — signing
-- [ ] `codesign` async API — verifying, removing signatures
+- [x] `codesign` async API — signing, removing signatures
+- [ ] `codesign` async API — verifying
 - [ ] `codesign` blocking API
 - [ ] `rcodesign` blocking API
 - [ ] `rcodesign` async API
