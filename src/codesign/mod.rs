@@ -2,10 +2,37 @@
 //!
 //! This backend spawns `codesign` as a subprocess, so it runs on macOS only and
 //! needs the Xcode Command Line Tools installed — without them every action
-//! fails with [`CodesignError::NotFound`](crate::errors::CodesignError::NotFound),
-//! which names the fix.
+//! fails with [`CodesignError::NotFound`], which names the fix.
 //!
-//! Everything starts at [`Codesign::sign`].
+//! # Building an invocation
+//!
+//! [`Codesign`] *is* the invocation, put together in three steps:
+//!
+//! 1. **Pick the action.** A constructor — [`Codesign::sign`] and, in time, its
+//!    siblings — takes the targets plus whatever that action cannot run
+//!    without, and hands back a builder specific to it.
+//! 2. **Configure it.** One setter per `codesign` option, each returning the
+//!    builder so they chain. Which setters exist follows from the action, so a
+//!    builder never offers an option its action doesn't support.
+//! 3. **Run it.** `.await` is what spawns `codesign`; everything before it only
+//!    fills in a value.
+//!
+//! ```no_run
+//! # async fn run() -> Result<(), signers::Error> {
+//! use signers::codesign::Codesign;
+//!
+//! Codesign::sign("MyApp.app", "-") // 1. the action, and what it runs on
+//!     .force(true)                 // 2. its options
+//!     .await?;                     // 3. the run
+//! # Ok(()) }
+//! ```
+//!
+//! # Actions
+//!
+//! An action is a type holding the options that action was configured with:
+//! [`Sign`] for [`Codesign::sign`]. You never build one yourself, but its page
+//! is where that action's options are documented and where the worked examples
+//! live.
 
 mod actions;
 
@@ -20,30 +47,28 @@ use crate::target::IntoTargets;
 
 pub use actions::{Action, PreserveMetadata, Sign, SigningFlags, Timestamp};
 
-/// A `codesign` action, and the options it will run with.
+/// A `codesign` invocation: an action, the options it will run with, and the
+/// targets it will run on.
 ///
-/// You get one from a constructor ([`Codesign::sign`]), configure it by
-/// chaining setters, and run it by `.await`ing it. The action type is what
-/// decides which setters exist, so a builder only ever offers options its
-/// action actually supports.
+/// `A` is the action, and it's what makes a builder specific.
+/// [`Codesign::sign`] returns a `Codesign<Sign>`, whose setters are `codesign`'s
+/// signing options and nothing else — an option some *other* action takes isn't
+/// rejected at runtime, it isn't there to call.
 ///
-/// Nothing happens before the `.await`. Until then it's an ordinary value you
-/// can keep building, clone, or drop:
+/// This page holds both halves of the API:
 ///
-/// ```no_run
-/// # async fn run(hardened: bool) -> Result<(), signers::Error> {
-/// use signers::codesign::{Codesign, SigningFlags};
+/// - **Constructors**, on `Codesign<()>` — one per action, each naming its
+///   targets and whatever that action cannot run without. For now
+///   [`sign`](Codesign::sign).
+/// - **Options**, one `impl` block per action — one setter per `codesign` flag,
+///   taking `self` and returning it so they chain.
 ///
-/// let mut signing = Codesign::sign("MyApp.app", "-").force(true);
-/// if hardened {
-///     signing = signing.options(SigningFlags::RUNTIME);
-/// }
-/// signing.await?;
-/// # Ok(()) }
-/// ```
+/// The action types are where those options are documented in context, with the
+/// examples that show them working together: [`Sign`].
 ///
-/// Awaiting gives back `Result<(), Error>`; see [`Error`] for what can go
-/// wrong on the way.
+/// Nothing happens before the `.await`, which yields `Result<(), Error>` — see
+/// [`Error`] for what can go wrong on the way. Until then this is an ordinary
+/// value: build it across several statements, clone it, drop it unrun.
 #[derive(Debug, Clone)]
 pub struct Codesign<A> {
     targets: Vec<PathBuf>,
@@ -51,7 +76,7 @@ pub struct Codesign<A> {
 }
 
 impl Codesign<()> {
-    /// Signs `target` with `identity`.
+    /// Signs `target` with `identity` (`codesign --sign`).
     ///
     /// `target` is anything [`IntoTargets`] accepts: a path, or a collection of
     /// them to sign as one batch. `identity` picks the signing certificate — a
@@ -60,15 +85,7 @@ impl Codesign<()> {
     ///
     /// Every option starts at `codesign`'s own default, so re-signing something
     /// that's already signed needs [`force`](Codesign::force), just like on the
-    /// command line.
-    ///
-    /// ```no_run
-    /// # async fn run() -> Result<(), signers::Error> {
-    /// use signers::codesign::Codesign;
-    ///
-    /// Codesign::sign("MyApp.app", "-").force(true).await?;
-    /// # Ok(()) }
-    /// ```
+    /// command line. See [`Sign`] for the rest of them, and for examples.
     pub fn sign(target: impl IntoTargets, identity: impl Into<String>) -> Codesign<Sign> {
         Codesign {
             targets: target.into_targets(),

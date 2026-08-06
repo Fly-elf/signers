@@ -49,6 +49,8 @@ pub(crate) mod sealed {
             Ok(())
         }
 
+        /// Called once [`validate`](Self::validate) has passed, so an action
+        /// renders only combinations it has already accepted.
         fn to_args<'a>(&'a self, targets: &'a [PathBuf]) -> Vec<Cow<'a, OsStr>>;
     }
 }
