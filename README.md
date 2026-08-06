@@ -1,61 +1,60 @@
 # signers
 
-Simple, ergonomic Rust bindings for macOS code signing.
+Manage macOS binary code-signing with a simple Rust API.
+- `async` first, with an optional `blocking` API
+- Multiplatform with no external dependency, via `rcodesign`
+- Python API
 
-`signers` wraps macOS binary code-signing behind a single, hard-to-misuse API, with two
-interchangeable backends:
+Built on top of two backends:
 
-- **`codesign`** — the macOS `codesign` CLI, via subprocess.
-- **`rcodesign`** — the [`apple-codesign`](https://crates.io/crates/apple-codesign) crate, used
-  natively. No external binary, no Xcode Command Line Tools required, works cross-platform.
+|                | `codesign`                     | `rcodesign`                                                              |
+|----------------|--------------------------------|--------------------------------------------------------------------------|
+| Platforms      | macOS only                     | macOS, Linux, Windows                                                    |
+| Requires       | Xcode Command Line Tools       | nothing extra                                                            |
+| Implementation | subprocess — the macOS [`codesign`](https://keith.github.io/xcode-man-pages/codesign.1.html) binary | native — the [`apple-codesign`](https://crates.io/crates/apple-codesign) crate |
 
-Pick whichever backend fits your environment — both expose the same API.
-
-> 🚧 **Early development.** The usage example below reflects the intended API design; nothing
-> is implemented yet. See [Status](#status) for where things currently stand.
-
-## Why
-
-Built for scripting and automating code signing — e.g. re-signing binaries after patching them
-in reverse-engineering or build-tooling workflows — without hand-rolling subprocess calls or
-learning the two underlying tools' CLIs.
-
-## Usage (planned API)
-
-```rust
-use signers::codesign::Codesign;
-
-Codesign::sign("MyApp.app")
-    .force(true)
-    .deep(true)
-    .identity("-")
-    .await?;
-
-let status = Codesign::verify("MyApp.app").await?;
-```
-
-The API is primarily async. An optional blocking variant will be available under `blocking` submodules
-
-## Backends
-
-|                | `codesign`                    | `rcodesign`                     |
-|----------------|--------------------------------|----------------------------------|
-| Implementation | subprocess (macOS `codesign`) | native (`apple-codesign` crate)  |
-| Platforms      | macOS only                    | macOS, Linux, Windows            |
-| Requires       | Xcode Command Line Tools      | nothing extra                    |
-
-Both backends are always available — no feature flag needed to choose between them.
+> 🚧 **Early development.** Signing works on the `codesign` backend; everything else is still
+> on the way. See [Status](#status).
 
 ## Installation
 
 Not yet published on crates.io.
 
+## Usage
+
+Both backends expose a set of actions (`sign`, `verify`, ...), each configurable through its own
+builder options. Every action needs at least one target (see `IntoTargets`) and only runs once
+you `.await` it.
+
+### Codesign
+Wraps the macOS `codesign` utility one-to-one — if you know how to use it, you already know what
+a builder will do. The API has the same default options as the utility.
+
+```rust
+// Ad-hoc signature, replacing whatever was there before.
+Codesign::sign(vec!["MyApp.app", "MyLib.dylib"], "-")
+    .force(true)
+    .await?;
+
+// Signing for distribution
+Codesign::sign("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
+    .entitlements("MyApp.entitlements")
+    .options(SigningFlags::RUNTIME) // the hardened runtime, needed to notarize
+    .timestamp(Timestamp::Enabled)
+    .force(true)
+    .await?;
+```
+
+### Rcodesign
+Exposes the `apple-codesign` crate with an API in the same style as `codesign`'s, easier to use
+than the crate on its own.
+
+*(Examples once the backend is implemented — see [Status](#status).)*
+
 ## Status
-
-Early development, built one feature at a time:
-
-- [x] Project setup
-- [ ] `codesign` async API
+The project is in early development, so most of the features don't work yet.
+- [x] `codesign` async API — signing
+- [ ] `codesign` async API — verifying, removing signatures
 - [ ] `codesign` blocking API
 - [ ] `rcodesign` blocking API
 - [ ] `rcodesign` async API

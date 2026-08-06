@@ -9,14 +9,14 @@ use bitflags::{Flags, bitflags};
 use super::sealed::ToArgs;
 use crate::codesign::Codesign;
 
-/// Options for the signing action (`codesign --sign`).
+/// The options a signing run was configured with (`codesign --sign`).
 ///
-/// Built through [`Codesign::sign`] and its chained setters. Every option
-/// defaults to `codesign`'s own default, so a builder with no setters applied
-/// runs `codesign --sign <identity> <targets>`.
+/// You don't build this yourself — [`Codesign::sign`] makes one and its setters
+/// fill it in. Everything starts at `codesign`'s own default, so a builder with
+/// no setters applied runs plain `codesign --sign <identity> <targets>`.
 ///
-/// [`Default`] leaves the identity empty — it exists as the base the crate's
-/// own constructors build on, filling the identity in.
+/// [`Default`] leaves the identity empty; it's just the base the constructor
+/// builds on.
 #[derive(Debug, Clone, Default)]
 pub struct Sign {
     identity: String,
@@ -68,29 +68,37 @@ impl Sign {
 }
 
 impl Codesign<Sign> {
-    /// Explicit signing identifier, overriding the one derived from the
-    /// target's `Info.plist` or filename (`--identifier`).
+    /// Signing identifier to use, instead of the one derived from the target's
+    /// `Info.plist` or filename (`--identifier`).
     pub fn identifier(mut self, identifier: impl Into<String>) -> Self {
         self.action.identifier = Some(identifier.into());
         self
     }
 
-    /// Internal requirements to embed, as a path to a requirements file or a
-    /// literal source string prefixed with `=` (`--requirements`).
+    /// Internal requirements to embed: a path to a requirements file, or the
+    /// source itself prefixed with `=` (`--requirements`).
+    ///
+    /// ```no_run
+    /// # async fn run() -> Result<(), signers::Error> {
+    /// # use signers::codesign::Codesign;
+    /// Codesign::sign("MyApp.app", "-")
+    ///     .requirements("=designated => anchor apple")
+    ///     .await?;
+    /// # Ok(()) }
+    /// ```
     pub fn requirements(mut self, requirements: impl Into<String>) -> Self {
         self.action.requirements = Some(requirements.into());
         self
     }
 
-    /// Prefix prepended to an implicitly derived identifier that contains no
-    /// dot, e.g. `com.example.` (`--prefix`).
+    /// Prefix to complete a derived identifier that has no dot in it, e.g.
+    /// `com.example.` (`--prefix`).
     pub fn prefix(mut self, prefix: impl Into<String>) -> Self {
         self.action.prefix = Some(prefix.into());
         self
     }
 
-    /// Restrict the search for the signing identity to this keychain
-    /// (`--keychain`).
+    /// Look for the signing identity in this keychain only (`--keychain`).
     pub fn keychain(mut self, path: impl Into<PathBuf>) -> Self {
         self.action.keychain = Some(path.into());
         self
@@ -116,12 +124,19 @@ impl Codesign<Sign> {
         self
     }
 
-    /// CodeDirectory option flags to seal into the signature (`--options`),
-    /// replacing any previously set flags.
+    /// CodeDirectory flags to seal into the signature (`--options`).
     ///
-    /// ```
-    /// # use signers::codesign::{Codesign, SigningFlags};
-    /// Codesign::sign("MyApp.app", "-").options(SigningFlags::RUNTIME | SigningFlags::KILL);
+    /// It's the whole set at once: calling it again replaces the flags rather
+    /// than adding to them.
+    ///
+    /// ```no_run
+    /// # async fn run() -> Result<(), signers::Error> {
+    /// use signers::codesign::{Codesign, SigningFlags};
+    ///
+    /// Codesign::sign("MyApp.app", "-")
+    ///     .options(SigningFlags::RUNTIME | SigningFlags::KILL)
+    ///     .await?;
+    /// # Ok(()) }
     /// ```
     pub fn options(mut self, options: SigningFlags) -> Self {
         self.action.options = options;
@@ -191,11 +206,25 @@ impl Codesign<Sign> {
         self
     }
 
-    /// Metadata to reuse from the existing signature when re-signing
-    /// (`--preserve-metadata`), replacing any previous selection.
+    /// Metadata to carry over from the signature you're replacing
+    /// (`--preserve-metadata`).
     ///
-    /// Requires [`force`](Codesign::force) to have any effect, and is ignored
-    /// altogether when the previous signature is linker-signed.
+    /// Only does something alongside [`force`](Codesign::force) — there's
+    /// nothing to carry over otherwise — and nothing at all if the old
+    /// signature was linker-signed. Like [`options`](Codesign::options), it
+    /// replaces the set rather than adding to it.
+    ///
+    /// ```no_run
+    /// # async fn run() -> Result<(), signers::Error> {
+    /// use signers::codesign::{Codesign, PreserveMetadata};
+    ///
+    /// // Re-sign a patched binary, keeping the entitlements it already had.
+    /// Codesign::sign("MyApp.app", "-")
+    ///     .force(true)
+    ///     .preserve_metadata(PreserveMetadata::ENTITLEMENTS)
+    ///     .await?;
+    /// # Ok(()) }
+    /// ```
     pub fn preserve_metadata(mut self, metadata: PreserveMetadata) -> Self {
         self.action.preserve_metadata = metadata;
         self
@@ -210,7 +239,10 @@ impl Codesign<Sign> {
         self
     }
 
-    /// Timestamp policy for the signature (`--timestamp`).
+    /// Whether to timestamp the signature, and where from (`--timestamp`).
+    ///
+    /// A trusted timestamp is what keeps a signature valid after the signing
+    /// certificate expires, so distribution builds want one.
     pub fn timestamp(mut self, timestamp: Timestamp) -> Self {
         self.action.timestamp = Some(timestamp);
         self
@@ -257,14 +289,13 @@ impl Codesign<Sign> {
         self
     }
 
-    /// Append the list of files touched by the signing operation to this path
+    /// Append the list of files the signing touched to this path
     /// (`--file-list`).
     ///
-    /// `codesign` itself also accepts `-` here to mean "write to standard
-    /// output", but this crate captures the child process's stdout internally
-    /// with nowhere to relay it, so `-` fails at `.await` time with
-    /// [`Error::FileListToStdout`](crate::Error::FileListToStdout) instead of
-    /// silently discarding the list.
+    /// `codesign` also takes `-` here, meaning standard output, but this crate
+    /// captures that and has nowhere to hand it to you — so `-` fails at
+    /// `.await` with [`Error::FileListToStdout`](crate::Error::FileListToStdout)
+    /// rather than dropping the list on the floor.
     pub fn file_list(mut self, path: impl Into<PathBuf>) -> Self {
         self.action.file_list = Some(path.into());
         self
@@ -439,7 +470,7 @@ fn joined<F: Flags + Copy>(flags: F) -> String {
     tokens
 }
 
-/// Timestamp policy embedded in the signature (`--timestamp`).
+/// What to do about timestamping, for [`timestamp`](Codesign::timestamp).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Timestamp {
     /// `--timestamp` — request a trusted timestamp from Apple's default server.
@@ -453,8 +484,9 @@ pub enum Timestamp {
 bitflags! {
     /// CodeDirectory option flags sealed into the signature (`--options`).
     ///
-    /// Values mirror `SecCodeSignatureFlags` from `Security/CSCommon.h`; names
-    /// are the tokens `codesign` accepts.
+    /// Combine them with `|` and hand the result to
+    /// [`options`](Codesign::options). Values mirror `SecCodeSignatureFlags`
+    /// from `Security/CSCommon.h`; names are the tokens `codesign` accepts.
     #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
     pub struct SigningFlags: u32 {
         /// Marks the code as able to host guest code.
@@ -486,7 +518,11 @@ bitflags! {
 
 bitflags! {
     /// Metadata to reuse from an existing signature when re-signing
-    /// (`--preserve-metadata`). Names are the tokens `codesign` accepts.
+    /// (`--preserve-metadata`).
+    ///
+    /// Combine them with `|` and hand the result to
+    /// [`preserve_metadata`](Codesign::preserve_metadata). Names are the tokens
+    /// `codesign` accepts.
     #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
     pub struct PreserveMetadata: u8 {
         /// Keep the existing signing identifier.
