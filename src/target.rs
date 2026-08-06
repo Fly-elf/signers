@@ -29,7 +29,7 @@
 //! literal handed straight to an action doesn't compile:
 //!
 //! ```compile_fail
-//! # use signers::codesign::Codesign;
+//! # use signers::Codesign;
 //! Codesign::sign(&["a.app", "b.app"], "-");
 //! // error[E0277]: the trait `IntoTargets` is not implemented for `&[&str; 2]`
 //! ```
@@ -65,7 +65,7 @@ use std::path::{Path, PathBuf};
 ///
 /// ```no_run
 /// # async fn run() -> Result<(), signers::Error> {
-/// use signers::codesign::Codesign;
+/// use signers::Codesign;
 /// use std::path::PathBuf;
 ///
 /// let target = PathBuf::from("MyApp.app");

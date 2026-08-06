@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use bitflags::{Flags, bitflags};
 
-use super::sealed::ToArgs;
+use super::actions::sealed::ToArgs;
 use crate::codesign::Codesign;
 
 /// The signing action, and the options it was configured with
@@ -32,7 +32,7 @@ use crate::codesign::Codesign;
 ///
 /// ```no_run
 /// # async fn run() -> Result<(), signers::Error> {
-/// use signers::codesign::Codesign;
+/// use signers::Codesign;
 ///
 /// Codesign::sign("patched.dylib", "-").force(true).await?;
 /// # Ok(()) }
@@ -43,7 +43,8 @@ use crate::codesign::Codesign;
 ///
 /// ```no_run
 /// # async fn run() -> Result<(), signers::Error> {
-/// use signers::codesign::{Codesign, PreserveMetadata};
+/// use signers::Codesign;
+/// use signers::codesign::sign::PreserveMetadata;
 ///
 /// Codesign::sign("patched.app", "-")
 ///     .force(true)
@@ -58,7 +59,8 @@ use crate::codesign::Codesign;
 ///
 /// ```no_run
 /// # async fn run() -> Result<(), signers::Error> {
-/// use signers::codesign::{Codesign, SigningFlags, Timestamp};
+/// use signers::Codesign;
+/// use signers::codesign::sign::{SigningFlags, Timestamp};
 ///
 /// Codesign::sign("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
 ///     .entitlements("MyApp.entitlements")
@@ -75,7 +77,7 @@ use crate::codesign::Codesign;
 ///
 /// ```no_run
 /// # async fn run() -> Result<(), signers::Error> {
-/// use signers::codesign::Codesign;
+/// use signers::Codesign;
 ///
 /// Codesign::sign(vec!["MyApp.app", "MyLib.dylib"], "-")
 ///     .force(true)
@@ -88,7 +90,8 @@ use crate::codesign::Codesign;
 ///
 /// ```no_run
 /// # async fn run(hardened: bool) -> Result<(), signers::Error> {
-/// use signers::codesign::{Codesign, SigningFlags};
+/// use signers::Codesign;
+/// use signers::codesign::sign::SigningFlags;
 ///
 /// let mut signing = Codesign::sign("MyApp.app", "-").force(true);
 /// if hardened {
@@ -160,7 +163,7 @@ impl Codesign<Sign> {
     ///
     /// ```no_run
     /// # async fn run() -> Result<(), signers::Error> {
-    /// # use signers::codesign::Codesign;
+    /// # use signers::Codesign;
     /// Codesign::sign("MyApp.app", "-")
     ///     .requirements("=designated => anchor apple")
     ///     .await?;
@@ -211,7 +214,8 @@ impl Codesign<Sign> {
     ///
     /// ```no_run
     /// # async fn run() -> Result<(), signers::Error> {
-    /// use signers::codesign::{Codesign, SigningFlags};
+    /// use signers::Codesign;
+    /// use signers::codesign::sign::SigningFlags;
     ///
     /// Codesign::sign("MyApp.app", "-")
     ///     .options(SigningFlags::RUNTIME | SigningFlags::KILL)
@@ -296,7 +300,8 @@ impl Codesign<Sign> {
     ///
     /// ```no_run
     /// # async fn run() -> Result<(), signers::Error> {
-    /// use signers::codesign::{Codesign, PreserveMetadata};
+    /// use signers::Codesign;
+    /// use signers::codesign::sign::PreserveMetadata;
     ///
     /// // Re-sign a patched binary, keeping the entitlements it already had.
     /// Codesign::sign("MyApp.app", "-")
@@ -561,7 +566,8 @@ fn joined<F: Flags + Copy>(flags: F) -> String {
 ///
 /// ```no_run
 /// # async fn run() -> Result<(), signers::Error> {
-/// use signers::codesign::{Codesign, Timestamp};
+/// use signers::Codesign;
+/// use signers::codesign::sign::Timestamp;
 ///
 /// let identity = "Developer ID Application: Jane Doe (A1B2C3D4E5)";
 ///
@@ -603,7 +609,8 @@ bitflags! {
     ///
     /// ```no_run
     /// # async fn run() -> Result<(), signers::Error> {
-    /// use signers::codesign::{Codesign, SigningFlags};
+    /// use signers::Codesign;
+    /// use signers::codesign::sign::SigningFlags;
     ///
     /// // The hardened runtime, plus killing the process if it becomes
     /// // dynamically invalid at runtime.
@@ -653,7 +660,8 @@ bitflags! {
     ///
     /// ```no_run
     /// # async fn run() -> Result<(), signers::Error> {
-    /// use signers::codesign::{Codesign, PreserveMetadata};
+    /// use signers::Codesign;
+    /// use signers::codesign::sign::PreserveMetadata;
     ///
     /// // Re-sign a patched binary, keeping its identifier and internal
     /// // requirements rather than deriving them again from scratch.

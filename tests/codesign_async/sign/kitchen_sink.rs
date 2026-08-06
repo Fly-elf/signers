@@ -4,7 +4,8 @@
 
 use std::fs;
 
-use signers::codesign::{Codesign, SigningFlags, Timestamp};
+use signers::Codesign;
+use signers::codesign::sign::{SigningFlags, Timestamp};
 
 use crate::support::fixture::{Workspace, fixture, output_of};
 use crate::support::inspect::{self, Signature};

@@ -1,7 +1,7 @@
 //! Policy embedded in the signature: entitlements, internal requirements, and
 //! launch constraints.
 
-use signers::codesign::Codesign;
+use signers::Codesign;
 
 use crate::support::fixture::{Workspace, fixture};
 use crate::support::inspect::{self, Signature};

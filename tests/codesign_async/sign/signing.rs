@@ -1,7 +1,7 @@
 //! Signing a target that starts out unsigned: the happy path, identifier
 //! derivation, and everything `IntoTargets` accepts to get there.
 
-use signers::codesign::Codesign;
+use signers::Codesign;
 
 use crate::support::fixture::{Workspace, output_of};
 use crate::support::inspect::{self, Signature};

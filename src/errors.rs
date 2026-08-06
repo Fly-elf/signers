@@ -23,7 +23,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 ///
 /// ```no_run
 /// # async fn run() {
-/// use signers::{CodesignError, Error, codesign::Codesign};
+/// use signers::{Codesign, CodesignError, Error};
 ///
 /// match Codesign::sign("MyApp.app", "-").force(true).await {
 ///     Ok(()) => println!("signed"),

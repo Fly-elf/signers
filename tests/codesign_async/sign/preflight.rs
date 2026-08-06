@@ -7,7 +7,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
 use signers::Error;
-use signers::codesign::Codesign;
+use signers::Codesign;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect;

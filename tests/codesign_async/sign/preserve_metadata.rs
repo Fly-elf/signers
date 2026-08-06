@@ -1,7 +1,8 @@
 //! `preserve_metadata`: which parts of an old signature carry over into a
 //! forced re-sign.
 
-use signers::codesign::{Codesign, PreserveMetadata};
+use signers::Codesign;
+use signers::codesign::sign::PreserveMetadata;
 
 use crate::support::fixture::{Workspace, fixture_str};
 use crate::support::inspect::{self, Signature};
