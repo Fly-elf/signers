@@ -1,12 +1,13 @@
 //! The signing action (`codesign --sign`).
 
 use std::borrow::Cow;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use bitflags::{Flags, bitflags};
+use bitflags::bitflags;
 
 use super::actions::sealed::ToArgs;
+use super::actions::{PushArgs, joined};
 use crate::codesign::Codesign;
 
 /// The signing action, and the options it was configured with
@@ -146,6 +147,22 @@ impl Sign {
         Self {
             identity: identity.into(),
             ..Self::default()
+        }
+    }
+
+    /// Ad-hoc signing options: identity `-`, everything else left at
+    /// `codesign`'s defaults.
+    pub(crate) fn adhoc() -> Self {
+        Self::new("-")
+    }
+
+    /// Distribution-signing options for `identity`: the hardened runtime and a
+    /// trusted timestamp switched on, since a notarized build needs both.
+    pub(crate) fn for_distribution(identity: impl Into<String>) -> Self {
+        Self {
+            options: SigningFlags::RUNTIME,
+            timestamp: Some(Timestamp::Enabled),
+            ..Self::new(identity)
         }
     }
 }
@@ -497,64 +514,6 @@ impl ToArgs for Sign {
     }
 }
 
-/// Argument-list vocabulary, so that each `codesign` option renders on one
-/// line and the arguments that have to allocate stay visible as such.
-trait PushArgs<'a> {
-    /// A standalone argument known at compile time: a bare flag such as
-    /// `--force`, or a whole `=`-form argument such as `--timestamp=none`.
-    fn flag(&mut self, name: &'static str);
-
-    /// A flag followed by its value, borrowed from the action for `'a`.
-    fn option<V: AsRef<OsStr> + ?Sized>(&mut self, name: &'static str, value: &'a V);
-
-    /// An argument that only exists once rendered — a joined token list, a
-    /// number, an interpolated `=`-form option — and so must be owned.
-    fn built(&mut self, value: impl Into<OsString>);
-
-    /// The paths the action operates on, which `codesign` expects last,
-    /// introduced by the `--` end-of-options separator.
-    fn targets(&mut self, targets: &'a [PathBuf]);
-}
-
-impl<'a> PushArgs<'a> for Vec<Cow<'a, OsStr>> {
-    fn flag(&mut self, name: &'static str) {
-        self.push(Cow::Borrowed(OsStr::new(name)));
-    }
-
-    fn option<V: AsRef<OsStr> + ?Sized>(&mut self, name: &'static str, value: &'a V) {
-        self.flag(name);
-        self.push(Cow::Borrowed(value.as_ref()));
-    }
-
-    fn built(&mut self, value: impl Into<OsString>) {
-        self.push(Cow::Owned(value.into()));
-    }
-
-    fn targets(&mut self, targets: &'a [PathBuf]) {
-        // Without the separator, `codesign`'s getopt reads a target whose name
-        // starts with `-` as options: `codesign --sign - -patched` fails with
-        // "unknown architecture name", having parsed `-patched` as `-p -a ...`.
-        self.flag("--");
-        self.extend(targets.iter().map(|t| Cow::Borrowed(t.as_os_str())));
-    }
-}
-
-/// Comma-joins the tokens of the flags set in `flags`, in declaration order.
-///
-/// Tokens come from each flag's `#[bitflags(flag_name)]`, so they are declared
-/// rather than derived. `bitflags`' own formatter can't be used here: it
-/// separates with ` | `, while `codesign` wants a bare comma-separated list.
-fn joined<F: Flags + Copy>(flags: F) -> String {
-    let mut tokens = String::new();
-    for flag in F::FLAGS.iter().filter(|flag| flags.contains(*flag.value())) {
-        if !tokens.is_empty() {
-            tokens.push(',');
-        }
-        tokens.push_str(flag.name());
-    }
-    tokens
-}
-
 /// The value the [`timestamp`](Codesign::timestamp) option takes
 /// (`--timestamp`).
 ///
@@ -701,6 +660,8 @@ bitflags! {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsString;
+
     use super::*;
 
     fn os(strings: &[&str]) -> Vec<OsString> {
@@ -723,6 +684,30 @@ mod tests {
         assert_eq!(
             args_of(&Codesign::sign("app", "-")),
             os(&["--sign", "-", "--", "app"])
+        );
+    }
+
+    #[test]
+    fn adhoc_signs_with_dash_identity() {
+        assert_eq!(
+            args_of(&Codesign::sign_adhoc("app")),
+            os(&["--sign", "-", "--", "app"])
+        );
+    }
+
+    #[test]
+    fn for_distribution_enables_hardened_runtime_and_timestamp() {
+        assert_eq!(
+            args_of(&Codesign::sign_for_distribution("app", "Developer ID")),
+            os(&[
+                "--sign",
+                "Developer ID",
+                "--options",
+                "runtime",
+                "--timestamp",
+                "--",
+                "app",
+            ])
         );
     }
 

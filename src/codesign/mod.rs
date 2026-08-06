@@ -95,6 +95,61 @@ impl Codesign<()> {
             action: Sign::new(identity),
         }
     }
+
+    /// Ad-hoc-signs `target`: no certificate, identity `-`
+    /// (`codesign --sign -`).
+    ///
+    /// Shorthand for [`Codesign::sign`]`(target, "-")` — the common case of
+    /// re-signing a patched binary that doesn't need to trace back to a
+    /// developer identity.
+    ///
+    /// ```no_run
+    /// # async fn run() -> Result<(), signers::Error> {
+    /// use signers::Codesign;
+    ///
+    /// Codesign::sign_adhoc("patched.dylib").force(true).await?;
+    /// # Ok(()) }
+    /// ```
+    pub fn sign_adhoc(target: impl IntoTargets) -> Codesign<Sign> {
+        Codesign {
+            targets: target.into_targets(),
+            action: Sign::adhoc(),
+        }
+    }
+
+    /// Signs `target` with `identity`, pre-configured for distribution: the
+    /// hardened runtime notarization requires, and a trusted timestamp so the
+    /// signature outlives the certificate
+    /// (`codesign --sign --options runtime --timestamp`).
+    ///
+    /// Shorthand for [`Codesign::sign`]`(target, identity)` with
+    /// [`options`](Codesign::options)([`SigningFlags::RUNTIME`](sign::SigningFlags::RUNTIME))
+    /// and [`timestamp`](Codesign::timestamp)([`Timestamp::Enabled`](sign::Timestamp::Enabled))
+    /// already applied. Add [`force`](Codesign::force) yourself when replacing
+    /// a signature that's already there — not every distribution build starts
+    /// unsigned.
+    ///
+    /// ```no_run
+    /// # async fn run() -> Result<(), signers::Error> {
+    /// use signers::Codesign;
+    ///
+    /// Codesign::sign_for_distribution(
+    ///     "MyApp.app",
+    ///     "Developer ID Application: Jane Doe (A1B2C3D4E5)",
+    /// )
+    /// .entitlements("MyApp.entitlements")
+    /// .await?;
+    /// # Ok(()) }
+    /// ```
+    pub fn sign_for_distribution(
+        target: impl IntoTargets,
+        identity: impl Into<String>,
+    ) -> Codesign<Sign> {
+        Codesign {
+            targets: target.into_targets(),
+            action: Sign::for_distribution(identity),
+        }
+    }
 }
 
 /// Runs the action: checks the options, checks every target exists, then spawns
