@@ -1,4 +1,10 @@
-//! Async signing API backed by the macOS `codesign` binary (subprocess).
+//! Signing through the macOS `codesign` binary.
+//!
+//! This backend spawns `codesign` as a subprocess, so it runs on macOS only and
+//! needs the Xcode Command Line Tools installed — without them every action
+//! fails with [`Error::CodesignNotFound`], which names the fix.
+//!
+//! Everything starts at [`Codesign::sign`].
 
 mod actions;
 
@@ -13,15 +19,30 @@ use crate::target::IntoTargets;
 
 pub use actions::{Action, PreserveMetadata, Sign, SigningFlags, Timestamp};
 
-/// Fluent builder over a signing action, parameterized by the action type.
+/// A `codesign` action, and the options it will run with.
 ///
-/// Create one with a constructor ([`Codesign::sign`], ...), chain the options
-/// that action supports, then `.await` it to run `codesign`.
+/// You get one from a constructor ([`Codesign::sign`]), configure it by
+/// chaining setters, and run it by `.await`ing it. The action type is what
+/// decides which setters exist, so a builder only ever offers options its
+/// action actually supports.
 ///
-/// Every action fails with an [`Error`], which separates a target this crate
-/// rejects before running anything from what `codesign` itself reported. Watch
-/// for [`Error::CodesignNotFound`] in particular: it means the Xcode Command
-/// Line Tools are missing, the one failure the native backend cannot have.
+/// Nothing happens before the `.await`. Until then it's an ordinary value you
+/// can keep building, clone, or drop:
+///
+/// ```no_run
+/// # async fn run(hardened: bool) -> Result<(), signers::Error> {
+/// use signers::codesign::{Codesign, SigningFlags};
+///
+/// let mut signing = Codesign::sign("MyApp.app", "-").force(true);
+/// if hardened {
+///     signing = signing.options(SigningFlags::RUNTIME);
+/// }
+/// signing.await?;
+/// # Ok(()) }
+/// ```
+///
+/// Awaiting gives back `Result<(), Error>`; see [`Error`] for what can go
+/// wrong on the way.
 #[derive(Debug, Clone)]
 pub struct Codesign<A> {
     targets: Vec<PathBuf>,
@@ -29,12 +50,16 @@ pub struct Codesign<A> {
 }
 
 impl Codesign<()> {
-    /// Signs one or more targets with `codesign`, using `identity`.
+    /// Signs `target` with `identity`.
     ///
-    /// `identity` is a keychain identity name, an identity preference, a
-    /// 40-digit certificate SHA-1 hash, or `-` for ad-hoc signing. Every option
-    /// keeps `codesign`'s own default, so re-signing a patched binary in place
-    /// needs [`force`](Codesign::force) just like on the command line.
+    /// `target` is anything [`IntoTargets`] accepts: a path, or a collection of
+    /// them to sign as one batch. `identity` picks the signing certificate — a
+    /// keychain identity name, an identity preference, a 40-digit certificate
+    /// SHA-1 hash, or `-` for an ad-hoc signature.
+    ///
+    /// Every option starts at `codesign`'s own default, so re-signing something
+    /// that's already signed needs [`force`](Codesign::force), just like on the
+    /// command line.
     ///
     /// ```no_run
     /// # async fn run() -> Result<(), signers::Error> {
@@ -51,6 +76,9 @@ impl Codesign<()> {
     }
 }
 
+/// Runs the action: checks the options, checks every target exists, then spawns
+/// `codesign` and waits for it. The future is `Send + 'static`, so it can be
+/// `tokio::spawn`ed as-is.
 impl<A: Action + Send + 'static> IntoFuture for Codesign<A> {
     type Output = Result<()>;
     type IntoFuture = Pin<Box<dyn Future<Output = Result<()>> + Send>>;

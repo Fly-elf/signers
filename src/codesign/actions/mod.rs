@@ -8,11 +8,12 @@ mod sign;
 
 pub use sign::{PreserveMetadata, Sign, SigningFlags, Timestamp};
 
-/// Marker implemented by every `codesign` action.
+/// Marks the types that can be run as a `codesign` action — [`Sign`] and, in
+/// time, its siblings.
 ///
-/// Sealed: it cannot be implemented outside this crate, so the set of actions
-/// stays closed and the argument-building behaviour stays a private
-/// implementation detail. Use it only as a bound (`Codesign<A: Action>`).
+/// Sealed, so only this crate can implement it: the set of actions stays closed
+/// and how they turn into arguments stays an implementation detail. There's
+/// nothing to call here; it exists to be used as a bound.
 pub trait Action: sealed::ToArgs {}
 
 /// Every action is defined by its argument rendering; the marker follows from
