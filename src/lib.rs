@@ -56,5 +56,5 @@ pub mod codesign;
 pub mod errors;
 pub mod target;
 
-pub use errors::{Error, Result};
+pub use errors::{CodesignError, Error, Result};
 pub use target::IntoTargets;

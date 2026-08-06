@@ -13,8 +13,8 @@ use std::future::IntoFuture;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
-use signers::Error;
 use signers::codesign::Codesign;
+use signers::{CodesignError, Error};
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect;
@@ -36,7 +36,7 @@ fn a_missing_codesign_binary_is_reported_as_such() {
     };
 
     match result.unwrap_err() {
-        Error::CodesignNotFound => {}
+        Error::Codesign(CodesignError::NotFound) => {}
         other => panic!("expected CodesignNotFound, got {other:?}"),
     }
     assert!(
@@ -62,7 +62,9 @@ fn a_codesign_that_cannot_be_executed_is_a_spawn_failure() {
     };
 
     match result.unwrap_err() {
-        Error::Spawn(source) => assert_eq!(source.kind(), std::io::ErrorKind::PermissionDenied),
+        Error::Codesign(CodesignError::Spawn(source)) => {
+            assert_eq!(source.kind(), std::io::ErrorKind::PermissionDenied)
+        }
         other => panic!("expected Spawn, got {other:?}"),
     }
 }
@@ -85,7 +87,7 @@ fn a_codesign_killed_by_a_signal_is_reported_as_terminated() {
     };
 
     match result.unwrap_err() {
-        Error::Terminated { status, stderr } => {
+        Error::Codesign(CodesignError::Terminated { status, stderr }) => {
             assert_eq!(
                 status.signal(),
                 Some(9),
@@ -112,7 +114,7 @@ fn a_silent_failure_still_reports_its_exit_code() {
 
     let error = result.unwrap_err();
     match &error {
-        Error::Codesign { code, stderr } => {
+        Error::Codesign(CodesignError::Failed { code, stderr }) => {
             assert_eq!(*code, 3);
             assert!(stderr.is_empty(), "the stand-in said something: {stderr}");
         }

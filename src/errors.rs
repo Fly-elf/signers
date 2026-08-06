@@ -1,8 +1,8 @@
 //! What can go wrong while running an action.
 //!
-//! Errors come in two kinds: what this crate turns down itself, before anything runs, and what
-//! `codesign` reported once it actually ran. See [`Error`](enum@Error) for the full list, and
-//! [`Result`] for the shorthand used everywhere else in the crate.
+//! - [`Error`](enum@Error) — every error this crate can return.
+//! - [`CodesignError`] — the errors specific to the `codesign` backend.
+//! - [`Result`] — shorthand for `Result<T, Error>`, used everywhere in the crate.
 
 use std::path::PathBuf;
 use std::process::ExitStatus;
@@ -12,26 +12,27 @@ use thiserror::Error;
 /// Shorthand for a result that fails with this crate's [`Error`](enum@Error).
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Anything that can go wrong while running a signing action.
+/// Every error this crate can return, from any action.
 ///
-/// - The crate turning the request down before running anything — a target that isn't there,
-///   an option it can't honour. Nothing has run yet, so a batch that can't work this way leaves
+/// - The crate turning a request down before running anything — a target that isn't there, an
+///   option it can't honour. Nothing has run yet, so a batch that can't work this way leaves
 ///   every target untouched.
-/// - What happened once `codesign` was actually run.
-///
-/// It's `#[non_exhaustive]` — more variants will land as backends grow — so keep a wildcard arm
-/// when you match:
+/// - What a backend reported once it actually ran, e.g. [`Error::Codesign`].
 ///
 /// # Examples
 ///
 /// ```no_run
 /// # async fn run() {
-/// use signers::{Error, codesign::Codesign};
+/// use signers::{CodesignError, Error, codesign::Codesign};
 ///
 /// match Codesign::sign("MyApp.app", "-").force(true).await {
 ///     Ok(()) => println!("signed"),
-///     Err(Error::CodesignNotFound) => eprintln!("run `xcode-select --install` first"),
-///     Err(Error::Codesign { stderr, .. }) => eprintln!("codesign said no: {stderr}"),
+///     Err(Error::Codesign(CodesignError::NotFound)) => {
+///         eprintln!("run `xcode-select --install` first")
+///     }
+///     Err(Error::Codesign(CodesignError::Failed { stderr, .. })) => {
+///         eprintln!("codesign said no: {stderr}")
+///     }
 ///     Err(error) => eprintln!("{error}"),
 /// }
 /// # }
@@ -63,6 +64,15 @@ pub enum Error {
     #[error("file_list(\"-\") is not supported: pass a path instead of standard output")]
     FileListToStdout,
 
+    /// Something went wrong in the `codesign` subprocess backend; see [`CodesignError`].
+    #[error(transparent)]
+    Codesign(#[from] CodesignError),
+}
+
+/// What can go wrong specifically in the `codesign` subprocess backend.
+#[non_exhaustive]
+#[derive(Debug, Error)]
+pub enum CodesignError {
     /// The `codesign` binary isn't installed, or isn't on `PATH`.
     ///
     /// Worth matching on if you want to fall back to another backend: it's the
@@ -71,7 +81,7 @@ pub enum Error {
         "the `codesign` binary was not found on PATH; \
          install the Xcode Command Line Tools with `xcode-select --install`"
     )]
-    CodesignNotFound,
+    NotFound,
 
     /// `codesign` is installed but couldn't be started: not executable, a
     /// failed fork, and so on.
@@ -86,7 +96,7 @@ pub enum Error {
     /// `codesign` ran and refused the job. This is the one that carries its
     /// complaint: `stderr` is what it printed, trimmed.
     #[error("`codesign` exited with code {code}: {}", diagnostics(.stderr))]
-    Codesign { code: i32, stderr: String },
+    Failed { code: i32, stderr: String },
 
     /// `codesign` was killed before it could exit — a crash on a malformed
     /// binary, a timeout from outside, the OOM killer.
@@ -121,7 +131,7 @@ mod tests {
 
     #[test]
     fn a_failure_carries_its_diagnostics() {
-        let error = Error::Codesign {
+        let error = CodesignError::Failed {
             code: 1,
             stderr: "hello: no identity found".into(),
         };
@@ -135,7 +145,7 @@ mod tests {
     /// message that trails off after its colon reads like truncated output.
     #[test]
     fn a_failure_with_nothing_to_say_still_reads_as_a_sentence() {
-        let silent = Error::Codesign {
+        let silent = CodesignError::Failed {
             code: 3,
             stderr: String::new(),
         };
@@ -148,7 +158,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn a_terminated_process_reports_the_signal_that_killed_it() {
-        let error = Error::Terminated {
+        let error = CodesignError::Terminated {
             status: killed_by(9),
             stderr: String::new(),
         };
@@ -162,7 +172,15 @@ mod tests {
     /// left to guess that this is a toolchain problem.
     #[test]
     fn a_missing_binary_names_the_remedy() {
-        let message = Error::CodesignNotFound.to_string();
+        let message = CodesignError::NotFound.to_string();
         assert!(message.contains("xcode-select --install"), "got {message}");
+    }
+
+    /// The outer `Error::Codesign` wrapper must forward `Display` unchanged, so callers who
+    /// only do `eprintln!("{error}")` see no difference from before the split.
+    #[test]
+    fn the_wrapper_variant_forwards_display_unchanged() {
+        let error = Error::from(CodesignError::NotFound);
+        assert_eq!(error.to_string(), CodesignError::NotFound.to_string());
     }
 }
