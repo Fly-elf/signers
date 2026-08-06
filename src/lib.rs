@@ -24,7 +24,7 @@
 //!
 //! ```no_run
 //! # async fn run() -> Result<(), signers::Error> {
-//! # use signers::codesign::Codesign;
+//! # use signers::Codesign;
 //! // Ad-hoc signature, replacing whatever was there before.
 //! Codesign::sign(vec!["MyApp.app", "MyLib.dylib"], "-")
 //!     .force(true)
@@ -33,7 +33,8 @@
 //! ```
 //! ```no_run
 //! # async fn run() -> Result<(), signers::Error> {
-//! # use signers::codesign::{Codesign, SigningFlags, Timestamp};
+//! # use signers::Codesign;
+//! # use signers::codesign::sign::{SigningFlags, Timestamp};
 //! // Signing for distribution.
 //! Codesign::sign("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
 //!     .entitlements("MyApp.entitlements")
@@ -56,5 +57,6 @@ pub mod codesign;
 pub mod errors;
 pub mod target;
 
+pub use codesign::Codesign;
 pub use errors::{CodesignError, Error, Result};
 pub use target::IntoTargets;

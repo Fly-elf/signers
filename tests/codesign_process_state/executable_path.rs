@@ -13,7 +13,7 @@ use std::future::IntoFuture;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
-use signers::codesign::Codesign;
+use signers::Codesign;
 use signers::{CodesignError, Error};
 
 use crate::support::fixture::Workspace;

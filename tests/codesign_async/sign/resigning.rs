@@ -3,7 +3,7 @@
 //! determine whether it's needed. Each test checks both the outcome and that
 //! the *other* signature was left alone.
 
-use signers::codesign::Codesign;
+use signers::Codesign;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect::{self, Signature};

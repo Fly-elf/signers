@@ -4,7 +4,7 @@
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 
-use signers::codesign::Codesign;
+use signers::Codesign;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect::{self, Signature};

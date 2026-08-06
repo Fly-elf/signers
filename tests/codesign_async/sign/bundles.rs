@@ -3,7 +3,7 @@
 
 use std::fs;
 
-use signers::codesign::Codesign;
+use signers::Codesign;
 
 use crate::support::fixture::{Workspace, output_of};
 use crate::support::inspect::{self, Signature};

@@ -1,7 +1,8 @@
 //! `SigningFlags` (`--options`) and the hardened-runtime version that rides
 //! along with them.
 
-use signers::codesign::{Codesign,  SigningFlags};
+use signers::Codesign;
+use signers::codesign::sign::SigningFlags;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect::Signature;

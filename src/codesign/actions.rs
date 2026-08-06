@@ -1,14 +1,13 @@
-//! Concrete `codesign` actions.
+//! Shared machinery every `codesign` action builds on.
 //!
-//! One action per submodule; each defines its options struct, its [`Default`],
-//! its [`Action`] impl, and the option setters on the matching
-//! `Codesign<Action>` specialisation.
+//! Each action (`sign` and, in time, `verify`/`remove`) lives in its own
+//! sibling module of [`codesign`](crate::codesign) and defines its own options
+//! struct, [`Default`], [`Action`] impl, and the setters on the matching
+//! `Codesign<Action>` specialisation — this module has no submodules of its
+//! own. It stays a separate module because [`Action`]/[`ToArgs`](sealed::ToArgs)
+//! will also be shared by the future blocking API, not just the async one.
 
-mod sign;
-
-pub use sign::{PreserveMetadata, Sign, SigningFlags, Timestamp};
-
-/// Marks the types that can be run as a `codesign` action — [`Sign`] and, in
+/// Marks the types that can be run as a `codesign` action — `Sign` and, in
 /// time, its siblings.
 ///
 /// Sealed, so only this crate can implement it: the set of actions stays closed

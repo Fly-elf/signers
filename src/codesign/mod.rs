@@ -19,7 +19,7 @@
 //!
 //! ```no_run
 //! # async fn run() -> Result<(), signers::Error> {
-//! use signers::codesign::Codesign;
+//! use signers::Codesign;
 //!
 //! Codesign::sign("MyApp.app", "-") // 1. the action, and what it runs on
 //!     .force(true)                 // 2. its options
@@ -35,6 +35,7 @@
 //! live.
 
 mod actions;
+pub mod sign;
 
 use std::future::{Future, IntoFuture};
 use std::io::ErrorKind;
@@ -42,10 +43,12 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::process::Stdio;
 
+use sign::Sign;
+
 use crate::errors::{CodesignError, Error, Result};
 use crate::target::IntoTargets;
 
-pub use actions::{Action, PreserveMetadata, Sign, SigningFlags, Timestamp};
+pub use actions::Action;
 
 /// A `codesign` invocation: an action, the options it will run with, and the
 /// targets it will run on.

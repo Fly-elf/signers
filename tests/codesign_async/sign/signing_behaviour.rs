@@ -5,7 +5,8 @@
 use std::fs;
 use std::path::Path;
 
-use signers::codesign::{Codesign, Timestamp};
+use signers::Codesign;
+use signers::codesign::sign::Timestamp;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect::{self, Signature};
