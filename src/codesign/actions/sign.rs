@@ -9,14 +9,94 @@ use bitflags::{Flags, bitflags};
 use super::sealed::ToArgs;
 use crate::codesign::Codesign;
 
-/// The options a signing run was configured with (`codesign --sign`).
+/// The signing action, and the options it was configured with
+/// (`codesign --sign`).
 ///
-/// You don't build this yourself — [`Codesign::sign`] makes one and its setters
-/// fill it in. Everything starts at `codesign`'s own default, so a builder with
-/// no setters applied runs plain `codesign --sign <identity> <targets>`.
+/// You never build one: [`Codesign::sign`] does, and it is the only way to get
+/// one. What fills it in afterwards are the setters on
+/// [`Codesign<Sign>`](Codesign#impl-Codesign%3CSign%3E) — one per `codesign`
+/// signing flag, from [`identifier`](Codesign::identifier) through to
+/// [`file_list`](Codesign::file_list).
+///
+/// Everything starts at `codesign`'s own default, so a builder with no setters
+/// applied runs plain `codesign --sign <identity> <targets>`.
 ///
 /// [`Default`] leaves the identity empty; it's just the base the constructor
 /// builds on.
+///
+/// # Examples
+///
+/// Re-sign a patched binary ad-hoc. `-` is the ad-hoc identity, and
+/// [`force`](Codesign::force) is what allows replacing the signature already
+/// there — without it `codesign` refuses:
+///
+/// ```no_run
+/// # async fn run() -> Result<(), signers::Error> {
+/// use signers::codesign::Codesign;
+///
+/// Codesign::sign("patched.dylib", "-").force(true).await?;
+/// # Ok(()) }
+/// ```
+///
+/// Re-sign, keeping what the old signature carried rather than rebuilding it
+/// from scratch:
+///
+/// ```no_run
+/// # async fn run() -> Result<(), signers::Error> {
+/// use signers::codesign::{Codesign, PreserveMetadata};
+///
+/// Codesign::sign("patched.app", "-")
+///     .force(true)
+///     .preserve_metadata(PreserveMetadata::ENTITLEMENTS | PreserveMetadata::IDENTIFIER)
+///     .await?;
+/// # Ok(()) }
+/// ```
+///
+/// Sign for distribution: a real identity, its entitlements, the hardened
+/// runtime notarization requires, and a timestamp so the signature outlives the
+/// certificate:
+///
+/// ```no_run
+/// # async fn run() -> Result<(), signers::Error> {
+/// use signers::codesign::{Codesign, SigningFlags, Timestamp};
+///
+/// Codesign::sign("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
+///     .entitlements("MyApp.entitlements")
+///     .options(SigningFlags::RUNTIME)
+///     .timestamp(Timestamp::Enabled)
+///     .force(true)
+///     .await?;
+/// # Ok(()) }
+/// ```
+///
+/// Sign several targets in one run. They share the options, and the targets are
+/// all checked before any of them is signed — so a typo in the last path leaves
+/// the first ones untouched rather than half-applied:
+///
+/// ```no_run
+/// # async fn run() -> Result<(), signers::Error> {
+/// use signers::codesign::Codesign;
+///
+/// Codesign::sign(vec!["MyApp.app", "MyLib.dylib"], "-")
+///     .force(true)
+///     .await?;
+/// # Ok(()) }
+/// ```
+///
+/// Since nothing runs before the `.await`, an invocation can be assembled a
+/// piece at a time:
+///
+/// ```no_run
+/// # async fn run(hardened: bool) -> Result<(), signers::Error> {
+/// use signers::codesign::{Codesign, SigningFlags};
+///
+/// let mut signing = Codesign::sign("MyApp.app", "-").force(true);
+/// if hardened {
+///     signing = signing.options(SigningFlags::RUNTIME);
+/// }
+/// signing.await?;
+/// # Ok(()) }
+/// ```
 #[derive(Debug, Clone, Default)]
 pub struct Sign {
     identity: String,
@@ -470,7 +550,37 @@ fn joined<F: Flags + Copy>(flags: F) -> String {
     tokens
 }
 
-/// What to do about timestamping, for [`timestamp`](Codesign::timestamp).
+/// The value the [`timestamp`](Codesign::timestamp) option takes
+/// (`--timestamp`).
+///
+/// Not a bool, because leaving the option unset — `codesign`'s own default — is
+/// a third thing, distinct from [`Disabled`](Timestamp::Disabled) explicitly
+/// refusing to contact a server.
+///
+/// # Examples
+///
+/// ```no_run
+/// # async fn run() -> Result<(), signers::Error> {
+/// use signers::codesign::{Codesign, Timestamp};
+///
+/// let identity = "Developer ID Application: Jane Doe (A1B2C3D4E5)";
+///
+/// // A trusted timestamp from Apple's own server — what distribution builds want.
+/// Codesign::sign("MyApp.app", identity)
+///     .timestamp(Timestamp::Enabled)
+///     .await?;
+///
+/// // A specific timestamp authority instead of Apple's.
+/// Codesign::sign("MyApp.app", identity)
+///     .timestamp(Timestamp::ServerUrl("http://timestamp.example.com".into()))
+///     .await?;
+///
+/// // No timestamp, explicitly — different from never calling `timestamp` at all.
+/// Codesign::sign("MyApp.app", "-")
+///     .timestamp(Timestamp::Disabled)
+///     .await?;
+/// # Ok(()) }
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Timestamp {
     /// `--timestamp` — request a trusted timestamp from Apple's default server.
@@ -482,11 +592,26 @@ pub enum Timestamp {
 }
 
 bitflags! {
-    /// CodeDirectory option flags sealed into the signature (`--options`).
+    /// The value the [`options`](Codesign::options) option takes: the
+    /// CodeDirectory flags to seal into the signature (`--options`).
     ///
-    /// Combine them with `|` and hand the result to
-    /// [`options`](Codesign::options). Values mirror `SecCodeSignatureFlags`
-    /// from `Security/CSCommon.h`; names are the tokens `codesign` accepts.
+    /// A set — combine the flags with `|`. Values mirror
+    /// `SecCodeSignatureFlags` from `Security/CSCommon.h`; names are the tokens
+    /// `codesign` accepts.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn run() -> Result<(), signers::Error> {
+    /// use signers::codesign::{Codesign, SigningFlags};
+    ///
+    /// // The hardened runtime, plus killing the process if it becomes
+    /// // dynamically invalid at runtime.
+    /// Codesign::sign("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
+    ///     .options(SigningFlags::RUNTIME | SigningFlags::KILL)
+    ///     .await?;
+    /// # Ok(()) }
+    /// ```
     #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
     pub struct SigningFlags: u32 {
         /// Marks the code as able to host guest code.
@@ -517,12 +642,27 @@ bitflags! {
 }
 
 bitflags! {
-    /// Metadata to reuse from an existing signature when re-signing
+    /// The value the [`preserve_metadata`](Codesign::preserve_metadata) option
+    /// takes: what to reuse from the signature being replaced
     /// (`--preserve-metadata`).
     ///
-    /// Combine them with `|` and hand the result to
-    /// [`preserve_metadata`](Codesign::preserve_metadata). Names are the tokens
-    /// `codesign` accepts.
+    /// A set — combine the flags with `|`. Names are the tokens `codesign`
+    /// accepts.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn run() -> Result<(), signers::Error> {
+    /// use signers::codesign::{Codesign, PreserveMetadata};
+    ///
+    /// // Re-sign a patched binary, keeping its identifier and internal
+    /// // requirements rather than deriving them again from scratch.
+    /// Codesign::sign("patched.app", "-")
+    ///     .force(true)
+    ///     .preserve_metadata(PreserveMetadata::IDENTIFIER | PreserveMetadata::REQUIREMENTS)
+    ///     .await?;
+    /// # Ok(()) }
+    /// ```
     #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
     pub struct PreserveMetadata: u8 {
         /// Keep the existing signing identifier.
