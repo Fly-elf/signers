@@ -1,13 +1,11 @@
 //! What the builder rejects before it ever spawns `codesign`: empty targets,
-//! missing targets, the access errors found while checking for them, and
-//! option values this crate cannot honour (`file_list("-")`).
+//! missing targets, and the access errors found while checking for them.
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
-use signers::Codesign;
-use signers::Error;
+use signers::{Codesign, Error};
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect;
@@ -15,21 +13,15 @@ use crate::support::running_as_root;
 
 #[tokio::test]
 async fn an_empty_target_is_rejected() {
-    let error = Codesign::sign("", "-").await.unwrap_err();
+    let error = Codesign::remove_signature("").await.unwrap_err();
     assert!(matches!(error, Error::NoTargets), "got {error:?}");
 }
 
 #[tokio::test]
 async fn an_empty_target_list_is_rejected() {
-    let error = Codesign::sign(Vec::<PathBuf>::new(), "-")
+    let error = Codesign::remove_signature(Vec::<PathBuf>::new())
         .await
         .unwrap_err();
-    assert!(matches!(error, Error::NoTargets), "got {error:?}");
-}
-
-#[tokio::test]
-async fn a_list_of_nothing_but_empty_targets_is_rejected() {
-    let error = Codesign::sign(vec!["", ""], "-").await.unwrap_err();
     assert!(matches!(error, Error::NoTargets), "got {error:?}");
 }
 
@@ -38,7 +30,9 @@ async fn a_missing_target_is_reported_with_its_path() {
     let workspace = Workspace::new();
     let missing = workspace.join("nowhere.bin");
 
-    let error = Codesign::sign(missing.clone(), "-").await.unwrap_err();
+    let error = Codesign::remove_signature(missing.clone())
+        .await
+        .unwrap_err();
 
     match error {
         Error::TargetNotFound(path) => assert_eq!(path, missing),
@@ -46,16 +40,16 @@ async fn a_missing_target_is_reported_with_its_path() {
     }
 }
 
+/// The pre-flight check matters more here than anywhere else: removal cannot be
+/// undone, so a batch that half-applies leaves the caller with signatures they
+/// have no way of putting back.
 #[tokio::test]
 async fn a_missing_target_aborts_the_whole_batch() {
-    // The pre-flight check is the difference: handed the same arguments,
-    // `codesign` signs the targets it can and only then fails on the missing
-    // one, leaving the caller with a half-applied operation.
     let workspace = Workspace::new();
-    let present = workspace.unsigned("present");
+    let present = workspace.adhoc_signed("present");
     let missing = workspace.join("missing");
 
-    let error = Codesign::sign(vec![present.clone(), missing.clone()], "-")
+    let error = Codesign::remove_signature(vec![present.clone(), missing.clone()])
         .await
         .unwrap_err();
 
@@ -64,7 +58,7 @@ async fn a_missing_target_aborts_the_whole_batch() {
         "got {error:?}",
     );
     assert!(
-        !inspect::is_signed(&present),
+        inspect::is_signed(&present),
         "the batch was applied even though one target was missing",
     );
 }
@@ -79,7 +73,9 @@ async fn an_unreadable_parent_directory_is_an_access_error() {
     let target = workspace.join("locked/hidden.bin");
     fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
 
-    let error = Codesign::sign(target.clone(), "-").await.unwrap_err();
+    let error = Codesign::remove_signature(target.clone())
+        .await
+        .unwrap_err();
 
     // Reopen before asserting, so a failure still leaves a removable workspace.
     fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
@@ -90,34 +86,4 @@ async fn an_unreadable_parent_directory_is_an_access_error() {
         }
         other => panic!("expected TargetAccess, got {other:?}"),
     }
-}
-
-#[tokio::test]
-async fn a_file_list_of_standard_output_is_rejected() {
-    let workspace = Workspace::new();
-    let target = workspace.unsigned("hello");
-
-    let error = Codesign::sign(&target, "-")
-        .file_list("-")
-        .await
-        .unwrap_err();
-
-    assert!(matches!(error, Error::FileListToStdout), "got {error:?}");
-    assert!(
-        !inspect::is_signed(&target),
-        "the target was signed despite the rejected option"
-    );
-}
-
-#[tokio::test]
-async fn a_failure_says_which_target_it_is_about() {
-    let workspace = Workspace::new();
-    let missing = workspace.join("ghost.bin");
-
-    let error = Codesign::sign(missing.clone(), "-").await.unwrap_err();
-
-    assert!(
-        error.to_string().contains(&missing.display().to_string()),
-        "unhelpful message: {error}",
-    );
 }

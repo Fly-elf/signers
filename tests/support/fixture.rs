@@ -212,18 +212,48 @@ impl Workspace {
     /// <name>.framework/Versions/Current -> A
     /// ```
     pub fn framework(&self, name: &str) -> PathBuf {
-        let bundle = self.join(format!("{name}.framework"));
-        let version = bundle.join("Versions/A");
-        fs::create_dir_all(version.join("Resources"))
-            .unwrap_or_else(|e| panic!("could not create {}: {e}", version.display()));
-        fs::copy(pristine_hello(), version.join(name))
-            .unwrap_or_else(|e| panic!("could not populate {}: {e}", bundle.display()));
-        self.write(
-            version.join("Resources/Info.plist"),
-            &info_plist(name, &format!("com.example.{name}"), "FMWK"),
-        );
+        self.build_framework(self.path(), name, &["A"])
+    }
 
-        symlink("A", bundle.join("Versions/Current"));
+    /// [`framework`](Self::framework) built under `parent` rather than at the
+    /// workspace root, so a bundle can be planted inside another one's
+    /// `Contents/Frameworks` — the shape in which nested code exists at all.
+    ///
+    /// Built in place because a framework is a tree of relative symlinks, which
+    /// no ordinary recursive copy reproduces faithfully.
+    pub fn framework_in(&self, parent: &Path, name: &str) -> PathBuf {
+        self.build_framework(parent, name, &["A"])
+    }
+
+    /// [`framework`](Self::framework) carrying several versions, each with its
+    /// own executable and `Info.plist`, `Current` pointing at the first.
+    ///
+    /// Every version is signed and stripped independently, so this is what makes
+    /// a version selector observable: with only one version, selecting it and
+    /// selecting nothing do the same thing.
+    pub fn versioned_framework(&self, name: &str, versions: &[&str]) -> PathBuf {
+        self.build_framework(self.path(), name, versions)
+    }
+
+    fn build_framework(&self, parent: &Path, name: &str, versions: &[&str]) -> PathBuf {
+        let (current, _) = versions
+            .split_first()
+            .expect("a framework needs at least one version");
+        let bundle = parent.join(format!("{name}.framework"));
+
+        for version in versions {
+            let version = bundle.join("Versions").join(version);
+            fs::create_dir_all(version.join("Resources"))
+                .unwrap_or_else(|e| panic!("could not create {}: {e}", version.display()));
+            fs::copy(pristine_hello(), version.join(name))
+                .unwrap_or_else(|e| panic!("could not populate {}: {e}", bundle.display()));
+            self.write(
+                version.join("Resources/Info.plist"),
+                &info_plist(name, &format!("com.example.{name}"), "FMWK"),
+            );
+        }
+
+        symlink(current, bundle.join("Versions/Current"));
         symlink(format!("Versions/Current/{name}"), bundle.join(name));
         symlink("Versions/Current/Resources", bundle.join("Resources"));
         bundle

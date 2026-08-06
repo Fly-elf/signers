@@ -1,7 +1,7 @@
 //! Shared machinery every `codesign` action builds on.
 //!
-//! Each action (`sign` and, in time, `verify`/`remove`) lives in its own
-//! sibling module of [`codesign`](crate::codesign) and defines its own options
+//! Each action (`sign`, `remove_signature` and, in time, `verify`) lives in its
+//! own sibling module of [`codesign`](crate::codesign) and defines its options
 //! struct, [`Default`], [`Action`] impl, and the setters on the matching
 //! `Codesign<Action>` specialisation — this module has no submodules of its
 //! own. It stays a separate module because [`Action`]/[`ToArgs`](sealed::ToArgs),
@@ -15,8 +15,8 @@ use std::path::PathBuf;
 
 use bitflags::Flags;
 
-/// Marks the types that can be run as a `codesign` action — `Sign` and, in
-/// time, its siblings.
+/// Marks the types that can be run as a `codesign` action — `Sign`,
+/// `RemoveSignature` and, in time, their siblings.
 ///
 /// Sealed, so only this crate can implement it: the set of actions stays closed
 /// and how they turn into arguments stays an implementation detail. There's

@@ -49,10 +49,42 @@ pub fn codesign(args: &[&OsStr]) -> Run {
     }
 }
 
-/// Whether `path` carries a signature, panicking rather than guessing if
-/// `codesign` fails for some other reason (a missing or unreadable file).
+/// Whether `path` carries a signature.
 pub fn is_signed(path: &Path) -> bool {
-    let run = codesign(&["-d".as_ref(), path.as_ref()]);
+    reports_a_signature(codesign(&["-d".as_ref(), path.as_ref()]), path)
+}
+
+/// Whether one slice of a universal binary carries a signature.
+///
+/// Plain [`is_signed`] reports on the host's native architecture alone, so it
+/// cannot see a signature left behind on another slice.
+pub fn is_signed_arch(path: &Path, arch: &str) -> bool {
+    let run = codesign(&[
+        "-d".as_ref(),
+        "--arch".as_ref(),
+        arch.as_ref(),
+        path.as_ref(),
+    ]);
+    reports_a_signature(run, path)
+}
+
+/// Whether one `version` of a versioned bundle carries a signature.
+///
+/// `codesign -d` reports on a single version at a time, which is what tells a
+/// version-selective operation apart from a bundle-wide one.
+pub fn is_signed_version(path: &Path, version: &str) -> bool {
+    let run = codesign(&[
+        "-d".as_ref(),
+        "--bundle-version".as_ref(),
+        version.as_ref(),
+        path.as_ref(),
+    ]);
+    reports_a_signature(run, path)
+}
+
+/// Reads a `codesign -d` run as a yes/no, panicking rather than guessing if it
+/// failed for some other reason (a missing or unreadable file).
+fn reports_a_signature(run: Run, path: &Path) -> bool {
     if run.success {
         return true;
     }

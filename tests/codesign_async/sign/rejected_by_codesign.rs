@@ -28,7 +28,7 @@ async fn a_plain_directory_is_rejected() {
 
     let error = Codesign::sign(&target, "-").await.unwrap_err();
 
-    assert!(super::codesign_error(error).contains("bundle format unrecognized"));
+    assert!(crate::codesign_error(error).contains("bundle format unrecognized"));
 }
 
 #[tokio::test]
@@ -40,7 +40,7 @@ async fn an_unknown_identity_is_reported_verbatim() {
         .await
         .unwrap_err();
 
-    let stderr = super::codesign_error(error);
+    let stderr = crate::codesign_error(error);
     assert!(stderr.contains("no identity found"), "got {stderr}");
     assert!(!inspect::is_signed(&target));
 }
@@ -58,7 +58,7 @@ async fn a_failure_inside_codesign_is_surfaced_with_its_diagnostics() {
     let result = Codesign::sign(&target, "-").await;
 
     fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
-    let stderr = super::codesign_error(result.unwrap_err());
+    let stderr = crate::codesign_error(result.unwrap_err());
     assert!(
         stderr.contains("hello"),
         "the diagnostics name no target: {stderr}"

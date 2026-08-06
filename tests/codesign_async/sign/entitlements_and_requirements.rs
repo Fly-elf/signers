@@ -93,7 +93,7 @@ async fn constraint_validity_is_only_enforced_on_request() {
         .await
         .unwrap_err();
 
-    assert!(super::codesign_error(error).contains("bogus-key-xyz"));
+    assert!(crate::codesign_error(error).contains("bogus-key-xyz"));
     assert!(
         !inspect::is_signed(&rejected),
         "the rejected target was signed anyway"

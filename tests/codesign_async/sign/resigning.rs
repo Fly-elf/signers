@@ -19,7 +19,7 @@ async fn re_signing_without_force_fails_and_changes_nothing() {
         .await
         .unwrap_err();
 
-    assert!(super::codesign_error(error).contains("is already signed"));
+    assert!(crate::codesign_error(error).contains("is already signed"));
     let after = Signature::of(&target);
     assert_eq!(
         after.cd_hash(),

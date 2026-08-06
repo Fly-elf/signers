@@ -17,23 +17,6 @@ mod signing;
 mod signing_behaviour;
 mod signing_flags;
 
-use signers::{CodesignError, Error};
-
 /// The bit `codesign` sets on every ad-hoc signature. It is not in
 /// `SigningFlags` because it is not something a caller asks for.
 const ADHOC: u32 = 0x2;
-
-/// Unwraps the `Error::Codesign` a failed run must produce, returning the
-/// diagnostics it captured.
-fn codesign_error(error: Error) -> String {
-    match error {
-        Error::Codesign(CodesignError::Failed { stderr, .. }) => {
-            assert!(
-                !stderr.is_empty(),
-                "the failure was reported with no diagnostics"
-            );
-            stderr
-        }
-        other => panic!("expected the `codesign` run to fail, got {other:?}"),
-    }
-}

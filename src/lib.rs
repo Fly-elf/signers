@@ -7,8 +7,8 @@
 //! | Requires       | Xcode Command Line Tools                                                              | nothing extra                    |
 //! | Implementation | subprocess — the macOS [`codesign`](https://keith.github.io/xcode-man-pages/codesign.1.html) binary | native — the [`apple-codesign`](https://crates.io/crates/apple-codesign) crate |
 //!
-//! > 🚧 **Early development.** Signing works through [`codesign`]; `rcodesign`, verifying,
-//! > removing signatures, and the blocking API are still on the way.
+//! > 🚧 **Early development.** Signing and removing signatures work through [`codesign`];
+//! > `rcodesign`, verifying, and the blocking API are still on the way.
 //!
 //! - `async` first, with an optional `blocking` API
 //! - Multiplatform with no external dependency, via `rcodesign`
@@ -42,6 +42,13 @@
 //!     .timestamp(Timestamp::Enabled)
 //!     .force(true)
 //!     .await?;
+//! # Ok(()) }
+//! ```
+//! ```no_run
+//! # async fn run() -> Result<(), signers::Error> {
+//! # use signers::Codesign;
+//! // Strip a signature, e.g. before patching the Mach-O it no longer matches.
+//! Codesign::remove_signature("MyApp.app").await?;
 //! # Ok(()) }
 //! ```
 //!
