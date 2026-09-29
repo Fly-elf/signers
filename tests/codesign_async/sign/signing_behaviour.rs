@@ -8,7 +8,7 @@ use std::path::Path;
 use signers::Codesign;
 use signers::codesign::sign::Timestamp;
 
-use crate::support::fixture::Workspace;
+use crate::support::fixture::{Workspace, set_xattr};
 use crate::support::inspect::{self, Signature};
 
 #[tokio::test]
@@ -48,18 +48,20 @@ async fn timestamping_can_be_turned_off() {
     inspect::assert_valid(&target);
 }
 
+/// Ad hoc signatures are never timestamped, so the server is not contacted.
+/// What this settles is the rendering: as `--timestamp <url>` the URL would
+/// reach `codesign` as one more target, which does not exist.
 #[tokio::test]
-#[ignore = "reaches out to Apple's timestamp server and needs a real identity"]
-async fn timestamping_can_be_turned_on() {
+async fn a_timestamp_server_is_passed_as_a_single_argument() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
     Codesign::sign(&target, "-")
-        .timestamp(Timestamp::Enabled)
+        .timestamp(Timestamp::ServerUrl("http://127.0.0.1:9".into()))
         .await
         .unwrap();
 
-    assert!(Signature::of(&target).raw().contains("Timestamp="));
+    inspect::assert_valid(&target);
 }
 
 #[tokio::test]
@@ -127,16 +129,26 @@ async fn the_file_list_records_what_was_signed() {
 }
 
 #[tokio::test]
-async fn stripping_disallowed_xattrs_is_accepted() {
+async fn disallowed_xattrs_are_stripped_only_on_request() {
     let workspace = Workspace::new();
-    let target = workspace.unsigned("hello");
+    let kept = workspace.unsigned("kept");
+    let stripped = workspace.unsigned("stripped");
+    for target in [&kept, &stripped] {
+        set_xattr(target, "com.apple.ResourceFork", "detritus");
+    }
 
-    Codesign::sign(&target, "-")
+    let error = Codesign::sign(&kept, "-").await.unwrap_err();
+    Codesign::sign(&stripped, "-")
         .strip_disallowed_xattrs(true)
         .await
         .unwrap();
 
-    inspect::assert_valid(&target);
+    assert!(crate::codesign_error(error).contains("detritus not allowed"));
+    inspect::assert_valid(&stripped);
+    assert!(
+        !inspect::xattrs(&stripped).contains(&"com.apple.ResourceFork".to_owned()),
+        "the resource fork survived"
+    );
 }
 
 #[tokio::test]

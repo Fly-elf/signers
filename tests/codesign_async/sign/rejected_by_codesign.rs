@@ -8,7 +8,7 @@ use signers::Codesign;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect::{self, Signature};
-use crate::support::running_as_root;
+use crate::support::{running_as_root, skip};
 
 #[tokio::test]
 async fn a_plain_file_is_signed_as_a_generic_target() {
@@ -48,7 +48,7 @@ async fn an_unknown_identity_is_reported_verbatim() {
 #[tokio::test]
 async fn a_failure_inside_codesign_is_surfaced_with_its_diagnostics() {
     if running_as_root() {
-        return; // root writes wherever it likes
+        skip!("root writes wherever it likes");
     }
     let workspace = Workspace::new();
     let locked = workspace.dir("locked");
@@ -63,4 +63,23 @@ async fn a_failure_inside_codesign_is_surfaced_with_its_diagnostics() {
         stderr.contains("hello"),
         "the diagnostics name no target: {stderr}"
     );
+}
+
+/// Without root `codesign` cannot open the system's signature database, which
+/// is how this shows the option reached it at all.
+#[tokio::test]
+async fn a_detached_database_signature_needs_root() {
+    if running_as_root() {
+        skip!("as root this would write to the system's signature database");
+    }
+    let workspace = Workspace::new();
+    let target = workspace.unsigned("hello");
+
+    let error = Codesign::sign(&target, "-")
+        .detached_database(true)
+        .await
+        .unwrap_err();
+
+    assert!(crate::codesign_error(error).contains("cannot access a database"));
+    assert!(!inspect::is_signed(&target));
 }

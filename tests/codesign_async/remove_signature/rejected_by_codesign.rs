@@ -8,7 +8,7 @@ use signers::Codesign;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect;
-use crate::support::running_as_root;
+use crate::support::{running_as_root, skip};
 
 #[tokio::test]
 async fn a_plain_directory_is_rejected() {
@@ -42,7 +42,7 @@ async fn a_rejected_target_stops_the_batch_where_it_stands() {
 #[tokio::test]
 async fn a_read_only_directory_is_surfaced_with_its_diagnostics() {
     if running_as_root() {
-        return; // root writes wherever it likes
+        skip!("root writes wherever it likes");
     }
     let workspace = Workspace::new();
     let locked = workspace.dir("locked");

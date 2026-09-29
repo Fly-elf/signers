@@ -5,6 +5,7 @@ use signers::Codesign;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect::{self, Signature};
+use crate::support::skip;
 
 #[tokio::test]
 async fn a_signed_binary_loses_its_signature() {
@@ -27,7 +28,7 @@ async fn a_linker_signature_is_removed_too() {
     let workspace = Workspace::new();
     let target = workspace.linker_signed("hello");
     if !inspect::is_signed(&target) {
-        return; // only the Apple Silicon linker signs what it links
+        skip!("only the Apple Silicon linker signs what it links");
     }
 
     Codesign::remove_signature(&target).await.unwrap();
@@ -42,7 +43,7 @@ async fn every_slice_of_a_universal_binary_is_stripped() {
     // caller asked for.
     let workspace = Workspace::new();
     let Some(target) = workspace.unsigned_universal("hello-universal") else {
-        return; // this toolchain has only one architecture's SDK
+        skip!("this toolchain has only one architecture's SDK");
     };
     Codesign::sign(&target, "-").await.unwrap();
     for arch in ["arm64", "x86_64"] {

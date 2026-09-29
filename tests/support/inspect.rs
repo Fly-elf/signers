@@ -227,9 +227,20 @@ impl Signature {
         self.required("Format")
     }
 
-    /// `adhoc` for an ad-hoc signature, otherwise the signer's name.
+    /// `adhoc` for an ad hoc signature. A certificate signature has no such
+    /// line: see [`authority`](Self::authority).
     pub fn signature(&self) -> &str {
         self.required("Signature")
+    }
+
+    /// The common name of the signing certificate, or `None` when signed ad hoc.
+    pub fn authority(&self) -> Option<&str> {
+        self.field("Authority")
+    }
+
+    /// When the timestamp server countersigned, or `None` without a timestamp.
+    pub fn timestamp(&self) -> Option<&str> {
+        self.field("Timestamp")
     }
 
     /// Identifies the signed bytes: unchanged between two signings of identical
@@ -263,8 +274,15 @@ impl Signature {
         })
     }
 
-    pub fn has_self_launch_constraints(&self) -> bool {
-        self.raw.contains("Has Self Launch Constraints")
+    /// Whether the signature carries a constraint of this kind.
+    pub fn has_constraint(&self, constraint: Constraint) -> bool {
+        let line = match constraint {
+            Constraint::LaunchSelf => "Has Self Launch Constraints",
+            Constraint::LaunchParent => "Has Parent Launch Constraints",
+            Constraint::LaunchResponsible => "Has Responsible Launch Constraints",
+            Constraint::Library => "Has Library Load Constraints",
+        };
+        self.raw.lines().any(|l| l.trim() == line)
     }
 
     /// The CodeDirectory line, which packs several values into one line:
@@ -316,6 +334,42 @@ impl Signature {
             .parse()
             .unwrap_or_else(|_| panic!("unparsable hash count `{hashes}`"))
     }
+}
+
+/// The kinds of constraint a signature can carry, one per `Codesign<Sign>` setter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Constraint {
+    LaunchSelf,
+    LaunchParent,
+    LaunchResponsible,
+    Library,
+}
+
+impl Constraint {
+    pub const ALL: [Self; 4] = [
+        Self::LaunchSelf,
+        Self::LaunchParent,
+        Self::LaunchResponsible,
+        Self::Library,
+    ];
+}
+
+/// The names of the extended attributes on `path`, through the `xattr` tool.
+pub fn xattrs(path: &Path) -> Vec<String> {
+    let run = Command::new("xattr")
+        .arg(path)
+        .output()
+        .unwrap_or_else(|e| panic!("could not run `xattr`: {e}"));
+    assert!(
+        run.status.success(),
+        "could not list the xattrs of {}: {}",
+        path.display(),
+        String::from_utf8_lossy(&run.stderr).trim(),
+    );
+    String::from_utf8_lossy(&run.stdout)
+        .lines()
+        .map(str::to_owned)
+        .collect()
 }
 
 /// The value of a whitespace-separated `key=value` token inside `line`.

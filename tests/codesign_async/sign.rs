@@ -16,6 +16,7 @@ mod resigning;
 mod signing;
 mod signing_behaviour;
 mod signing_flags;
+mod with_identity;
 
 /// The bit `codesign` sets on every ad-hoc signature. It is not in
 /// `SigningFlags` because it is not something a caller asks for.

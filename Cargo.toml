@@ -18,3 +18,9 @@ tracing = { version = "0.1", features = ["release_max_level_info"] }
 [dev-dependencies]
 tempfile = "3.27"
 tokio = { version = "1.53", features = ["macros", "rt-multi-thread"] }
+
+# Opt-in test groups: tests needing an environment `cargo test` cannot assume
+# are ignored unless their group is set, e.g.
+# RUSTFLAGS='--cfg signers_test="keychain"' cargo test
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(signers_test, values("keychain", "network"))'] }
