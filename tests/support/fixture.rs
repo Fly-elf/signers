@@ -52,6 +52,13 @@ pub fn pristine_universal_hello() -> Option<&'static Path> {
         .as_deref()
 }
 
+/// The same fixture built as a dynamic library, for the options `codesign`
+/// treats differently for libraries.
+pub fn pristine_hello_dylib() -> &'static Path {
+    static DYLIB: OnceLock<PathBuf> = OnceLock::new();
+    DYLIB.get_or_init(|| compile_hello("hello.dylib", &["-dynamiclib"]))
+}
+
 fn compile_hello(name: &str, args: &[&str]) -> PathBuf {
     compile(name, args).unwrap_or_else(|why| panic!("{why}"))
 }
@@ -109,6 +116,21 @@ pub fn output_of(path: &Path) -> String {
     String::from_utf8_lossy(&run.stdout).trim().to_string()
 }
 
+/// Sets the extended attribute `name` on `path` through the `xattr` tool.
+pub fn set_xattr(path: &Path, name: &str, value: &str) {
+    let run = Command::new("xattr")
+        .args(["-w", name, value])
+        .arg(path)
+        .output()
+        .unwrap_or_else(|e| panic!("could not run `xattr`: {e}"));
+    assert!(
+        run.status.success(),
+        "could not set {name} on {}: {}",
+        path.display(),
+        String::from_utf8_lossy(&run.stderr).trim(),
+    );
+}
+
 /// A throwaway directory holding one test's copies of the fixture.
 ///
 /// Every test builds its own, so the suite runs in parallel and a test that
@@ -139,30 +161,37 @@ impl Workspace {
     /// Silicon an ad-hoc *linker-signed* binary, which `codesign` is willing to
     /// replace without `--force`.
     pub fn linker_signed(&self, name: impl AsRef<Path>) -> PathBuf {
-        let target = self.join(name);
-        fs::copy(pristine_hello(), &target)
-            .unwrap_or_else(|e| panic!("could not copy the fixture to {}: {e}", target.display()));
-        target
+        self.copy_of(pristine_hello(), name)
     }
 
     /// A copy carrying no signature at all.
     pub fn unsigned(&self, name: impl AsRef<Path>) -> PathBuf {
-        let target = self.linker_signed(name);
-        codesign(&["--remove-signature".as_ref(), target.as_ref()])
-            .expect_success("strip the fixture's linker signature");
-        target
+        self.stripped_copy_of(pristine_hello(), name)
     }
 
     /// An unsigned copy of the *universal* fixture, or `None` when this
     /// toolchain cannot build one.
     pub fn unsigned_universal(&self, name: impl AsRef<Path>) -> Option<PathBuf> {
-        let source = pristine_universal_hello()?;
+        Some(self.stripped_copy_of(pristine_universal_hello()?, name))
+    }
+
+    /// An unsigned copy of the fixture built as a dynamic library.
+    pub fn unsigned_dylib(&self, name: impl AsRef<Path>) -> PathBuf {
+        self.stripped_copy_of(pristine_hello_dylib(), name)
+    }
+
+    fn copy_of(&self, source: &Path, name: impl AsRef<Path>) -> PathBuf {
         let target = self.join(name);
         fs::copy(source, &target)
             .unwrap_or_else(|e| panic!("could not copy the fixture to {}: {e}", target.display()));
+        target
+    }
+
+    fn stripped_copy_of(&self, source: &Path, name: impl AsRef<Path>) -> PathBuf {
+        let target = self.copy_of(source, name);
         codesign(&["--remove-signature".as_ref(), target.as_ref()])
             .expect_success("strip the fixture's linker signature");
-        Some(target)
+        target
     }
 
     /// A copy carrying a real ad-hoc signature — the state in which `codesign`

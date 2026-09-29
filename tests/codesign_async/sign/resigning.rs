@@ -7,6 +7,7 @@ use signers::Codesign;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect::{self, Signature};
+use crate::support::skip;
 
 #[tokio::test]
 async fn re_signing_without_force_fails_and_changes_nothing() {
@@ -52,7 +53,7 @@ async fn a_linker_signature_is_replaced_without_force() {
     let workspace = Workspace::new();
     let target = workspace.linker_signed("hello");
     if !inspect::is_signed(&target) {
-        return; // only the Apple Silicon linker signs what it links
+        skip!("only the Apple Silicon linker signs what it links");
     }
     assert!(
         Signature::of(&target)

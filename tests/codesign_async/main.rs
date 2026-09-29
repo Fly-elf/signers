@@ -4,7 +4,7 @@
 //!
 //! One module per action; `verify` joins `sign` and `remove_signature` here as
 //! it lands. Anything that mutates process-global state (the working directory,
-//! `PATH`) lives in `tests/codesign_process_state.rs` instead, so this binary
+//! `PATH`) lives in `tests/codesign_process_state/` instead, so this binary
 //! stays parallel-safe.
 
 #![cfg(target_os = "macos")]
@@ -12,6 +12,7 @@
 #[path = "../support/mod.rs"]
 mod support;
 
+mod preflight;
 mod remove_signature;
 mod sign;
 

@@ -8,7 +8,7 @@ use signers::Codesign;
 use signers::codesign::sign::{SigningFlags, Timestamp};
 
 use crate::support::fixture::{Workspace, fixture, output_of};
-use crate::support::inspect::{self, Signature};
+use crate::support::inspect::{self, Constraint, Signature};
 
 #[tokio::test]
 async fn a_fully_loaded_builder_renders_a_command_codesign_accepts() {
@@ -19,6 +19,9 @@ async fn a_fully_loaded_builder_renders_a_command_codesign_accepts() {
     // The identifier is the one `launch-constraint.plist` insists on: the
     // kernel kills a process that breaches its own launch constraint, and the
     // last assertion here is that the result still runs.
+    //
+    // `enforce_constraint_validity` stays out: since macOS 27 `codesign` fails
+    // every constraint under it, valid or not.
     let workspace = Workspace::new();
     let target = workspace.presigned("hello", &["-i", "com.example.previous"]);
     let list = workspace.join("signed.txt");
@@ -34,7 +37,6 @@ async fn a_fully_loaded_builder_renders_a_command_codesign_accepts() {
         .options(SigningFlags::RUNTIME | SigningFlags::KILL | SigningFlags::HARD)
         .runtime_version("13.1")
         .launch_constraint_self(fixture("launch-constraint.plist"))
-        .enforce_constraint_validity(true)
         .force(true)
         .page_size(4096)
         .timestamp(Timestamp::Disabled)
@@ -56,7 +58,7 @@ async fn a_fully_loaded_builder_renders_a_command_codesign_accepts() {
     );
     assert_eq!(signature.runtime_version(), Some("13.1.0"));
     assert_eq!(signature.page_size(), Some(4096));
-    assert!(signature.has_self_launch_constraints());
+    assert!(signature.has_constraint(Constraint::LaunchSelf));
     assert!(inspect::entitlements(&target).contains("allow-jit"));
     assert_eq!(inspect::designated_requirement(&target), requirement);
     assert!(!fs::read_to_string(&list).unwrap().is_empty());
