@@ -1,10 +1,13 @@
-//! Signing a target that starts out unsigned: the happy path, identifier
-//! derivation, and everything `IntoTargets` accepts to get there.
+//! Signing a target that starts out unsigned: the happy path, the preset
+//! constructors, identifier derivation, and everything `IntoTargets` accepts to
+//! get there.
 
 use signers::Codesign;
+use signers::codesign::sign::SigningFlags;
 
 use crate::support::fixture::{Workspace, output_of};
 use crate::support::inspect::{self, Signature};
+use crate::support::skip;
 
 #[tokio::test]
 async fn an_unsigned_binary_gets_a_valid_ad_hoc_signature() {
@@ -30,6 +33,49 @@ async fn an_unsigned_binary_gets_a_valid_ad_hoc_signature() {
 }
 
 #[tokio::test]
+async fn an_ad_hoc_signing_needs_no_identity() {
+    let workspace = Workspace::new();
+    let target = workspace.unsigned("hello");
+
+    Codesign::sign_adhoc(&target).await.unwrap();
+
+    inspect::assert_valid(&target);
+    assert_eq!(Signature::of(&target).signature(), "adhoc");
+}
+
+/// Signed ad hoc, which `codesign` never timestamps: only the hardened-runtime
+/// half of the preset shows here. `with_identity` covers the other half.
+#[tokio::test]
+async fn the_distribution_preset_enables_the_hardened_runtime() {
+    let workspace = Workspace::new();
+    let target = workspace.unsigned("hello");
+
+    Codesign::sign_for_distribution(&target, "-").await.unwrap();
+
+    inspect::assert_valid(&target);
+    assert_eq!(
+        Signature::of(&target).flags(),
+        super::ADHOC | SigningFlags::RUNTIME.bits()
+    );
+}
+
+#[tokio::test]
+async fn the_distribution_preset_gives_way_to_later_options() {
+    let workspace = Workspace::new();
+    let target = workspace.unsigned("hello");
+
+    Codesign::sign_for_distribution(&target, "-")
+        .options(SigningFlags::KILL)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        Signature::of(&target).flags(),
+        super::ADHOC | SigningFlags::KILL.bits()
+    );
+}
+
+#[tokio::test]
 async fn a_signed_binary_still_runs() {
     // Apple Silicon refuses to execute code whose signature does not check out,
     // so this is the end-to-end proof that signing left the Mach-O intact.
@@ -47,7 +93,7 @@ async fn every_slice_of_a_universal_binary_is_signed() {
     // own CodeDirectory, and one `sign` has to cover all of them.
     let workspace = Workspace::new();
     let Some(target) = workspace.unsigned_universal("hello-universal") else {
-        return; // this toolchain has only one architecture's SDK
+        skip!("this toolchain has only one architecture's SDK");
     };
 
     Codesign::sign(&target, "-")
