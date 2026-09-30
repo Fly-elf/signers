@@ -1,4 +1,4 @@
-//! The signature-removal action (`codesign --remove-signature`).
+//! The signature-removal action (`--remove-signature`).
 
 use std::borrow::Cow;
 use std::ffi::OsStr;
@@ -8,46 +8,22 @@ use super::actions::PushArgs;
 use super::actions::sealed::ToArgs;
 use crate::codesign::Codesign;
 
-/// The signature-removal action, and the options it was configured with
-/// (`codesign --remove-signature`).
+/// Options of the signature-removal action: the `A` in `Codesign<RemoveSignature>`.
 ///
-/// You never build one: [`Codesign::remove_signature`] does, and it is the only
-/// way to get one. Its single option lives on
-/// [`Codesign<RemoveSignature>`](Codesign#impl-Codesign%3CRemoveSignature%3E) —
-/// [`bundle_version`](Codesign::bundle_version).
-///
-/// Accept only `bundle_version` as an option, other documented options are skipped
-/// because they are ignored by `codesign` (`--deep`, `--architecture`, `--dryrun`).
+/// [`Codesign::remove_signature`] creates it. Its only option is
+/// [`bundle_version`](Codesign#impl-Codesign%3CRemoveSignature%3E). With this operation,
+/// `codesign` ignores `--deep` and `--architecture`, still removes the signature under
+/// `--dryrun`, and crashes on `--file-list`. So those options aren't offered.
 ///
 /// # Examples
 ///
-/// Strip a patched binary before re-signing it
+/// Remove the signature from one version of a framework, and leave the other versions signed:
 ///
 /// ```no_run
-/// # async fn run() -> Result<(), signers::Error> {
+/// # async fn run() -> signers::Result<()> {
 /// use signers::Codesign;
 ///
-/// Codesign::remove_signature("patched.dylib").await?;
-/// # Ok(()) }
-/// ```
-///
-/// Strip several targets in one run.
-///
-/// ```no_run
-/// # async fn run() -> Result<(), signers::Error> {
-/// use signers::Codesign;
-///
-/// Codesign::remove_signature(vec!["MyApp.app", "MyLib.dylib"]).await?;
-/// # Ok(()) }
-/// ```
-///
-/// Strip one version of a versioned framework, leaving the others signed:
-///
-/// ```no_run
-/// # async fn run() -> Result<(), signers::Error> {
-/// use signers::Codesign;
-///
-/// Codesign::remove_signature("MyLib.framework")
+/// Codesign::remove_signature("Engine.framework")
 ///     .bundle_version("A")
 ///     .await?;
 /// # Ok(()) }
@@ -57,12 +33,12 @@ pub struct RemoveSignature {
     bundle_version: Option<String>,
 }
 
+/// Options for [`remove_signature`](Codesign::remove_signature).
 impl Codesign<RemoveSignature> {
-    /// Version to operate on inside a versioned bundle, i.e. a name under its
-    /// `Versions` directory (`--bundle-version`).
+    /// Removes the signature from this version of a versioned bundle only (`--bundle-version`).
     ///
-    /// The one place removal is selective: the versions not named keep their
-    /// signatures. Without it `codesign` strips the bundle's default version.
+    /// `version` names a directory under the bundle's `Versions`. Without this option,
+    /// `codesign` uses the version that `Current` points to.
     pub fn bundle_version(mut self, version: impl Into<String>) -> Self {
         self.action.bundle_version = Some(version.into());
         self

@@ -1,4 +1,4 @@
-//! The signing action (`codesign --sign`).
+//! The signing action and the types its options take (`--sign`).
 
 use std::borrow::Cow;
 use std::ffi::OsStr;
@@ -10,95 +10,38 @@ use super::actions::sealed::ToArgs;
 use super::actions::{PushArgs, joined};
 use crate::codesign::Codesign;
 
-/// The signing action, and the options it was configured with
-/// (`codesign --sign`).
+/// Options of the signing action: the `A` in `Codesign<Sign>`.
 ///
-/// You never build one: [`Codesign::sign`] does, and it is the only way to get
-/// one. What fills it in afterwards are the setters on
-/// [`Codesign<Sign>`](Codesign#impl-Codesign%3CSign%3E) — one per `codesign`
-/// signing flag, from [`identifier`](Codesign::identifier) through to
-/// [`file_list`](Codesign::file_list).
-///
-/// Everything starts at `codesign`'s own default, so a builder with no setters
-/// applied runs plain `codesign --sign <identity> <targets>`.
-///
-/// [`Default`] leaves the identity empty; it's just the base the constructor
-/// builds on.
+/// [`Codesign::sign`], [`Codesign::sign_adhoc`] and [`Codesign::sign_for_distribution`] create
+/// it. You set its options with [the signing setters](Codesign#impl-Codesign%3CSign%3E). An
+/// option you never set keeps `codesign`'s default.
 ///
 /// # Examples
 ///
-/// Re-sign a patched binary ad-hoc. `-` is the ad-hoc identity, and
-/// [`force`](Codesign::force) is what allows replacing the signature already
-/// there — without it `codesign` refuses:
+/// Sign the nested code first, then the bundle that seals it. This replaces the deprecated
+/// [`deep`](Codesign::deep):
 ///
 /// ```no_run
-/// # async fn run() -> Result<(), signers::Error> {
+/// # async fn run() -> signers::Result<()> {
 /// use signers::Codesign;
 ///
-/// Codesign::sign("patched.dylib", "-").force(true).await?;
-/// # Ok(()) }
-/// ```
+/// let identity = "Developer ID Application: Jane Doe (A1B2C3D4E5)";
 ///
-/// Re-sign, keeping what the old signature carried rather than rebuilding it
-/// from scratch:
-///
-/// ```no_run
-/// # async fn run() -> Result<(), signers::Error> {
-/// use signers::Codesign;
-/// use signers::codesign::sign::PreserveMetadata;
-///
-/// Codesign::sign("patched.app", "-")
-///     .force(true)
-///     .preserve_metadata(PreserveMetadata::ENTITLEMENTS | PreserveMetadata::IDENTIFIER)
+/// Codesign::sign_for_distribution("MyApp.app/Contents/Frameworks/Engine.framework", identity)
 ///     .await?;
-/// # Ok(()) }
-/// ```
-///
-/// Sign for distribution: a real identity, its entitlements, the hardened
-/// runtime notarization requires, and a timestamp so the signature outlives the
-/// certificate:
-///
-/// ```no_run
-/// # async fn run() -> Result<(), signers::Error> {
-/// use signers::Codesign;
-/// use signers::codesign::sign::{SigningFlags, Timestamp};
-///
-/// Codesign::sign("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
+/// Codesign::sign_for_distribution("MyApp.app", identity)
 ///     .entitlements("MyApp.entitlements")
-///     .options(SigningFlags::RUNTIME)
-///     .timestamp(Timestamp::Enabled)
-///     .force(true)
 ///     .await?;
 /// # Ok(()) }
 /// ```
 ///
-/// Sign several targets in one run. They share the options, and the targets are
-/// all checked before any of them is signed — so a typo in the last path leaves
-/// the first ones untouched rather than half-applied:
+/// Leave the binary unchanged and write its signature to a separate file:
 ///
 /// ```no_run
-/// # async fn run() -> Result<(), signers::Error> {
+/// # async fn run() -> signers::Result<()> {
 /// use signers::Codesign;
 ///
-/// Codesign::sign(vec!["MyApp.app", "MyLib.dylib"], "-")
-///     .force(true)
-///     .await?;
-/// # Ok(()) }
-/// ```
-///
-/// Since nothing runs before the `.await`, an invocation can be assembled a
-/// piece at a time:
-///
-/// ```no_run
-/// # async fn run(hardened: bool) -> Result<(), signers::Error> {
-/// use signers::Codesign;
-/// use signers::codesign::sign::SigningFlags;
-///
-/// let mut signing = Codesign::sign("MyApp.app", "-").force(true);
-/// if hardened {
-///     signing = signing.options(SigningFlags::RUNTIME);
-/// }
-/// signing.await?;
+/// Codesign::sign_adhoc("mytool").detached("mytool.sig").await?;
 /// # Ok(()) }
 /// ```
 #[derive(Debug, Clone, Default)]
@@ -141,8 +84,7 @@ pub struct Sign {
 }
 
 impl Sign {
-    /// Signing options for `identity`, everything else left at `codesign`'s
-    /// defaults.
+    /// Options for `identity`, with everything else at `codesign`'s defaults.
     pub(crate) fn new(identity: impl Into<String>) -> Self {
         Self {
             identity: identity.into(),
@@ -150,14 +92,12 @@ impl Sign {
         }
     }
 
-    /// Ad-hoc signing options: identity `-`, everything else left at
-    /// `codesign`'s defaults.
+    /// Options for an ad hoc signature (identity `-`).
     pub(crate) fn adhoc() -> Self {
         Self::new("-")
     }
 
-    /// Distribution-signing options for `identity`: the hardened runtime and a
-    /// trusted timestamp switched on, since a notarized build needs both.
+    /// Options for `identity`, with the hardened runtime and a timestamp on.
     pub(crate) fn for_distribution(identity: impl Into<String>) -> Self {
         Self {
             options: SigningFlags::RUNTIME,
@@ -167,22 +107,34 @@ impl Sign {
     }
 }
 
+/// Signing options, for [`sign`](Codesign::sign) and its presets.
+///
+/// Each setter maps to one `codesign` flag. A later call replaces an earlier one, and `false`
+/// leaves a flag out.
 impl Codesign<Sign> {
-    /// Signing identifier to use, instead of the one derived from the target's
-    /// `Info.plist` or filename (`--identifier`).
+    /// Seals this identifier instead of deriving one from `Info.plist` or the file name
+    /// (`--identifier`).
+    ///
+    /// Every target in the batch gets this identifier, and each program should have its own.
     pub fn identifier(mut self, identifier: impl Into<String>) -> Self {
         self.action.identifier = Some(identifier.into());
         self
     }
 
-    /// Internal requirements to embed: a path to a requirements file, or the
-    /// source itself prefixed with `=` (`--requirements`).
+    /// Embeds internal requirements from a file, or from source prefixed with `=`
+    /// (`--requirements`).
+    ///
+    /// The kinds of requirement you don't specify get `codesign`'s defaults. On the command line,
+    /// `-` reads from standard input. Here `codesign` gets no input, so `-` makes signing fail.
+    ///
+    /// # Examples
     ///
     /// ```no_run
-    /// # async fn run() -> Result<(), signers::Error> {
-    /// # use signers::Codesign;
-    /// Codesign::sign("MyApp.app", "-")
-    ///     .requirements("=designated => anchor apple")
+    /// # async fn run() -> signers::Result<()> {
+    /// use signers::Codesign;
+    ///
+    /// Codesign::sign("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
+    ///     .requirements("=designated => identifier \"com.example.myapp\" and anchor apple generic")
     ///     .await?;
     /// # Ok(()) }
     /// ```
@@ -191,112 +143,127 @@ impl Codesign<Sign> {
         self
     }
 
-    /// Prefix to complete a derived identifier that has no dot in it, e.g.
-    /// `com.example.` (`--prefix`).
+    /// Prefixes a derived identifier that contains no dot, e.g. with `com.example.` (`--prefix`).
+    ///
+    /// Include the trailing dot. It has no effect when you set
+    /// [`identifier`](Codesign::identifier).
     pub fn prefix(mut self, prefix: impl Into<String>) -> Self {
         self.action.prefix = Some(prefix.into());
         self
     }
 
-    /// Look for the signing identity in this keychain only (`--keychain`).
+    /// Looks up the signing identity in this keychain only (`--keychain`).
+    ///
+    /// The keychain doesn't need to be on the search list, so a temporary one works. The
+    /// certificate chain still comes from the search list only.
     pub fn keychain(mut self, path: impl Into<PathBuf>) -> Self {
         self.action.keychain = Some(path.into());
         self
     }
 
-    /// Entitlements plist to embed in the signature (`--entitlements`).
+    /// Embeds the entitlements in this plist (`--entitlements`).
+    ///
+    /// `codesign` leaves them out of libraries unless you also set
+    /// [`force_library_entitlements`](Codesign::force_library_entitlements).
     pub fn entitlements(mut self, path: impl Into<PathBuf>) -> Self {
         self.action.entitlements = Some(path.into());
         self
     }
 
-    /// Embed the entitlements in libraries too, not just in main executables
+    /// Embeds the entitlements in libraries too, not only in main executables
     /// (`--force-library-entitlements`).
+    ///
+    /// Without it, `codesign` signs a library with no entitlements and reports no error.
     pub fn force_library_entitlements(mut self, force_library_entitlements: bool) -> Self {
         self.action.force_library_entitlements = force_library_entitlements;
         self
     }
 
-    /// Embed the entitlements as both XML and DER
-    /// (`--generate-entitlement-der`); already the default since macOS 12.
+    /// Embeds the entitlements as DER as well as XML (`--generate-entitlement-der`).
+    ///
+    /// This has been the default since macOS 12.
     pub fn generate_entitlement_der(mut self, generate_entitlement_der: bool) -> Self {
         self.action.generate_entitlement_der = generate_entitlement_der;
         self
     }
 
-    /// CodeDirectory flags to seal into the signature (`--options`).
+    /// Sets the code signing flags to seal (`--options`).
     ///
-    /// It's the whole set at once: calling it again replaces the flags rather
-    /// than adding to them.
-    ///
-    /// ```no_run
-    /// # async fn run() -> Result<(), signers::Error> {
-    /// use signers::Codesign;
-    /// use signers::codesign::sign::SigningFlags;
-    ///
-    /// Codesign::sign("MyApp.app", "-")
-    ///     .options(SigningFlags::RUNTIME | SigningFlags::KILL)
-    ///     .await?;
-    /// # Ok(()) }
-    /// ```
+    /// This replaces the whole set, including the one from
+    /// [`sign_for_distribution`](Codesign::sign_for_distribution).
     pub fn options(mut self, options: SigningFlags) -> Self {
         self.action.options = options;
         self
     }
 
-    /// Hardened-runtime version to store in the signature; only meaningful
-    /// together with [`SigningFlags::RUNTIME`] (`--runtime-version`).
+    /// Records this hardened runtime version instead of the SDK's (`--runtime-version`).
+    ///
+    /// Only takes effect with [`SigningFlags::RUNTIME`]. Without that flag, `codesign` ignores it.
     pub fn runtime_version(mut self, version: impl Into<String>) -> Self {
         self.action.runtime_version = Some(version.into());
         self
     }
 
-    /// Launch constraint plist for the executable itself
+    /// Embeds the launch constraint in this plist, on the executable itself
     /// (`--launch-constraint-self`).
     pub fn launch_constraint_self(mut self, path: impl Into<PathBuf>) -> Self {
         self.action.launch_constraint_self = Some(path.into());
         self
     }
 
-    /// Launch constraint plist for the executable's parent process
+    /// Embeds the launch constraint in this plist, on the executable's parent process
     /// (`--launch-constraint-parent`).
     pub fn launch_constraint_parent(mut self, path: impl Into<PathBuf>) -> Self {
         self.action.launch_constraint_parent = Some(path.into());
         self
     }
 
-    /// Launch constraint plist for the executable's responsible process
+    /// Embeds the launch constraint in this plist, on the executable's responsible process
     /// (`--launch-constraint-responsible`).
     pub fn launch_constraint_responsible(mut self, path: impl Into<PathBuf>) -> Self {
         self.action.launch_constraint_responsible = Some(path.into());
         self
     }
 
-    /// Constraint plist restricting the libraries the executable may load
+    /// Embeds the constraint in this plist on the libraries the executable may load
     /// (`--library-constraint`).
+    ///
+    /// System libraries are exempt.
     pub fn library_constraint(mut self, path: impl Into<PathBuf>) -> Self {
         self.action.library_constraint = Some(path.into());
         self
     }
 
-    /// Require the supplied constraints to be structurally valid and to only
-    /// use keys known to this macOS version (`--enforce-constraint-validity`).
+    /// Makes an invalid constraint fail the signing instead of only warning
+    /// (`--enforce-constraint-validity`).
+    ///
+    /// By default `codesign` reports unknown keys and malformed constraints but signs anyway, so
+    /// you can sign constraints meant for a newer macOS.
+    ///
+    /// <div class="warning">
+    ///
+    /// On macOS 27.0, `codesign` rejects every constraint when this is set, valid ones included,
+    /// with "Failure serializing Lightweight code requirement".
+    ///
+    /// </div>
     pub fn enforce_constraint_validity(mut self, enforce_constraint_validity: bool) -> Self {
         self.action.enforce_constraint_validity = enforce_constraint_validity;
         self
     }
 
-    /// Replace an existing signature rather than failing when one is present
-    /// (`--force`).
+    /// Replaces an existing signature instead of failing (`--force`).
+    ///
+    /// Patching a binary breaks its signature but leaves it in place, so re-signing it needs
+    /// `force`. Setting it on an unsigned target does no harm.
     pub fn force(mut self, force: bool) -> Self {
         self.action.force = force;
         self
     }
 
-    /// Recursively sign nested code — frameworks, helpers, plug-ins (`--deep`).
+    /// Signs the nested code too, applying every option to it as well (`--deep`).
     ///
-    /// Deprecated by Apple for signing as of macOS 13: every option is applied
-    /// to the nested content as well, which is rarely what you want.
+    /// Apple deprecated this for signing in macOS 13, because the options rarely suit the nested
+    /// code. Instead, sign the nested code first and the bundle last, as in the [`Sign`] examples.
     #[deprecated(
         since = "0.1.0",
         note = "Apple deprecated --deep for signing as of macOS 13.0; \
@@ -307,97 +274,89 @@ impl Codesign<Sign> {
         self
     }
 
-    /// Metadata to carry over from the signature you're replacing
-    /// (`--preserve-metadata`).
+    /// Reuses parts of the signature being replaced (`--preserve-metadata`).
     ///
-    /// Only does something alongside [`force`](Codesign::force) — there's
-    /// nothing to carry over otherwise — and nothing at all if the old
-    /// signature was linker-signed. Like [`options`](Codesign::options), it
-    /// replaces the set rather than adding to it.
-    ///
-    /// ```no_run
-    /// # async fn run() -> Result<(), signers::Error> {
-    /// use signers::Codesign;
-    /// use signers::codesign::sign::PreserveMetadata;
-    ///
-    /// // Re-sign a patched binary, keeping the entitlements it already had.
-    /// Codesign::sign("MyApp.app", "-")
-    ///     .force(true)
-    ///     .preserve_metadata(PreserveMetadata::ENTITLEMENTS)
-    ///     .await?;
-    /// # Ok(()) }
-    /// ```
+    /// Needs [`force`](Codesign::force), since without it there is no replacing. Values you set
+    /// explicitly win over preserved ones. `codesign` ignores this option when the old signature
+    /// came from the linker.
     pub fn preserve_metadata(mut self, metadata: PreserveMetadata) -> Self {
         self.action.preserve_metadata = metadata;
         self
     }
 
-    /// Granularity of code signing, in bytes (`--pagesize`).
+    /// Sets the signing page size in bytes, or `0` for a single page (`--pagesize`).
     ///
-    /// `codesign` requires a power of two; `0` signs the whole code as a single
-    /// page. Applies to the main executable only.
+    /// Anything but a power of two or `0` makes `codesign` fail. Only the main executable is
+    /// affected, not resources.
     pub fn page_size(mut self, page_size: u32) -> Self {
         self.action.page_size = Some(page_size);
         self
     }
 
-    /// Whether to timestamp the signature, and where from (`--timestamp`).
+    /// Sets whether to get a secure timestamp, and from where (`--timestamp`).
     ///
-    /// A trusted timestamp is what keeps a signature valid after the signing
-    /// certificate expires, so distribution builds want one.
+    /// If you don't set it, `codesign` decides on its own. The server is contacted during
+    /// `.await`, and if it can't be reached the signing fails. Ad hoc signatures ignore this
+    /// option.
     pub fn timestamp(mut self, timestamp: Timestamp) -> Self {
         self.action.timestamp = Some(timestamp);
         self
     }
 
-    /// Version to operate on inside a versioned bundle, i.e. a name under its
-    /// `Versions` directory (`--bundle-version`).
+    /// Signs this version of a versioned bundle instead of the current one (`--bundle-version`).
+    ///
+    /// `version` names a directory under the bundle's `Versions`, e.g. `"A"`.
     pub fn bundle_version(mut self, version: impl Into<String>) -> Self {
         self.action.bundle_version = Some(version.into());
         self
     }
 
-    /// Strip extended attributes that would otherwise break signing, such as
-    /// `com.apple.FinderInfo` (`--strip-disallowed-xattrs`).
+    /// Removes extended attributes that block signing, such as resource forks
+    /// (`--strip-disallowed-xattrs`).
+    ///
+    /// Without it, a target that carries one fails with "resource fork, Finder information, or
+    /// similar detritus not allowed".
     pub fn strip_disallowed_xattrs(mut self, strip_disallowed_xattrs: bool) -> Self {
         self.action.strip_disallowed_xattrs = strip_disallowed_xattrs;
         self
     }
 
-    /// Build the resource seal on a single thread (`--single-threaded-signing`).
+    /// Builds the resource seal on one thread (`--single-threaded-signing`).
     pub fn single_threaded_signing(mut self, single_threaded_signing: bool) -> Self {
         self.action.single_threaded_signing = single_threaded_signing;
         self
     }
 
-    /// Perform every signing step, including the cryptographic ones, but
-    /// discard the result instead of writing it (`--dryrun`).
+    /// Runs the whole signing, identity and keychain access included, but writes nothing
+    /// (`--dryrun`).
     pub fn dry_run(mut self, dry_run: bool) -> Self {
         self.action.dry_run = dry_run;
         self
     }
 
-    /// Write the signature to this file instead of into the code, leaving the
-    /// target untouched (`--detached`).
+    /// Writes the signature to this file and leaves the target unchanged (`--detached`).
     pub fn detached(mut self, path: impl Into<PathBuf>) -> Self {
         self.action.detached = Some(path.into());
         self
     }
 
-    /// Write the detached signature into the system database
-    /// (`--detached-database`); requires elevated privileges.
+    /// Writes a detached signature to the system database (`--detached-database`).
+    ///
+    /// This needs root. Otherwise `codesign` fails with "cannot access a database" and leaves the
+    /// target unchanged.
     pub fn detached_database(mut self, detached_database: bool) -> Self {
         self.action.detached_database = detached_database;
         self
     }
 
-    /// Append the list of files the signing touched to this path
+    /// Appends to this file the paths that signing may have changed, one per line
     /// (`--file-list`).
     ///
-    /// `codesign` also takes `-` here, meaning standard output, but this crate
-    /// captures that and has nowhere to hand it to you — so `-` fails at
-    /// `.await` with [`Error::FileListToStdout`](crate::Error::FileListToStdout)
-    /// rather than dropping the list on the floor.
+    /// Any file not listed is unchanged. A listed file may be unchanged too.
+    ///
+    /// On the command line, `-` means standard output. Here the crate captures that output, so
+    /// `-` makes `.await` fail with [`Error::FileListToStdout`](crate::Error::FileListToStdout)
+    /// before anything runs.
     pub fn file_list(mut self, path: impl Into<PathBuf>) -> Self {
         self.action.file_list = Some(path.into());
         self
@@ -514,145 +473,130 @@ impl ToArgs for Sign {
     }
 }
 
-/// The value the [`timestamp`](Codesign::timestamp) option takes
-/// (`--timestamp`).
+/// Where [`timestamp`](Codesign::timestamp) gets a secure timestamp from, if anywhere.
 ///
-/// Not a bool, because leaving the option unset — `codesign`'s own default — is
-/// a third thing, distinct from [`Disabled`](Timestamp::Disabled) explicitly
-/// refusing to contact a server.
+/// Leaving the option unset isn't the same as [`Disabled`](Timestamp::Disabled): unset lets
+/// `codesign` decide.
 ///
 /// # Examples
 ///
 /// ```no_run
-/// # async fn run() -> Result<(), signers::Error> {
+/// # async fn run() -> signers::Result<()> {
 /// use signers::Codesign;
 /// use signers::codesign::sign::Timestamp;
 ///
 /// let identity = "Developer ID Application: Jane Doe (A1B2C3D4E5)";
 ///
-/// // A trusted timestamp from Apple's own server — what distribution builds want.
+/// // An offline build: no timestamp server is contacted.
 /// Codesign::sign("MyApp.app", identity)
-///     .timestamp(Timestamp::Enabled)
-///     .await?;
-///
-/// // A specific timestamp authority instead of Apple's.
-/// Codesign::sign("MyApp.app", identity)
-///     .timestamp(Timestamp::ServerUrl("http://timestamp.example.com".into()))
-///     .await?;
-///
-/// // No timestamp, explicitly — different from never calling `timestamp` at all.
-/// Codesign::sign("MyApp.app", "-")
 ///     .timestamp(Timestamp::Disabled)
+///     .await?;
+///
+/// // Your own timestamp authority instead of Apple's.
+/// Codesign::sign("MyApp.app", identity)
+///     .timestamp(Timestamp::ServerUrl("http://tsa.example.com".into()))
 ///     .await?;
 /// # Ok(()) }
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Timestamp {
-    /// `--timestamp` — request a trusted timestamp from Apple's default server.
+    /// Apple's timestamp server (`--timestamp`).
     Enabled,
-    /// `--timestamp=<url>` — request a timestamp from a specific server.
+    /// The timestamp server at this URL (`--timestamp=<url>`).
     ServerUrl(String),
-    /// `--timestamp=none` — do not contact any timestamp server.
+    /// No timestamp (`--timestamp=none`).
     Disabled,
 }
 
 bitflags! {
-    /// The value the [`options`](Codesign::options) option takes: the
-    /// CodeDirectory flags to seal into the signature (`--options`).
+    /// Code signing flags that [`options`](Codesign::options) seals into the signature.
     ///
-    /// A set — combine the flags with `|`. Values mirror
-    /// `SecCodeSignatureFlags` from `Security/CSCommon.h`; names are the tokens
-    /// `codesign` accepts.
+    /// Combine them with `|`. The bits are the ones `codesign -dv` prints as `flags=0x…`.
     ///
     /// # Examples
     ///
     /// ```no_run
-    /// # async fn run() -> Result<(), signers::Error> {
+    /// # async fn run() -> signers::Result<()> {
     /// use signers::Codesign;
     /// use signers::codesign::sign::SigningFlags;
     ///
-    /// // The hardened runtime, plus killing the process if it becomes
-    /// // dynamically invalid at runtime.
     /// Codesign::sign("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
-    ///     .options(SigningFlags::RUNTIME | SigningFlags::KILL)
+    ///     .options(SigningFlags::RUNTIME | SigningFlags::LIBRARY)
     ///     .await?;
     /// # Ok(()) }
     /// ```
     #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
     pub struct SigningFlags: u32 {
-        /// Marks the code as able to host guest code.
+        /// Lets the code host guest code (`host`).
         #[bitflags(flag_name = "host")]
         const HOST = 0x0001;
-        /// Hints that the code prefers being denied access to resources over
-        /// losing its identity.
+        /// Asks the system to deny the process a resource rather than invalidate its identity
+        /// (`hard`).
         #[bitflags(flag_name = "hard")]
         const HARD = 0x0100;
-        /// Kills the process as soon as it becomes dynamically invalid.
+        /// Kills the process as soon as its signature becomes invalid (`kill`).
         #[bitflags(flag_name = "kill")]
         const KILL = 0x0200;
-        /// Makes validation honour certificate expiration.
+        /// Fails verification once any certificate in the chain has expired (`expires`).
         #[bitflags(flag_name = "expires")]
         const EXPIRES = 0x0400;
-        /// Enforces library validation: only system libraries or libraries
-        /// sharing the same team identifier may be linked.
+        /// Lets the executable load only system libraries or its own team's (`library`).
         #[bitflags(flag_name = "library")]
         const LIBRARY = 0x2000;
-        /// Opts into the hardened runtime (required for notarization).
+        /// Opts into the hardened runtime, which notarization requires (`runtime`).
         #[bitflags(flag_name = "runtime")]
         const RUNTIME = 0x1_0000;
-        /// Marks the signature as linker-generated: replaceable without
-        /// `--force` and never preserved.
+        /// Marks the signature as the linker's: replaced without `force`, never preserved
+        /// (`linker-signed`).
         #[bitflags(flag_name = "linker-signed")]
         const LINKER_SIGNED = 0x2_0000;
     }
 }
 
 bitflags! {
-    /// The value the [`preserve_metadata`](Codesign::preserve_metadata) option
-    /// takes: what to reuse from the signature being replaced
-    /// (`--preserve-metadata`).
+    /// Parts of the old signature that [`preserve_metadata`](Codesign::preserve_metadata)
+    /// carries over.
     ///
-    /// A set — combine the flags with `|`. Names are the tokens `codesign`
-    /// accepts.
+    /// Combine them with `|`.
     ///
     /// # Examples
     ///
     /// ```no_run
-    /// # async fn run() -> Result<(), signers::Error> {
+    /// # async fn run() -> signers::Result<()> {
     /// use signers::Codesign;
     /// use signers::codesign::sign::PreserveMetadata;
     ///
-    /// // Re-sign a patched binary, keeping its identifier and internal
-    /// // requirements rather than deriving them again from scratch.
-    /// Codesign::sign("patched.app", "-")
+    /// // Re-sign a patched binary and keep the identifier and entitlements it had.
+    /// Codesign::sign_adhoc("patched")
     ///     .force(true)
-    ///     .preserve_metadata(PreserveMetadata::IDENTIFIER | PreserveMetadata::REQUIREMENTS)
+    ///     .preserve_metadata(PreserveMetadata::IDENTIFIER | PreserveMetadata::ENTITLEMENTS)
     ///     .await?;
     /// # Ok(()) }
     /// ```
     #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
     pub struct PreserveMetadata: u8 {
-        /// Keep the existing signing identifier.
+        /// The signing identifier (`identifier`).
         #[bitflags(flag_name = "identifier")]
         const IDENTIFIER = 1 << 0;
-        /// Keep the existing entitlements.
+        /// The entitlements (`entitlements`).
         #[bitflags(flag_name = "entitlements")]
         const ENTITLEMENTS = 1 << 1;
-        /// Keep the existing internal requirements, as a whole.
+        /// All the internal requirements, since they can't be picked one by one
+        /// (`requirements`).
         #[bitflags(flag_name = "requirements")]
         const REQUIREMENTS = 1 << 2;
-        /// Keep the existing CodeDirectory option flags.
+        /// The code signing flags (`flags`).
         #[bitflags(flag_name = "flags")]
         const FLAGS = 1 << 3;
-        /// Keep the existing hardened-runtime version.
+        /// The hardened runtime version (`runtime`).
         #[bitflags(flag_name = "runtime")]
         const RUNTIME = 1 << 4;
-        /// Keep the existing launch constraints. Ignored when any
-        /// `launch_constraint_*` option is supplied.
+        /// The launch constraints, unless a `launch_constraint_*` option is set
+        /// (`launch-constraints`).
         #[bitflags(flag_name = "launch-constraints")]
         const LAUNCH_CONSTRAINTS = 1 << 5;
-        /// Keep the existing library load constraints. Ignored when
-        /// [`library_constraint`](Codesign::library_constraint) is supplied.
+        /// The library constraint, unless
+        /// [`library_constraint`](Codesign::library_constraint) is set (`library-constraints`).
         #[bitflags(flag_name = "library-constraints")]
         const LIBRARY_CONSTRAINTS = 1 << 6;
     }
