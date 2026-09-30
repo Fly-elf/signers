@@ -75,3 +75,15 @@ async fn many_signings_can_run_at_once() {
         );
     }
 }
+
+/// The action's output type is part of the public contract (ADR-0011): callers
+/// that match on `Ok(())` must keep compiling.
+#[tokio::test]
+async fn awaiting_a_signing_yields_unit() {
+    let workspace = Workspace::new();
+    let target = workspace.unsigned("hello");
+
+    let result: signers::Result<()> = Codesign::sign(&target, "-").await;
+
+    assert!(matches!(result, Ok(())));
+}
