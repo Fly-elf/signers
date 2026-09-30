@@ -1,23 +1,17 @@
-//! What can go wrong while running an action.
-//!
-//! - [`Error`](enum@Error) — every error this crate can return.
-//! - [`CodesignError`] — the errors specific to the `codesign` backend.
-//! - [`Result`] — shorthand for `Result<T, Error>`, used everywhere in the crate.
+//! Why an action failed: [`Error`](enum@Error), and [`CodesignError`] for the `codesign` backend.
 
 use std::path::PathBuf;
 use std::process::ExitStatus;
 
 use thiserror::Error;
 
-/// Shorthand for a result that fails with this crate's [`Error`](enum@Error).
+/// A `Result` whose error is this crate's [`Error`](enum@Error).
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Every error this crate can return, from any action.
+/// Why an action failed.
 ///
-/// - The crate turning a request down before running anything — a target that isn't there, an
-///   option it can't honour. Nothing has run yet, so a batch that can't work this way leaves
-///   every target untouched.
-/// - What a backend reported once it actually ran, e.g. [`Error::Codesign`].
+/// Every variant except [`Codesign`](Error::Codesign) comes from a check made before `codesign`
+/// starts, so no target has been touched.
 ///
 /// # Examples
 ///
@@ -25,14 +19,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// # async fn run() {
 /// use signers::{Codesign, CodesignError, Error};
 ///
-/// match Codesign::sign("MyApp.app", "-").force(true).await {
-///     Ok(()) => println!("signed"),
-///     Err(Error::Codesign(CodesignError::NotFound)) => {
-///         eprintln!("run `xcode-select --install` first")
-///     }
-///     Err(Error::Codesign(CodesignError::Failed { stderr, .. })) => {
-///         eprintln!("codesign said no: {stderr}")
-///     }
+/// match Codesign::sign_adhoc("mytool").force(true).await {
+///     Ok(()) => {}
+///     Err(Error::TargetNotFound(path)) => eprintln!("no such file: {}", path.display()),
+///     Err(Error::Codesign(CodesignError::Failed { stderr, .. })) => eprintln!("{stderr}"),
 ///     Err(error) => eprintln!("{error}"),
 /// }
 /// # }
@@ -40,75 +30,71 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum Error {
-    /// No target was given, or every one given was empty.
+    /// No target was given, or every target was an empty path.
     #[error("no targets to operate on")]
     NoTargets,
 
-    /// A target isn't there.
+    /// This target doesn't exist.
     #[error("target does not exist: {0}")]
     TargetNotFound(PathBuf),
 
-    /// A target couldn't be looked at to find out whether it exists — usually
-    /// permission denied somewhere in its parent directories.
+    /// Whether this target exists couldn't be checked, e.g. because a parent directory denies
+    /// access.
     #[error("could not access target {path}: {source}")]
     TargetAccess {
         path: PathBuf,
         source: std::io::Error,
     },
 
-    /// [`file_list`](crate::codesign::Codesign::file_list) was set to `-`,
-    /// which is how `codesign` spells "write the list to standard output".
-    ///
-    /// This crate captures the child's output and has nowhere to hand that list
-    /// to you, so it would just be thrown away. Pass a real path instead.
+    /// [`file_list`](crate::Codesign::file_list) was `-`, but the crate captures standard output,
+    /// so the list would be lost.
     #[error("file_list(\"-\") is not supported: pass a path instead of standard output")]
     FileListToStdout,
 
-    /// Something went wrong in the `codesign` subprocess backend; see [`CodesignError`].
+    /// The `codesign` tool couldn't run, or it rejected the job.
     #[error(transparent)]
     Codesign(#[from] CodesignError),
 }
 
-/// What can go wrong specifically in the `codesign` subprocess backend.
+/// Why running the `codesign` tool failed.
 #[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum CodesignError {
-    /// The `codesign` binary isn't installed, or isn't on `PATH`.
+    /// No `codesign` was found on `PATH`.
     ///
-    /// Worth matching on if you want to fall back to another backend: it's the
-    /// one failure the native `rcodesign` backend can't have.
+    /// `codesign` ships with macOS in `/usr/bin`. This error usually means `PATH` leaves out
+    /// `/usr/bin`, or the system isn't macOS.
     #[error(
         "the `codesign` binary was not found on PATH; \
          install the Xcode Command Line Tools with `xcode-select --install`"
     )]
     NotFound,
 
-    /// `codesign` is installed but couldn't be started: not executable, a
-    /// failed fork, and so on.
+    /// `codesign` was found but couldn't start, e.g. because it isn't executable.
     #[error("failed to spawn the `codesign` process: {0}")]
     Spawn(#[source] std::io::Error),
 
-    /// `codesign` started, but reading its output or reaping it failed, so
-    /// there's no result to report either way.
+    /// Waiting for `codesign` or reading its output failed.
+    ///
+    /// The outcome is unknown, so the targets may or may not have changed.
     #[error("failed while running the `codesign` process: {0}")]
     Run(#[source] std::io::Error),
 
-    /// `codesign` ran and refused the job. This is the one that carries its
-    /// complaint: `stderr` is what it printed, trimmed.
+    /// `codesign` exited with `code`. `stderr` holds its diagnostics, trimmed.
+    ///
+    /// In a batch, the targets before the rejected one have already changed. See
+    /// [`Codesign`](crate::Codesign#errors).
     #[error("`codesign` exited with code {code}: {}", diagnostics(.stderr))]
     Failed { code: i32, stderr: String },
 
-    /// `codesign` was killed before it could exit — a crash on a malformed
-    /// binary, a timeout from outside, the OOM killer.
+    /// `codesign` was killed by a signal before it could exit.
     ///
-    /// No exit code, and usually nothing on `stderr` either. On Unix, the
-    /// signal that killed it is in `status`, via `ExitStatusExt::signal`.
+    /// `status` holds the signal (`ExitStatusExt::signal`). `stderr` is usually empty.
     #[error("the `codesign` process terminated abnormally ({status}): {}", diagnostics(.stderr))]
     Terminated { status: ExitStatus, stderr: String },
 }
 
-/// Stands in for the diagnostics a failing run didn't produce, so a message
-/// never trails off after its colon.
+/// Returns `stderr`, or "no diagnostics" if it's empty, so a message never ends with a colon.
 fn diagnostics(stderr: &str) -> &str {
     if stderr.is_empty() {
         "no diagnostics"
