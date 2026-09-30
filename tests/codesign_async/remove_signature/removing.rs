@@ -120,3 +120,16 @@ async fn spaces_and_non_ascii_in_a_path_are_passed_through_verbatim() {
 
     assert!(!inspect::is_signed(&target));
 }
+
+/// The action's output type is part of the public contract (ADR-0011): callers
+/// that match on `Ok(())` must keep compiling.
+#[tokio::test]
+async fn awaiting_a_removal_yields_unit() {
+    let workspace = Workspace::new();
+    let target = workspace.unsigned("hello");
+    Codesign::sign(&target, "-").await.unwrap();
+
+    let result: signers::Result<()> = Codesign::remove_signature(&target).await;
+
+    assert!(matches!(result, Ok(())));
+}

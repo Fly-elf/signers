@@ -46,6 +46,8 @@ impl Codesign<RemoveSignature> {
 }
 
 impl ToArgs for RemoveSignature {
+    type Output = ();
+
     fn to_args<'a>(&'a self, targets: &'a [PathBuf]) -> Vec<Cow<'a, OsStr>> {
         let mut args: Vec<Cow<'a, OsStr>> = Vec::new();
 
@@ -59,6 +61,10 @@ impl ToArgs for RemoveSignature {
 
         args.targets(targets);
         args
+    }
+
+    fn output(&self, _stdout: Vec<u8>, _stderr: Vec<u8>) -> crate::errors::Result<()> {
+        Ok(())
     }
 }
 
@@ -134,5 +140,18 @@ mod tests {
     fn there_is_nothing_to_validate() {
         let action = Codesign::remove_signature("app").bundle_version("A");
         assert!(action.action.validate().is_ok());
+    }
+
+    #[test]
+    fn the_output_ignores_whatever_codesign_printed() {
+        let action = Codesign::remove_signature("app");
+        assert_eq!(action.action.output(Vec::new(), Vec::new()).unwrap(), ());
+        assert_eq!(
+            action
+                .action
+                .output(b"noise".to_vec(), vec![0xff, 0xfe])
+                .unwrap(),
+            ()
+        );
     }
 }

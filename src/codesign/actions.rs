@@ -1,4 +1,5 @@
-//! What every `codesign` action shares: the sealed [`Action`] trait and argument rendering.
+//! What every `codesign` action shares: the sealed [`Action`] trait, argument rendering and
+//! the result of a successful run.
 //!
 //! It's apart from the async runner so that a blocking runner can share it.
 
@@ -11,8 +12,9 @@ use bitflags::Flags;
 /// An action type that [`Codesign`](crate::Codesign) can run, such as
 /// [`Sign`](crate::codesign::sign::Sign).
 ///
-/// Use it as a bound to accept any runnable `Codesign<A>`. It's sealed, so only this crate
-/// defines actions.
+/// Use it as a bound to accept any runnable `Codesign<A>`. `.await` on a `Codesign<A>` yields
+/// `Result<A::Output>`: `()` for the actions so far. It's sealed, so only this crate defines
+/// actions.
 pub trait Action: sealed::ToArgs {}
 
 impl<T: sealed::ToArgs> Action for T {}
@@ -25,8 +27,13 @@ pub(crate) mod sealed {
 
     use crate::errors::Result;
 
-    /// Renders an action into `codesign` arguments.
+    /// Renders an action into `codesign` arguments and reads the result of its run.
     pub trait ToArgs {
+        /// What `.await` yields when `codesign` succeeds.
+        ///
+        /// It depends on the action type only, never on the option values.
+        type Output: Send + 'static;
+
         /// Rejects options this crate can't honour, before any target is checked or `codesign`
         /// runs.
         fn validate(&self) -> Result<()> {
@@ -38,6 +45,12 @@ pub(crate) mod sealed {
         /// Flag names are `'static` and most values borrow from the action, so only arguments
         /// built here allocate.
         fn to_args<'a>(&'a self, targets: &'a [PathBuf]) -> Vec<Cow<'a, OsStr>>;
+
+        /// Builds the result from the raw stdout and stderr of a `codesign` run that exited 0.
+        ///
+        /// Both streams are untrimmed bytes. A failed run never gets here: it becomes an error
+        /// before.
+        fn output(&self, stdout: Vec<u8>, stderr: Vec<u8>) -> Result<Self::Output>;
     }
 }
 
