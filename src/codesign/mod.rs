@@ -32,6 +32,10 @@ pub use actions::Action;
 /// statements, clone or drop. To run several at once, spawn
 /// [`into_future`](Codesign::into_future): the future is `Send + 'static`.
 ///
+/// `.await` yields `Result<A::Output>`, where [`Output`](Action) is the type the action
+/// declares for a successful run. For [`sign`](Codesign::sign) and
+/// [`remove_signature`](Codesign::remove_signature) it is `()`.
+///
 /// # Examples
 ///
 /// Build the run over several statements:
@@ -206,10 +210,12 @@ impl Codesign<()> {
 
 /// Runs the action when awaited. See [`Codesign`] for its errors and panics.
 impl<A: Action + Send + 'static> IntoFuture for Codesign<A> {
-    type Output = Result<()>;
-    type IntoFuture = Pin<Box<dyn Future<Output = Result<()>> + Send>>;
+    type Output = Result<A::Output>;
+    type IntoFuture = Pin<Box<dyn Future<Output = Result<A::Output>> + Send>>;
 
     /// Returns the future that runs the action. Nothing happens until it's polled.
+    ///
+    /// It resolves to the action's [`Output`](Action) once `codesign` exits 0.
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
             self.action.validate()?;
@@ -258,7 +264,7 @@ impl<A: Action + Send + 'static> IntoFuture for Codesign<A> {
 
             let output = child.wait_with_output().await.map_err(CodesignError::Run)?;
             if output.status.success() {
-                return Ok(());
+                return self.action.output(output.stdout, output.stderr);
             }
 
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();

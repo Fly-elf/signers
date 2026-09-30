@@ -364,6 +364,8 @@ impl Codesign<Sign> {
 }
 
 impl ToArgs for Sign {
+    type Output = ();
+
     fn validate(&self) -> crate::errors::Result<()> {
         if self.file_list.as_deref() == Some(Path::new("-")) {
             return Err(crate::errors::Error::FileListToStdout);
@@ -470,6 +472,10 @@ impl ToArgs for Sign {
 
         args.targets(targets);
         args
+    }
+
+    fn output(&self, _stdout: Vec<u8>, _stderr: Vec<u8>) -> crate::errors::Result<()> {
+        Ok(())
     }
 }
 
@@ -914,6 +920,19 @@ mod tests {
         assert_eq!(
             args_of(&action),
             os(&["--sign", "-", "--force", "--", "a.app", "b.app"])
+        );
+    }
+
+    #[test]
+    fn the_output_ignores_whatever_codesign_printed() {
+        let action = Codesign::sign("app", "-");
+        assert_eq!(action.action.output(Vec::new(), Vec::new()).unwrap(), ());
+        assert_eq!(
+            action
+                .action
+                .output(b"noise".to_vec(), vec![0xff, 0xfe])
+                .unwrap(),
+            ()
         );
     }
 }
