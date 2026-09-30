@@ -1,87 +1,54 @@
-//! Every action's `target` parameter is generic over [`IntoTargets`].
-//! It's a convenient way to specify files to work with — supported types:
-//! - A single path: [`str`], [`String`], [`OsString`], [`Path`] or [`PathBuf`] — owned or
-//!   borrowed
-//! - A batch: `Vec` or a slice, of anything from the list above
-//!
-//! Empty paths are dropped — if nothing is left, [`Error::NoTargets`](crate::Error::NoTargets) is returned.
-//!
-//! # Examples
-//! ```
-//! use signers::target::IntoTargets;
-//! use std::ffi::OsString;
-//! use std::path::{Path, PathBuf};
-//!
-//! let expected = vec![PathBuf::from("app")];
-//!
-//! assert_eq!("app".into_targets(), expected);                   // &str
-//! assert_eq!(String::from("app").into_targets(), expected);     // String
-//! assert_eq!(OsString::from("app").into_targets(), expected);   // OsString
-//! assert_eq!(Path::new("app").into_targets(), expected);        // &Path
-//! assert_eq!(PathBuf::from("app").into_targets(), expected);    // PathBuf
-//! assert_eq!((&PathBuf::from("app")).into_targets(), expected); // &PathBuf
-//! ```
-//!
-//! A batch can be a `Vec` or a slice — but not a bare array literal. `&["a.app", "b.app"]` is a
-//! reference to a fixed-size array (`&[&str; 2]`), a different type from the slice (`&[&str]`)
-//! that `IntoTargets` is actually implemented for. Rust converts one into the other in plenty of
-//! places, but not while `Codesign::sign` is still working out which type you mean — so an array
-//! literal handed straight to an action doesn't compile:
-//!
-//! ```compile_fail
-//! # use signers::Codesign;
-//! Codesign::sign(&["a.app", "b.app"], "-");
-//! // error[E0277]: the trait `IntoTargets` is not implemented for `&[&str; 2]`
-//! ```
-//!
-//! `vec![..]` sidesteps the problem — it's a real `Vec`, nothing to convert. Or tell Rust up
-//! front that you mean a slice, with a typed `let`:
-//!
-//! ```
-//! use signers::target::IntoTargets;
-//! use std::path::PathBuf;
-//!
-//! let expected = vec![PathBuf::from("a"), PathBuf::from("b")];
-//!
-//! assert_eq!(vec!["a", "b"].into_targets(), expected); // Vec<&str>, order preserved
-//!
-//! let slice: &[&str] = &["a", "b"]; // the `let` says up front: this is a slice
-//! assert_eq!(slice.into_targets(), expected); // &[&str]
-//! ```
+//! The paths an action runs on; see [`IntoTargets`].
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-/// A convenient way to specify files to operate on.
+/// The targets of an action: one path, or a `Vec` or slice of paths.
 ///
-/// This is what lets every action take a path exactly as you already have it
-/// — a `&str` literal, an owned `String`, a `PathBuf` you built earlier — with
-/// no conversion of your own to write.
+/// Every action takes `impl IntoTargets`. The implementors below are the path types it accepts,
+/// on their own or in a `Vec` or slice.
 ///
-/// Implemented for:
-/// - A single path: [`str`], [`String`], [`OsString`], [`Path`] or [`PathBuf`]
-///   — owned or borrowed
-/// - A batch: `Vec` or a slice, of anything from the list above
+/// Empty paths are dropped. If none are left, `.await` fails with
+/// [`Error::NoTargets`](crate::Error::NoTargets). Order and duplicates are kept, and each path
+/// reaches `codesign` byte for byte, non-UTF-8 included. A path starting with `-` is never read
+/// as an option.
+///
+/// # Examples
 ///
 /// ```no_run
-/// # async fn run() -> Result<(), signers::Error> {
-/// use signers::Codesign;
+/// # async fn run() -> signers::Result<()> {
 /// use std::path::PathBuf;
 ///
-/// let target = PathBuf::from("MyApp.app");
+/// use signers::Codesign;
 ///
-/// Codesign::sign("MyApp.app", "-").await?;            // a &str literal, as-is
-/// Codesign::sign(&target, "-").await?;                // a borrowed PathBuf, as-is
-/// Codesign::sign(vec!["a.app", "b.app"], "-").await?; // a batch
+/// let built = PathBuf::from("target/release/mytool");
+/// Codesign::sign_adhoc(&built).await?;
+/// Codesign::sign_adhoc(vec!["liba.dylib", "libb.dylib"]).await?;
 /// # Ok(()) }
 /// ```
+///
+/// An array literal is neither a `Vec` nor a slice, so it doesn't compile. Use `vec![…]`:
+///
+/// ```compile_fail
+/// # use signers::Codesign;
+/// Codesign::sign_adhoc(&["liba.dylib", "libb.dylib"]);
+/// ```
 pub trait IntoTargets {
-    /// Turns `self` into the paths an action runs on, dropping any that are empty.
+    /// Converts `self` into the target paths, dropping empty ones.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::path::PathBuf;
+    ///
+    /// use signers::IntoTargets;
+    ///
+    /// assert_eq!(vec!["b", "", "a"].into_targets(), [PathBuf::from("b"), PathBuf::from("a")]);
+    /// ```
     fn into_targets(self) -> Vec<PathBuf>;
 }
 
-/// Implements [`IntoTargets`] for a single-path type convertible into [`PathBuf`],
-/// dropping the result if it's empty instead of returning a one-element vector.
+/// Implements [`IntoTargets`] for single-path types: an empty path yields no target.
 macro_rules! impl_target {
     ($($ty:ty),+ $(,)?) => {
         $(

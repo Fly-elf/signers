@@ -1,13 +1,6 @@
-//! Shared machinery every `codesign` action builds on.
+//! What every `codesign` action shares: the sealed [`Action`] trait and argument rendering.
 //!
-//! Each action (`sign`, `remove_signature` and, in time, `verify`) lives in its
-//! own sibling module of [`codesign`](crate::codesign) and defines its options
-//! struct, [`Default`], [`Action`] impl, and the setters on the matching
-//! `Codesign<Action>` specialisation — this module has no submodules of its
-//! own. It stays a separate module because [`Action`]/[`ToArgs`](sealed::ToArgs),
-//! along with the [`PushArgs`] vocabulary and [`joined`] helper every action
-//! renders its arguments with, will also be shared by the future blocking API,
-//! not just the async one.
+//! It's apart from the async runner so that a blocking runner can share it.
 
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
@@ -15,21 +8,16 @@ use std::path::PathBuf;
 
 use bitflags::Flags;
 
-/// Marks the types that can be run as a `codesign` action — `Sign`,
-/// `RemoveSignature` and, in time, their siblings.
+/// An action type that [`Codesign`](crate::Codesign) can run, such as
+/// [`Sign`](crate::codesign::sign::Sign).
 ///
-/// Sealed, so only this crate can implement it: the set of actions stays closed
-/// and how they turn into arguments stays an implementation detail. There's
-/// nothing to call here; it exists to be used as a bound.
+/// Use it as a bound to accept any runnable `Codesign<A>`. It's sealed, so only this crate
+/// defines actions.
 pub trait Action: sealed::ToArgs {}
 
-/// Every action is defined by its argument rendering; the marker follows from
-/// it, so actions never implement it by hand.
 impl<T: sealed::ToArgs> Action for T {}
 
-/// Home of the trait that seals [`Action`]: outside the crate this module
-/// cannot be named, so [`ToArgs`](sealed::ToArgs) cannot be implemented and no
-/// foreign type can become an action.
+/// Holds [`ToArgs`](sealed::ToArgs) where other crates can't name it, which seals [`Action`].
 pub(crate) mod sealed {
     use std::borrow::Cow;
     use std::ffi::OsStr;
@@ -37,47 +25,34 @@ pub(crate) mod sealed {
 
     use crate::errors::Result;
 
-    /// Renders an action, applied to `targets`, into a `codesign` argument list.
-    ///
-    /// This is what every action *is* — the options it holds only matter as the
-    /// arguments they turn into. Living behind a `pub(crate)` module keeps both
-    /// the trait and the rendering off the public API, while the generic
-    /// `IntoFuture` runner can still call it.
-    ///
-    /// Arguments borrow from the action for as long as `'a`: flag names are
-    /// `&'static str` and most option values already live in the action, so
-    /// only the few arguments built at render time are owned.
+    /// Renders an action into `codesign` arguments.
     pub trait ToArgs {
-        /// Rejects an option combination this crate cannot honour, before any
-        /// target is looked at or `codesign` is ever spawned.
-        ///
-        /// Most actions have nothing to reject, hence the default no-op.
+        /// Rejects options this crate can't honour, before any target is checked or `codesign`
+        /// runs.
         fn validate(&self) -> Result<()> {
             Ok(())
         }
 
-        /// Called once [`validate`](Self::validate) has passed, so an action
-        /// renders only combinations it has already accepted.
+        /// Renders the arguments for `targets`, once [`validate`](Self::validate) has passed.
+        ///
+        /// Flag names are `'static` and most values borrow from the action, so only arguments
+        /// built here allocate.
         fn to_args<'a>(&'a self, targets: &'a [PathBuf]) -> Vec<Cow<'a, OsStr>>;
     }
 }
 
-/// Argument-list vocabulary, so that each `codesign` option renders on one
-/// line and the arguments that have to allocate stay visible as such.
+/// Appends `codesign` arguments, so that each option renders in one line.
 pub(crate) trait PushArgs<'a> {
-    /// A standalone argument known at compile time: a bare flag such as
-    /// `--force`, or a whole `=`-form argument such as `--timestamp=none`.
+    /// Appends an argument known at compile time, e.g. `--force` or `--timestamp=none`.
     fn flag(&mut self, name: &'static str);
 
-    /// A flag followed by its value, borrowed from the action for `'a`.
+    /// Appends a flag and its value, borrowed from the action.
     fn option<V: AsRef<OsStr> + ?Sized>(&mut self, name: &'static str, value: &'a V);
 
-    /// An argument that only exists once rendered — a joined token list, a
-    /// number, an interpolated `=`-form option — and so must be owned.
+    /// Appends an argument built at render time, e.g. a joined flag list or a number.
     fn built(&mut self, value: impl Into<OsString>);
 
-    /// The paths the action operates on, which `codesign` expects last,
-    /// introduced by the `--` end-of-options separator.
+    /// Appends `--`, then the targets, so that no target is read as an option.
     fn targets(&mut self, targets: &'a [PathBuf]);
 }
 
@@ -104,11 +79,9 @@ impl<'a> PushArgs<'a> for Vec<Cow<'a, OsStr>> {
     }
 }
 
-/// Comma-joins the tokens of the flags set in `flags`, in declaration order.
+/// Comma-joins the `flag_name` tokens of the flags set in `flags`, in declaration order.
 ///
-/// Tokens come from each flag's `#[bitflags(flag_name)]`, so they are declared
-/// rather than derived. `bitflags`' own formatter can't be used here: it
-/// separates with ` | `, while `codesign` wants a bare comma-separated list.
+/// Not `bitflags`' `Display`, which separates with ` | `.
 pub(crate) fn joined<F: Flags + Copy>(flags: F) -> String {
     let mut tokens = String::new();
     for flag in F::FLAGS.iter().filter(|flag| flags.contains(*flag.value())) {
