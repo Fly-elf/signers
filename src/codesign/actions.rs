@@ -79,7 +79,8 @@ pub(crate) mod sealed {
         /// Turns a non-zero exit code into this action's error; by default
         /// [`CodesignError::Failed`].
         ///
-        /// `stderr` is already lossy-decoded and trimmed. A process killed by a signal has no
+        /// `stdout` is the run's raw standard output, which the default ignores. `stderr` is
+        /// already lossy-decoded and trimmed. A process killed by a signal has no
         /// exit code and never gets here.
         fn failure(&self, code: i32, _stdout: Vec<u8>, stderr: String) -> Error {
             CodesignError::Failed { code, stderr }.into()
