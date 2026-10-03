@@ -129,8 +129,11 @@ pub enum CodesignError {
     /// The signature is invalid or modified, the target is unsigned, or the requirement text of
     /// [`test_requirement`](crate::Codesign::test_requirement) doesn't compile. `stderr` holds
     /// the diagnostics `codesign` printed on standard error, trimmed.
-    #[error("verification failed: {}", diagnostics(.stderr))]
-    VerificationFailed { stderr: String },
+    #[error("verification failed: {}{}", diagnostics(.stderr), changes(.resources))]
+    VerificationFailed {
+        stderr: String,
+        resources: Vec<ResourceChange>,
+    },
 
     /// [`verify`](crate::Codesign::verify) found a valid signature on code that doesn't meet the
     /// requirement it was given.
@@ -141,6 +144,45 @@ pub enum CodesignError {
     /// own. `stderr` holds the diagnostics `codesign` printed on standard error, trimmed.
     #[error("validly signed, but the requirement isn't satisfied: {}", diagnostics(.stderr))]
     RequirementUnsatisfied { stderr: String },
+}
+
+/// A sealed resource that `codesign --verify` found altered.
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResourceChange {
+    pub change: Change,
+    pub path: PathBuf,
+}
+
+/// How a sealed resource differs from what the signature sealed.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Change {
+    Added,
+    Modified,
+    Missing,
+}
+
+impl Change {
+    fn as_str(self) -> &'static str {
+        match self {
+            Change::Added => "added",
+            Change::Modified => "modified",
+            Change::Missing => "missing",
+        }
+    }
+}
+
+/// Renders `resources` as ` (modified: path; added: path)`, or nothing if there are none.
+fn changes(resources: &[ResourceChange]) -> String {
+    if resources.is_empty() {
+        return String::new();
+    }
+    let list: Vec<String> = resources
+        .iter()
+        .map(|r| format!("{}: {}", r.change.as_str(), r.path.display()))
+        .collect();
+    format!(" ({})", list.join("; "))
 }
 
 /// Returns `stderr`, or "no diagnostics" if it's empty, so a message never ends with a colon.
