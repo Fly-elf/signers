@@ -405,13 +405,59 @@ Chosen signature=1
 
     #[test]
     fn unreadable_entitlements_are_rejected() {
-        for stdout in ["not a plist", "<plist version=\"1.0\"><array/></plist>"] {
+        for stdout in [
+            "<?xml version=\"1.0\"?><plist version=\"1.0\"><array/></plist>",
+            "<?xml not a plist",
+            "\t[Dict]\n<?xml version=\"1.0\"?><plist",
+        ] {
             unexpected_output(Display::default().output(
                 &paths(&["a"]),
                 stdout.as_bytes().to_vec(),
                 report("/x/a", "first").into_bytes(),
             ));
         }
+    }
+
+    const DUMP: &str = "\t[Dict]\n\t\t[Key] ccat\n\t\t[Value]\n\t\t\t[Int] 0\n";
+
+    fn entitlement_keys(stdout: String) -> Option<Vec<String>> {
+        let signatures = Display::default()
+            .output(
+                &paths(&["a"]),
+                stdout.into_bytes(),
+                report("/x/a", "first").into_bytes(),
+            )
+            .unwrap();
+        signatures[0]
+            .entitlements
+            .as_ref()
+            .map(|e| e.keys().cloned().collect())
+    }
+
+    #[test]
+    fn a_constraint_dump_before_the_plist_is_skipped() {
+        let keys = entitlement_keys(format!("{DUMP}{DUMP}{ENTITLEMENTS}"));
+
+        assert_eq!(
+            keys.unwrap(),
+            [
+                "com.apple.security.cs.allow-jit",
+                "com.apple.security.get-task-allow"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_constraint_dump_without_a_plist_has_no_entitlements() {
+        assert_eq!(entitlement_keys(DUMP.to_owned()), None);
+        assert_eq!(entitlement_keys(format!("{DUMP}  <?xml indented\n")), None);
+    }
+
+    #[test]
+    fn a_plist_marker_inside_a_dump_line_is_not_the_plist() {
+        let keys = entitlement_keys(format!("\t[String] <?xml\n{ENTITLEMENTS}"));
+
+        assert_eq!(keys.unwrap().len(), 2);
     }
 
     /// One process over several targets can't say whose entitlements stdout
