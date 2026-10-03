@@ -9,11 +9,12 @@ use bitflags::bitflags;
 use super::actions::sealed::ToArgs;
 use super::actions::{PushArgs, joined};
 use crate::codesign::Codesign;
+use crate::target::Shape;
 
 /// Options of the signing action: the `A` in `Codesign<Sign>`.
 ///
 /// [`Codesign::sign`], [`Codesign::sign_adhoc`] and [`Codesign::sign_for_distribution`] create
-/// it. You set its options with [the signing setters](Codesign#impl-Codesign%3CSign%3E). An
+/// it. You set its options with [the signing setters](Codesign#impl-Codesign%3CSign,+S%3E). An
 /// option you never set keeps `codesign`'s default.
 ///
 /// # Examples
@@ -111,7 +112,7 @@ impl Sign {
 ///
 /// Each setter maps to one `codesign` flag. A later call replaces an earlier one, and `false`
 /// leaves a flag out.
-impl Codesign<Sign> {
+impl<S: Shape> Codesign<Sign, S> {
     /// Seals this identifier instead of deriving one from `Info.plist` or the file name
     /// (`--identifier`).
     ///
@@ -335,6 +336,10 @@ impl Codesign<Sign> {
     }
 
     /// Writes the signature to this file and leaves the target unchanged (`--detached`).
+    ///
+    /// Every target's signature goes to this one file, so with
+    /// [`per_target(true)`](Codesign::per_target) `.await` fails with
+    /// [`Error::SharedOutputPerTarget`](crate::Error::SharedOutputPerTarget).
     pub fn detached(mut self, path: impl Into<PathBuf>) -> Self {
         self.action.detached = Some(path.into());
         self
@@ -356,7 +361,9 @@ impl Codesign<Sign> {
     ///
     /// On the command line, `-` means standard output. Here the crate captures that output, so
     /// `-` makes `.await` fail with [`Error::FileListToStdout`](crate::Error::FileListToStdout)
-    /// before anything runs.
+    /// before anything runs. With [`per_target(true)`](Codesign::per_target) it fails with
+    /// [`Error::SharedOutputPerTarget`](crate::Error::SharedOutputPerTarget), since every process
+    /// would append to the same file.
     pub fn file_list(mut self, path: impl Into<PathBuf>) -> Self {
         self.action.file_list = Some(path.into());
         self
@@ -365,12 +372,23 @@ impl Codesign<Sign> {
 
 impl ToArgs for Sign {
     type Output = ();
+    const PER_TARGET: bool = false;
 
     fn validate(&self) -> crate::errors::Result<()> {
         if self.file_list.as_deref() == Some(Path::new("-")) {
             return Err(crate::errors::Error::FileListToStdout);
         }
         Ok(())
+    }
+
+    fn shared_output(&self) -> Option<&'static str> {
+        if self.file_list.is_some() {
+            Some("file_list")
+        } else if self.detached.is_some() {
+            Some("detached")
+        } else {
+            None
+        }
     }
 
     fn to_args<'a>(&'a self, targets: &'a [PathBuf]) -> Vec<Cow<'a, OsStr>> {
@@ -474,8 +492,13 @@ impl ToArgs for Sign {
         args
     }
 
-    fn output(&self, _stdout: Vec<u8>, _stderr: Vec<u8>) -> crate::errors::Result<()> {
-        Ok(())
+    fn output(
+        &self,
+        targets: &[PathBuf],
+        _stdout: Vec<u8>,
+        _stderr: Vec<u8>,
+    ) -> crate::errors::Result<Vec<()>> {
+        Ok(vec![(); targets.len()])
     }
 }
 
@@ -620,7 +643,7 @@ mod tests {
 
     /// Renders the arguments, taking ownership so assertions can compare them
     /// against plain `OsString`s.
-    fn args_of(builder: &Codesign<Sign>) -> Vec<OsString> {
+    fn args_of<S>(builder: &Codesign<Sign, S>) -> Vec<OsString> {
         builder
             .action
             .to_args(&builder.targets)
@@ -781,7 +804,7 @@ mod tests {
     }
 
     /// That these are the tokens `codesign` *accepts* is settled against the
-    /// real binary in `tests/codesign_async/sign.rs`; here they only have to
+    /// real binary in `tests/codesign_async/sign/signing_flags.rs`; here they only have to
     /// stay comma-joined, in declaration order, with no separators of any kind.
     #[test]
     fn flag_tokens_are_joined_in_declaration_order() {
@@ -924,15 +947,96 @@ mod tests {
     }
 
     #[test]
-    fn the_output_ignores_whatever_codesign_printed() {
-        let action = Codesign::sign("app", "-");
-        assert_eq!(action.action.output(Vec::new(), Vec::new()).unwrap(), ());
+    fn the_output_is_one_unit_per_target_whatever_codesign_printed() {
+        let action = Codesign::sign("app", "-").action;
+        let targets = [PathBuf::from("a"), PathBuf::from("b"), PathBuf::from("c")];
+
+        let silent: Vec<()> = action.output(&targets, Vec::new(), Vec::new()).unwrap();
+        assert_eq!(silent.len(), 3);
+
+        let noisy = action.output(&targets[..1], b"noise".to_vec(), vec![0xff, 0xfe]);
+        assert_eq!(noisy.unwrap().len(), 1);
+
+        let none = action.output(&[], b"noise".to_vec(), Vec::new());
+        assert_eq!(none.unwrap().len(), 0);
+    }
+
+    /// Signing mutates its targets, so the batch stays one `codesign` process
+    /// unless the caller asks otherwise (ADR-0013).
+    #[test]
+    fn every_constructor_defaults_to_one_process_for_all_targets() {
+        assert!(!Codesign::sign("app", "-").per_target);
+        assert!(!Codesign::sign_adhoc(vec!["a.app", "b.app"]).per_target);
+        assert!(!Codesign::sign_for_distribution(["a.app", "b.app"], "Developer ID").per_target);
+    }
+
+    #[test]
+    fn per_target_keeps_the_last_value_and_renders_no_argument() {
+        let action = Codesign::sign(vec!["app"], "-").per_target(true);
+        assert!(action.per_target);
+        assert_eq!(args_of(&action), os(&["--sign", "-", "--", "app"]));
+
+        let action = action.per_target(false);
+        assert!(!action.per_target);
+        assert_eq!(args_of(&action), os(&["--sign", "-", "--", "app"]));
+    }
+
+    #[test]
+    fn only_options_writing_one_shared_file_are_reported_as_shared_output() {
+        let shared = |builder: Codesign<Sign>| builder.action.shared_output();
+
+        assert_eq!(shared(Codesign::sign("app", "-")), None);
         assert_eq!(
-            action
-                .action
-                .output(b"noise".to_vec(), vec![0xff, 0xfe])
-                .unwrap(),
-            ()
+            shared(Codesign::sign("app", "-").file_list("signed.txt")),
+            Some("file_list")
         );
+        assert_eq!(
+            shared(Codesign::sign("app", "-").detached("app.sig")),
+            Some("detached")
+        );
+        // The other options that take a path only read it.
+        assert_eq!(
+            shared(
+                Codesign::sign("app", "-")
+                    .entitlements("app.entitlements")
+                    .keychain("build.keychain")
+                    .detached_database(true)
+                    .force(true)
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn the_file_list_is_the_shared_output_named_when_both_are_set() {
+        for action in [
+            Codesign::sign("app", "-")
+                .file_list("signed.txt")
+                .detached("app.sig"),
+            Codesign::sign("app", "-")
+                .detached("app.sig")
+                .file_list("signed.txt"),
+        ] {
+            assert_eq!(action.action.shared_output(), Some("file_list"));
+        }
+    }
+
+    /// `sign` has no exit code of its own to tell apart, so every one of them
+    /// stays the generic failure (ADR-0014).
+    #[test]
+    fn a_failed_run_is_reported_with_its_code_and_diagnostics() {
+        let action = Codesign::sign("app", "-").action;
+        for code in [1, 2, 3] {
+            match action.failure(code, "app: no identity found".into()) {
+                crate::errors::Error::Codesign(crate::errors::CodesignError::Failed {
+                    code: reported,
+                    stderr,
+                }) => {
+                    assert_eq!(reported, code);
+                    assert_eq!(stderr, "app: no identity found");
+                }
+                other => panic!("expected Failed, got {other:?}"),
+            }
+        }
     }
 }

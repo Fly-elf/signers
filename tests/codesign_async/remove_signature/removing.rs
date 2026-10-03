@@ -133,3 +133,22 @@ async fn awaiting_a_removal_yields_unit() {
 
     assert!(matches!(result, Ok(())));
 }
+
+/// A collection of targets yields one output per target, in the shape of the
+/// collection (ADR-0012).
+#[tokio::test]
+async fn awaiting_a_collection_of_targets_yields_one_unit_per_target() {
+    let workspace = Workspace::new();
+    let targets = ["first", "second", "third"].map(|name| workspace.adhoc_signed(name));
+
+    let from_a_list: signers::Result<Vec<()>> = Codesign::remove_signature(targets.to_vec()).await;
+    let from_a_slice: signers::Result<Vec<()>> = Codesign::remove_signature(&targets[..2]).await;
+    let from_an_array: signers::Result<[(); 3]> = Codesign::remove_signature(targets.clone()).await;
+
+    assert_eq!(from_a_list.unwrap().len(), 3);
+    assert_eq!(from_a_slice.unwrap().len(), 2);
+    assert!(matches!(from_an_array, Ok([(), (), ()])));
+    for target in &targets {
+        assert!(!inspect::is_signed(target));
+    }
+}

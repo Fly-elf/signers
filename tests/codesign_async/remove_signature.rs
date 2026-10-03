@@ -11,6 +11,7 @@
 //! unrunnable is this action working, not failing.
 
 mod bundles;
+mod per_target;
 mod preflight;
 mod rejected_by_codesign;
 mod removing;

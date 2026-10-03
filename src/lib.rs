@@ -19,15 +19,17 @@
 //!
 //! Where to go next:
 //!
-//! - [`Codesign`]: the actions, and what `.await` checks before running anything.
+//! - [`Codesign`]: the actions, what `.await` checks before running anything, and running one
+//!   `codesign` per target of a collection.
 //! - [`Sign`](codesign::sign::Sign), [`RemoveSignature`](codesign::remove_signature::RemoveSignature):
 //!   more examples for each action.
-//! - [`IntoTargets`]: what you can pass as targets.
+//! - [`IntoTargets`]: what you can pass as targets. One path yields one result; a `Vec`, slice
+//!   or array yields one per target, in a `Vec` or an array.
 //! - [`Error`]: what can fail.
 
 pub mod codesign;
 pub mod errors;
-pub mod target;
+mod target;
 
 pub use codesign::Codesign;
 pub use errors::{CodesignError, Error, Result};
