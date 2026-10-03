@@ -1,3 +1,5 @@
+//! The display action and the [`Signature`] it returns (`--display`).
+
 use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;
@@ -12,6 +14,38 @@ mod signature;
 
 pub use signature::*;
 
+/// Options of the display action: the `A` in `Codesign<Display>`.
+///
+/// [`Codesign::display`] creates it. You set its options with
+/// [the display setters](Codesign#impl-Codesign%3CDisplay,+S%3E). An option you never set keeps
+/// `codesign`'s default.
+///
+/// # Examples
+///
+/// List the code nested in a bundle:
+///
+/// ```no_run
+/// # async fn run() -> signers::Result<()> {
+/// use signers::Codesign;
+///
+/// let signature = Codesign::display("MyApp.app").deep(true).await?;
+/// for path in &signature.nested {
+///     println!("{path}");
+/// }
+/// # Ok(()) }
+/// ```
+///
+/// Read one slice of a universal binary:
+///
+/// ```no_run
+/// # async fn run() -> signers::Result<()> {
+/// use signers::Codesign;
+/// use signers::codesign::display::Format;
+///
+/// let signature = Codesign::display("/bin/ls").architecture("arm64e").await?;
+/// assert_eq!(signature.format, Format::MachOThin("arm64e".into()));
+/// # Ok(()) }
+/// ```
 #[derive(Debug, Clone, Default)]
 pub struct Display {
     architecture: Option<String>,
@@ -20,22 +54,37 @@ pub struct Display {
     detached: Option<PathBuf>,
 }
 
+/// Options for [`display`](Codesign::display).
+///
+/// Each setter maps to one `codesign` flag. A later call replaces an earlier one, and `false`
+/// leaves a flag out.
 impl<S: Shape> Codesign<Display, S> {
+    /// Reads this slice of a universal binary, e.g. `arm64` or `x86_64` (`--architecture`).
+    ///
+    /// Without it a universal binary is reported whole, as [`Format::MachOUniversal`]. A slice the
+    /// binary doesn't have fails with [`CodesignError::Failed`].
     pub fn architecture(mut self, arch: impl Into<String>) -> Self {
         self.action.architecture = Some(arch.into());
         self
     }
 
+    /// Reads this version of a versioned bundle instead of `Current` (`--bundle-version`).
+    ///
+    /// A version the bundle doesn't have fails with [`CodesignError::Failed`].
     pub fn bundle_version(mut self, version: impl Into<String>) -> Self {
         self.action.bundle_version = Some(version.into());
         self
     }
 
+    /// Lists the code nested in a bundle, in [`Signature::nested`] (`--deep`).
+    ///
+    /// Only the items directly inside the bundle are listed, and their own signatures aren't read.
     pub fn deep(mut self, deep: bool) -> Self {
         self.action.deep = deep;
         self
     }
 
+    /// Reads the signature from a detached signature file instead of from the code (`--detached`).
     pub fn detached(mut self, path: impl Into<PathBuf>) -> Self {
         self.action.detached = Some(path.into());
         self
