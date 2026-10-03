@@ -38,9 +38,10 @@ impl Run {
 /// let run = codesign(&["--remove-signature".as_ref(), path.as_ref()]);
 /// ```
 pub fn codesign(args: &[&OsStr]) -> Run {
-    let output = Command::new("codesign").args(args).output().expect(
-        "could not run `codesign`; the integration suite needs the Xcode Command Line Tools",
-    );
+    let output = Command::new("codesign")
+        .args(args)
+        .output()
+        .expect("could not run `codesign`; it ships with macOS in /usr/bin, so check PATH");
 
     Run {
         success: output.status.success(),

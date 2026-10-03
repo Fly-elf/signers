@@ -7,11 +7,12 @@ use std::path::PathBuf;
 use super::actions::PushArgs;
 use super::actions::sealed::ToArgs;
 use crate::codesign::Codesign;
+use crate::target::Shape;
 
 /// Options of the signature-removal action: the `A` in `Codesign<RemoveSignature>`.
 ///
 /// [`Codesign::remove_signature`] creates it. Its only option is
-/// [`bundle_version`](Codesign#impl-Codesign%3CRemoveSignature%3E). With this operation,
+/// [`bundle_version`](Codesign#impl-Codesign%3CRemoveSignature,+S%3E). With this operation,
 /// `codesign` ignores `--deep` and `--architecture`, still removes the signature under
 /// `--dryrun`, and crashes on `--file-list`. So those options aren't offered.
 ///
@@ -34,7 +35,7 @@ pub struct RemoveSignature {
 }
 
 /// Options for [`remove_signature`](Codesign::remove_signature).
-impl Codesign<RemoveSignature> {
+impl<S: Shape> Codesign<RemoveSignature, S> {
     /// Removes the signature from this version of a versioned bundle only (`--bundle-version`).
     ///
     /// `version` names a directory under the bundle's `Versions`. Without this option,
@@ -47,6 +48,7 @@ impl Codesign<RemoveSignature> {
 
 impl ToArgs for RemoveSignature {
     type Output = ();
+    const PER_TARGET: bool = false;
 
     fn to_args<'a>(&'a self, targets: &'a [PathBuf]) -> Vec<Cow<'a, OsStr>> {
         let mut args: Vec<Cow<'a, OsStr>> = Vec::new();
@@ -63,8 +65,13 @@ impl ToArgs for RemoveSignature {
         args
     }
 
-    fn output(&self, _stdout: Vec<u8>, _stderr: Vec<u8>) -> crate::errors::Result<()> {
-        Ok(())
+    fn output(
+        &self,
+        targets: &[PathBuf],
+        _stdout: Vec<u8>,
+        _stderr: Vec<u8>,
+    ) -> crate::errors::Result<Vec<()>> {
+        Ok(vec![(); targets.len()])
     }
 }
 
@@ -80,7 +87,7 @@ mod tests {
 
     /// Renders the arguments, taking ownership so assertions can compare them
     /// against plain `OsString`s.
-    fn args_of(builder: &Codesign<RemoveSignature>) -> Vec<OsString> {
+    fn args_of<S>(builder: &Codesign<RemoveSignature, S>) -> Vec<OsString> {
         builder
             .action
             .to_args(&builder.targets)
@@ -143,15 +150,64 @@ mod tests {
     }
 
     #[test]
-    fn the_output_ignores_whatever_codesign_printed() {
-        let action = Codesign::remove_signature("app");
-        assert_eq!(action.action.output(Vec::new(), Vec::new()).unwrap(), ());
-        assert_eq!(
-            action
-                .action
-                .output(b"noise".to_vec(), vec![0xff, 0xfe])
-                .unwrap(),
-            ()
-        );
+    fn the_output_is_one_unit_per_target_whatever_codesign_printed() {
+        let action = Codesign::remove_signature("app").action;
+        let targets = [PathBuf::from("a"), PathBuf::from("b"), PathBuf::from("c")];
+
+        let silent: Vec<()> = action.output(&targets, Vec::new(), Vec::new()).unwrap();
+        assert_eq!(silent.len(), 3);
+
+        let noisy = action.output(&targets[..1], b"noise".to_vec(), vec![0xff, 0xfe]);
+        assert_eq!(noisy.unwrap().len(), 1);
+
+        let none = action.output(&[], b"noise".to_vec(), Vec::new());
+        assert_eq!(none.unwrap().len(), 0);
+    }
+
+    /// A removal mutates its targets, so the batch stays one `codesign` process
+    /// unless the caller asks otherwise (ADR-0013).
+    #[test]
+    fn the_constructor_defaults_to_one_process_for_all_targets() {
+        assert!(!Codesign::remove_signature("app").per_target);
+        assert!(!Codesign::remove_signature(vec!["a.app", "b.app"]).per_target);
+        assert!(!Codesign::remove_signature(["a.app", "b.app"]).per_target);
+    }
+
+    #[test]
+    fn per_target_keeps_the_last_value_and_renders_no_argument() {
+        let action = Codesign::remove_signature(vec!["app"]).per_target(true);
+        assert!(action.per_target);
+        assert_eq!(args_of(&action), os(&["--remove-signature", "--", "app"]));
+
+        let action = action.per_target(false);
+        assert!(!action.per_target);
+        assert_eq!(args_of(&action), os(&["--remove-signature", "--", "app"]));
+    }
+
+    /// The only option names a version to act on: nothing here writes a file
+    /// that several processes would have to share.
+    #[test]
+    fn no_option_is_a_shared_output() {
+        let action = Codesign::remove_signature("app").bundle_version("A");
+        assert_eq!(action.action.shared_output(), None);
+    }
+
+    /// A removal has no exit code of its own to tell apart, so every one of
+    /// them stays the generic failure (ADR-0014).
+    #[test]
+    fn a_failed_run_is_reported_with_its_code_and_diagnostics() {
+        let action = Codesign::remove_signature("app").action;
+        for code in [1, 2, 3] {
+            match action.failure(code, "app: bundle format unrecognized".into()) {
+                crate::errors::Error::Codesign(crate::errors::CodesignError::Failed {
+                    code: reported,
+                    stderr,
+                }) => {
+                    assert_eq!(reported, code);
+                    assert_eq!(stderr, "app: bundle format unrecognized");
+                }
+                other => panic!("expected Failed, got {other:?}"),
+            }
+        }
     }
 }
