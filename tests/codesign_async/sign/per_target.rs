@@ -14,7 +14,7 @@ use crate::support::fixture::Workspace;
 use crate::support::inspect::{self, Signature};
 
 /// A batch stops at the first target `codesign` refuses, so the ones after it
-/// stay unsigned, and the error is the one `codesign` produced (ADR-0005).
+/// stay unsigned, and the error is the one `codesign` produced.
 #[tokio::test]
 async fn one_process_for_all_targets_is_the_default() {
     let workspace = Workspace::new();
@@ -85,7 +85,7 @@ async fn a_single_target_yields_unit() {
 }
 
 /// A single target has no `per_target` setter and runs once: its failure is
-/// the plain error, never a `Batch` (ADR-0015).
+/// the plain error, never a `Batch`.
 #[tokio::test]
 async fn a_single_target_fails_with_its_plain_error() {
     let workspace = Workspace::new();

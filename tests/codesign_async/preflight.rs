@@ -10,7 +10,7 @@
 macro_rules! preflight_tests {
     ($constructor:path) => {
         // Every check below is made once, before any process starts, whether the
-        // run is one process for all targets or one per target (ADR-0013). So
+        // run is one process for all targets or one per target. So
         // each is asserted in both modes, and always as a plain error: a
         // refused run has no per-target failures to collect.
         const MODES: [bool; 2] = [false, true];

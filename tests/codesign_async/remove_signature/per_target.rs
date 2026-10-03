@@ -49,7 +49,7 @@ async fn an_array_of_targets_yields_an_array_of_the_same_length() {
 }
 
 /// A single target has no `per_target` setter and runs once: its failure is
-/// the plain error, never a `Batch` (ADR-0015).
+/// the plain error, never a `Batch`.
 #[tokio::test]
 async fn a_single_target_fails_with_its_plain_error() {
     let workspace = Workspace::new();

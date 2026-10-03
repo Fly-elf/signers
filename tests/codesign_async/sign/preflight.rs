@@ -27,8 +27,7 @@ async fn a_file_list_of_standard_output_is_rejected() {
 }
 
 /// One `codesign` per target would have each process overwrite the file the
-/// others wrote, so the combination is refused instead of honoured badly
-/// (ADR-0013).
+/// others wrote, so the combination is refused instead of honoured badly.
 #[tokio::test]
 async fn an_option_writing_one_shared_file_cannot_run_per_target() {
     let workspace = Workspace::new();
@@ -65,7 +64,7 @@ async fn an_option_writing_one_shared_file_cannot_run_per_target() {
 }
 
 /// A single target is one process whatever the option, so there is nothing to
-/// share and nothing to refuse (ADR-0015). It has no `per_target` setter to
+/// share and nothing to refuse. It has no `per_target` setter to
 /// ask for a second mode.
 #[tokio::test]
 async fn a_shared_file_is_not_refused_for_a_single_target() {
@@ -143,7 +142,7 @@ async fn a_shared_file_is_accepted_once_per_target_is_switched_back_off() {
     assert_eq!(listed, signed);
 }
 
-/// The order is part of the contract (ADR-0012): `validate`, then the
+/// The order is part of the contract: `validate`, then the
 /// shared-output check, then the targets themselves. Each case trips two checks
 /// at once and has to report the earlier one.
 #[tokio::test]

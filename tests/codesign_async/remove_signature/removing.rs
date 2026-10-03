@@ -121,7 +121,7 @@ async fn spaces_and_non_ascii_in_a_path_are_passed_through_verbatim() {
     assert!(!inspect::is_signed(&target));
 }
 
-/// The action's output type is part of the public contract (ADR-0011): callers
+/// The action's output type is part of the public contract: callers
 /// that match on `Ok(())` must keep compiling.
 #[tokio::test]
 async fn awaiting_a_removal_yields_unit() {
@@ -135,7 +135,7 @@ async fn awaiting_a_removal_yields_unit() {
 }
 
 /// A collection of targets yields one output per target, in the shape of the
-/// collection (ADR-0012).
+/// collection.
 #[tokio::test]
 async fn awaiting_a_collection_of_targets_yields_one_unit_per_target() {
     let workspace = Workspace::new();

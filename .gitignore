@@ -1,7 +1,5 @@
 /target
 Cargo.lock
 .DS_Store
-CLAUDE.md
-.claude
 .vscode
 .idea

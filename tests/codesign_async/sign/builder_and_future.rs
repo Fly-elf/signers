@@ -99,7 +99,7 @@ async fn many_signings_can_run_at_once() {
     }
 }
 
-/// The action's output type is part of the public contract (ADR-0011): callers
+/// The action's output type is part of the public contract: callers
 /// that match on `Ok(())` must keep compiling.
 #[tokio::test]
 async fn awaiting_a_signing_yields_unit() {
@@ -112,7 +112,7 @@ async fn awaiting_a_signing_yields_unit() {
 }
 
 /// A collection of targets yields one output per target, in a `Vec` whatever
-/// the collection's length (ADR-0012): a one-element list is still a list.
+/// the collection's length: a one-element list is still a list.
 #[tokio::test]
 async fn awaiting_a_list_of_targets_yields_one_unit_per_target() {
     let workspace = Workspace::new();
@@ -154,7 +154,7 @@ async fn awaiting_an_array_of_targets_yields_an_array_of_the_same_length() {
 
 /// A helper generic over `T: IntoTargets` can build and configure a signing for
 /// any kind of target: every setter is there whatever the shape, and the
-/// output type follows the target type (ADR-0012, ADR-0016).
+/// output type follows the target type.
 #[tokio::test]
 async fn a_helper_generic_over_the_target_type_configures_any_builder() {
     fn named<T: IntoTargets>(target: T) -> Codesign<Sign, T::Shape> {
@@ -180,7 +180,7 @@ async fn a_helper_generic_over_the_target_type_configures_any_builder() {
 }
 
 /// `Codesign<Sign>` keeps naming the single-target builder: the shape
-/// parameter defaults to one target (ADR-0012).
+/// parameter defaults to one target.
 #[tokio::test]
 async fn the_builder_type_without_a_shape_is_the_single_target_one() {
     let workspace = Workspace::new();

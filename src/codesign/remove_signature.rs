@@ -165,7 +165,7 @@ mod tests {
     }
 
     /// A removal mutates its targets, so the batch stays one `codesign` process
-    /// unless the caller asks otherwise (ADR-0013).
+    /// unless the caller asks otherwise.
     #[test]
     fn the_constructor_defaults_to_one_process_for_all_targets() {
         assert!(!Codesign::remove_signature("app").per_target);
@@ -193,7 +193,7 @@ mod tests {
     }
 
     /// A removal has no exit code of its own to tell apart, so every one of
-    /// them stays the generic failure (ADR-0014).
+    /// them stays the generic failure.
     #[test]
     fn a_failed_run_is_reported_with_its_code_and_diagnostics() {
         let action = Codesign::remove_signature("app").action;

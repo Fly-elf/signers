@@ -351,7 +351,7 @@ mod tests {
         assert_shape::<Array<0>>(none);
     }
 
-    /// `Multi` follows the shape, not the length (ADR-0015): the bound compiles
+    /// `Multi` follows the shape, not the length: the bound compiles
     /// for every collection target and, by design, for no single one.
     #[test]
     fn collection_targets_are_multi() {

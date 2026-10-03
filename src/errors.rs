@@ -194,7 +194,7 @@ mod tests {
         );
     }
 
-    /// The remedy is the whole point of the variant (ADR-0017): `codesign` ships with macOS, so the
+    /// The remedy is the whole point of the variant: `codesign` ships with macOS, so the
     /// fix is `PATH`, never the Command Line Tools.
     #[test]
     fn a_missing_binary_names_the_remedy() {
