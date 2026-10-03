@@ -36,7 +36,8 @@ pub use actions::Action;
 /// `S` is the shape of the targets, fixed by their type (see [`IntoTargets`]): `.await` yields
 /// one [`Output`](Action) for a single path, a `Vec` of them for a `Vec` or slice, an array of
 /// them for an array. For [`sign`](Codesign::sign) and
-/// [`remove_signature`](Codesign::remove_signature) the output is `()`.
+/// [`remove_signature`](Codesign::remove_signature) the output is `()`; for
+/// [`display`](Codesign::display) it is a [`Signature`](display::Signature).
 ///
 /// In the signatures, `S`, its default `One` and `S::Out` stand for that shape. They are
 /// internal, so let type inference fill them in; `Codesign<Sign>` is the builder for a single
@@ -51,7 +52,7 @@ pub use actions::Action;
 /// `Send + 'static`, so you can spawn it.
 ///
 /// `codesign` runs once over all the targets, unless [`per_target`](Codesign::per_target) runs it
-/// once per target.
+/// once per target. That is the default for [`display`](Codesign::display) on a collection.
 ///
 /// # Examples
 ///
@@ -83,10 +84,12 @@ pub use actions::Action;
 ///
 /// So far no target has been touched. Then `codesign` runs:
 ///
-/// - once over all the targets, by default and always for a single target. Its failure comes as
-///   [`Error::Codesign`]. It stops at the first target it rejects: the targets before that one
-///   have already been changed, the ones after it haven't.
-/// - once per target, with `per_target(true)`. Every target runs, and the failures come together
+/// - once over all the targets, by default (except for [`display`](Codesign::display)) and always
+///   for a single target. Its failure comes as [`Error::Codesign`]. It stops at the first target
+///   it rejects: the targets before that one have already been changed, the ones after it
+///   haven't.
+/// - once per target, with `per_target(true)`, which is the default for
+///   [`display`](Codesign::display). Every target runs, and the failures come together
 ///   as [`Error::Batch`]. If `codesign` can't start at all ([`CodesignError::NotFound`],
 ///   [`CodesignError::Spawn`]), that error comes alone instead.
 ///
@@ -216,6 +219,69 @@ impl Codesign<()> {
         new(target, RemoveSignature::default())
     }
 
+    /// Reads the signature of `target` as a [`Signature`](display::Signature) (`--display`),
+    /// changing nothing.
+    ///
+    /// `.await` yields one [`Signature`](display::Signature) per target: identifier, signing
+    /// flags, hashes, the certificate chain, entitlements and more.
+    /// [`Signature::raw`](display::Signature::raw) and
+    /// [`Signature::field`](display::Signature::field) reach whatever the typed fields don't.
+    ///
+    /// Given several targets, each is read on its own by default, so one `.await` reports every
+    /// target that failed, as [`Error::Batch`]. The signatures of the targets that did read are
+    /// dropped with it. [`per_target(false)`](Codesign::per_target) runs one `codesign` instead:
+    /// it stops at the first target it rejects, and the entitlements of every target stay
+    /// [`None`](display::Signature#structfield.entitlements).
+    ///
+    /// # Errors
+    ///
+    /// An unsigned target fails with [`CodesignError::Failed`], exit code 1. With one `codesign`
+    /// over several targets, its `stderr` also holds the reports of the targets before the unsigned
+    /// one. A report or entitlements that can't be read fails with
+    /// [`CodesignError::UnexpectedOutput`]. The checks made before `codesign` starts are on
+    /// [`Codesign`].
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn run() -> signers::Result<()> {
+    /// use signers::Codesign;
+    /// use signers::codesign::display::SignatureKind;
+    ///
+    /// let signature = Codesign::display("MyApp.app").await?;
+    /// if signature.signature == SignatureKind::AdHoc {
+    ///     println!("{} is signed ad hoc", signature.identifier);
+    /// }
+    /// # Ok(()) }
+    /// ```
+    ///
+    /// Read the entitlements of a binary:
+    ///
+    /// ```no_run
+    /// # async fn run() -> signers::Result<()> {
+    /// use signers::Codesign;
+    ///
+    /// let signature = Codesign::display("mytool").await?;
+    /// let debuggable = signature
+    ///     .entitlements
+    ///     .as_ref()
+    ///     .and_then(|entitlements| entitlements.get("com.apple.security.get-task-allow"))
+    ///     .and_then(|value| value.as_boolean())
+    ///     .unwrap_or(false);
+    /// # let _ = debuggable;
+    /// # Ok(()) }
+    /// ```
+    ///
+    /// Read two binaries at once:
+    ///
+    /// ```no_run
+    /// # async fn run() -> signers::Result<()> {
+    /// use signers::Codesign;
+    ///
+    /// let [ls, cat] = Codesign::display(["/bin/ls", "/bin/cat"]).await?;
+    /// println!("{} {}", ls.cd_hash, cat.cd_hash);
+    /// # Ok(()) }
+    /// ```
     pub fn display<T: IntoTargets>(target: T) -> Codesign<Display, T::Shape> {
         new(target, Display::default())
     }
@@ -229,7 +295,8 @@ impl<A: Action, S: Multi> Codesign<A, S> {
     /// every target runs, and the failures come together as [`Error::Batch`], in input order. At
     /// most [`available_parallelism`](std::thread::available_parallelism) processes run at a
     /// time. The default is `false` for [`sign`](Codesign::sign) and
-    /// [`remove_signature`](Codesign::remove_signature).
+    /// [`remove_signature`](Codesign::remove_signature), which change the targets in order, and
+    /// `true` for [`display`](Codesign::display), which only reads them.
     ///
     /// Only a `Vec`, slice or array of targets has this setter, even with one element: that is
     /// the `S: Multi` bound. A single target always runs one `codesign`:
