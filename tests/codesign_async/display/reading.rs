@@ -82,7 +82,7 @@ async fn an_ad_hoc_binary_is_read_back_as_codesign_prints_it() {
     );
     assert_eq!(
         (signature.total_signatures, signature.chosen_signature),
-        (1, 1)
+        (Some(1), Some(1))
     );
     assert!(signature.executable_segment.is_some());
     assert!(signature.cms_digest.is_some());

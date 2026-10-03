@@ -709,8 +709,8 @@ Chosen signature=1
             runtime_version: None,
             sealed_resources: None,
             internal_requirements: Some(InternalRequirements { count: 0, size: 12 }),
-            total_signatures: 1,
-            chosen_signature: 1,
+            total_signatures: Some(1),
+            chosen_signature: Some(1),
             nested: vec![],
             constraints: Constraints::empty(),
             entitlements: None,
@@ -1354,8 +1354,6 @@ Has Some Future Constraints
             ("CDHash=", "CDHash"),
             ("Signature=", "Signature"),
             ("Info.plist", "Info.plist"),
-            ("Total signatures=", "Total signatures"),
-            ("Chosen signature=", "Chosen signature"),
         ];
 
         for (prefix, key) in required {
@@ -1365,6 +1363,25 @@ Has Some Future Constraints
 
         let detail = rejection(&without(&without(APPLE, "Signature size="), "Authority="));
         assert!(detail.contains("Signature"), "{detail}");
+    }
+
+    /// `codesign -dvvvv` on fresh `cc` output: no signature count lines.
+    #[test]
+    fn a_linker_signed_report_has_no_signature_counts() {
+        let report = without(&without(ADHOC, "Total signatures="), "Chosen signature=")
+            .replace("flags=0x2(adhoc)", "flags=0x20002(adhoc,linker-signed)")
+            .replace(
+                "Internal requirements count=0 size=12",
+                "Internal requirements=none",
+            );
+
+        let signature = parsed(&report);
+
+        assert_eq!(signature.total_signatures, None);
+        assert_eq!(signature.chosen_signature, None);
+        assert_eq!(signature.internal_requirements, None);
+        assert_eq!(parsed(ADHOC).total_signatures, Some(1));
+        assert_eq!(parsed(ADHOC).chosen_signature, Some(1));
     }
 
     #[test]
