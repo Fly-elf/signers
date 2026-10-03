@@ -485,6 +485,7 @@ mod tests {
         shared_output: Option<&'static str>,
         drop_last_output: bool,
         unreadable: bool,
+        file_list: bool,
     }
 
     impl ToArgs for Probe {
@@ -504,8 +505,15 @@ mod tests {
         }
 
         fn to_args<'a>(&'a self, targets: &'a [PathBuf]) -> Vec<Cow<'a, OsStr>> {
-            ["--display", "--"]
+            let list: &[&str] = if self.file_list {
+                &["--file-list", "-"]
+            } else {
+                &[]
+            };
+            ["--display"]
                 .into_iter()
+                .chain(list.iter().copied())
+                .chain(["--"])
                 .map(OsStr::new)
                 .chain(targets.iter().map(|target| target.as_os_str()))
                 .map(Cow::Borrowed)
@@ -529,9 +537,9 @@ mod tests {
             Ok(outputs)
         }
 
-        fn failure(&self, code: i32, _stdout: Vec<u8>, stderr: String) -> Error {
+        fn failure(&self, code: i32, stdout: String, stderr: String) -> Error {
             CodesignError::UnexpectedOutput {
-                detail: format!("probe saw exit {code}: {stderr}"),
+                detail: format!("probe saw exit {code} with stdout {stdout:?}: {stderr}"),
             }
             .into()
         }
@@ -604,11 +612,32 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_failed_run_hands_the_hook_both_streams_trimmed() {
+        let (_dir, unsigned) = unsigned(&["a.txt"]);
+        let batch = vec![PathBuf::from(SIGNED[0]), unsigned[0].clone()];
+        let probe = Probe {
+            file_list: true,
+            ..Probe::default()
+        };
+
+        let error = new(batch, probe).per_target(false).await.unwrap_err();
+
+        assert_eq!(
+            unexpected_output(error),
+            format!(
+                "probe saw exit 1 with stdout \"{0}\": Executable={0}\n{1}: code object is not signed at all",
+                SIGNED[0],
+                unsigned[0].display()
+            )
+        );
+    }
+
+    #[tokio::test]
     async fn a_failed_run_becomes_whatever_the_action_makes_of_it() {
         let (_dir, unsigned) = unsigned(&["a.txt", "b.txt"]);
         let expected = |path: &PathBuf| {
             format!(
-                "probe saw exit 1: {}: code object is not signed at all",
+                "probe saw exit 1 with stdout \"\": {}: code object is not signed at all",
                 path.display()
             )
         };

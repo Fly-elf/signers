@@ -1029,7 +1029,7 @@ mod tests {
         for code in [1, 2, 3] {
             match action.failure(
                 code,
-                b"file modified: /x\n".to_vec(),
+                "file modified: /x".into(),
                 "app: no identity found".into(),
             ) {
                 crate::errors::Error::Codesign(crate::errors::CodesignError::Failed {
