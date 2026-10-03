@@ -277,7 +277,6 @@ fn resource_changes(stdout: &str) -> Vec<ResourceChange> {
 #[cfg(test)]
 mod tests {
     use std::ffi::OsString;
-    use std::os::unix::ffi::OsStrExt;
 
     use super::*;
 
@@ -555,7 +554,7 @@ mod tests {
     #[test]
     fn exit_one_means_the_signature_did_not_verify() {
         let action = Codesign::verify("app").action;
-        match action.failure(1, Vec::new(), "app: invalid signature".into()) {
+        match action.failure(1, String::new(), "app: invalid signature".into()) {
             Error::Codesign(CodesignError::VerificationFailed { stderr, resources }) => {
                 assert_eq!(stderr, "app: invalid signature");
                 assert!(resources.is_empty());
@@ -567,7 +566,7 @@ mod tests {
     #[test]
     fn exit_one_carries_the_altered_resources_printed_on_stdout() {
         let action = Codesign::verify("app").action;
-        let stdout = b"file modified: /x/app/r.txt\nfile added: /x/app/new.txt\n".to_vec();
+        let stdout = "file modified: /x/app/r.txt\nfile added: /x/app/new.txt".to_string();
         match action.failure(
             1,
             stdout,
@@ -590,7 +589,7 @@ mod tests {
     #[test]
     fn exit_three_ignores_stdout() {
         let action = Codesign::verify("app").action;
-        let error = action.failure(3, b"file modified: /x\n".to_vec(), "no".into());
+        let error = action.failure(3, "file modified: /x".into(), "no".into());
         assert!(matches!(
             error,
             Error::Codesign(CodesignError::RequirementUnsatisfied { ref stderr }) if stderr == "no"
@@ -606,13 +605,13 @@ mod tests {
 
     #[test]
     fn no_output_lists_no_resource() {
-        assert!(resource_changes(b"").is_empty());
-        assert!(resource_changes(b"\n\n").is_empty());
+        assert!(resource_changes("").is_empty());
+        assert!(resource_changes("\n\n").is_empty());
     }
 
     #[test]
     fn each_kind_of_change_is_recognised() {
-        let listed = resource_changes(b"file added: /a\nfile modified: /m\nfile missing: /x\n");
+        let listed = resource_changes("file added: /a\nfile modified: /m\nfile missing: /x\n");
         assert_eq!(
             pairs(&listed),
             [
@@ -625,7 +624,7 @@ mod tests {
 
     #[test]
     fn resources_keep_the_order_they_were_printed_in() {
-        let listed = resource_changes(b"file missing: /z\nfile added: /b\nfile missing: /a\n");
+        let listed = resource_changes("file missing: /z\nfile added: /b\nfile missing: /a\n");
         let paths: Vec<_> = listed.iter().map(|r| r.path.to_str().unwrap()).collect();
         assert_eq!(paths, ["/z", "/b", "/a"]);
     }
@@ -644,41 +643,42 @@ mod tests {
         ]
         .join("\n");
         assert_eq!(
-            pairs(&resource_changes(stdout.as_bytes())),
+            pairs(&resource_changes(&stdout)),
             [(Change::Modified, PathBuf::from("/yes"))]
         );
     }
 
     #[test]
     fn a_path_is_everything_after_the_prefix() {
-        let listed = resource_changes(b"file modified: /a b/it's: -x; (y)  \n");
+        let listed = resource_changes("file modified: /a b/it's: -x; (y)  \n");
         assert_eq!(listed[0].path, PathBuf::from("/a b/it's: -x; (y)  "));
     }
 
     #[test]
     fn a_last_line_without_a_newline_still_counts() {
-        let listed = resource_changes(b"file added: /a\nfile added: /b");
+        let listed = resource_changes("file added: /a\nfile added: /b");
         assert_eq!(listed.len(), 2);
     }
 
     #[test]
     fn an_empty_path_is_still_an_entry() {
-        let listed = resource_changes(b"file added: \n");
+        let listed = resource_changes("file added: \n");
         assert_eq!(pairs(&listed), [(Change::Added, PathBuf::new())]);
     }
 
     #[test]
-    fn a_path_that_is_not_utf8_survives_byte_for_byte() {
-        let listed = resource_changes(b"file modified: /a\xff\xfeb\nfile added: /ok\n");
+    fn a_path_that_is_not_utf8_is_decoded_lossily() {
+        let stdout = String::from_utf8_lossy(b"file modified: /a\xff\xfeb\nfile added: /ok\n");
+        let listed = resource_changes(&stdout);
         assert_eq!(listed.len(), 2);
-        assert_eq!(listed[0].path.as_os_str().as_bytes(), b"/a\xff\xfeb");
+        assert_eq!(listed[0].path, PathBuf::from("/a\u{FFFD}\u{FFFD}b"));
         assert_eq!(listed[1].path, PathBuf::from("/ok"));
     }
 
     #[test]
     fn exit_three_means_the_requirement_was_not_satisfied() {
         let action = Codesign::verify("app").action;
-        match action.failure(3, Vec::new(), "test-requirement: failed".into()) {
+        match action.failure(3, String::new(), "test-requirement: failed".into()) {
             Error::Codesign(CodesignError::RequirementUnsatisfied { stderr }) => {
                 assert_eq!(stderr, "test-requirement: failed");
             }
@@ -690,7 +690,7 @@ mod tests {
     fn any_other_exit_code_is_the_generic_failure() {
         let action = Codesign::verify("app").action;
         for code in [2, 4, 64, 127, 255] {
-            let error = action.failure(code, b"file modified: /x\n".to_vec(), "boom".into());
+            let error = action.failure(code, "file modified: /x".into(), "boom".into());
             assert_eq!(
                 code_of(error),
                 Some((code, "boom".to_string())),
@@ -706,11 +706,11 @@ mod tests {
             .deep(true)
             .action;
         assert!(matches!(
-            action.failure(1, Vec::new(), String::new()),
+            action.failure(1, String::new(), String::new()),
             Error::Codesign(CodesignError::VerificationFailed { .. })
         ));
         assert!(matches!(
-            action.failure(3, Vec::new(), String::new()),
+            action.failure(3, String::new(), String::new()),
             Error::Codesign(CodesignError::RequirementUnsatisfied { .. })
         ));
     }
