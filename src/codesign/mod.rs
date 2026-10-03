@@ -711,7 +711,7 @@ mod tests {
         assert!(matches!(error, Error::FileListToStdout), "got {error:?}");
     }
 
-    /// ADR-0015: one target is one process, so there is no second process to
+    /// One target is one process, so there is no second process to
     /// share an output with, even for an action that defaults to per target.
     #[tokio::test]
     async fn a_shared_output_is_not_refused_for_a_single_target() {
@@ -732,7 +732,7 @@ mod tests {
     }
 
     /// `A::PER_TARGET` is true for the probe, yet a single target never
-    /// starts per target; the other shapes do (ADR-0015).
+    /// starts per target; the other shapes do.
     #[test]
     fn the_constructor_default_is_false_for_a_single_target_whatever_the_action() {
         const { assert!(Probe::PER_TARGET) };
@@ -749,7 +749,7 @@ mod tests {
         assert!(new(["a", "b"], Probe::default()).per_target);
     }
 
-    /// The setter is typed on the shape, not on the length (ADR-0015).
+    /// The setter is typed on the shape, not on the length.
     #[test]
     fn a_one_element_collection_keeps_the_per_target_setter() {
         let from_vec = new(vec!["a"], Probe::default()).per_target(false);
