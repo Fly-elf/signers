@@ -123,6 +123,12 @@ pub enum CodesignError {
     /// targets.
     #[error("`codesign` produced output this crate can't read: {detail}")]
     UnexpectedOutput { detail: String },
+
+    #[error("verification failed: {}", diagnostics(.stderr))]
+    VerificationFailed { stderr: String },
+
+    #[error("validly signed, but the requirement isn't satisfied: {}", diagnostics(.stderr))]
+    RequirementUnsatisfied { stderr: String },
 }
 
 /// Returns `stderr`, or "no diagnostics" if it's empty, so a message never ends with a colon.
