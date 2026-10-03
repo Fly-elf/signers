@@ -2,7 +2,6 @@
 
 use std::borrow::Cow;
 use std::ffi::OsStr;
-use std::os::unix::ffi::OsStrExt;
 use std::path::PathBuf;
 
 use super::actions::PushArgs;
@@ -242,7 +241,7 @@ impl ToArgs for Verify {
         Ok(vec![(); targets.len()])
     }
 
-    fn failure(&self, code: i32, stdout: Vec<u8>, stderr: String) -> Error {
+    fn failure(&self, code: i32, stdout: String, stderr: String) -> Error {
         match code {
             1 => CodesignError::VerificationFailed {
                 stderr,
@@ -256,19 +255,19 @@ impl ToArgs for Verify {
 }
 
 /// Reads the `file added|modified|missing: <path>` lines `--verbose=1` prints, in order.
-fn resource_changes(stdout: &[u8]) -> Vec<ResourceChange> {
-    const PREFIXES: [(&[u8], Change); 3] = [
-        (b"file added: ", Change::Added),
-        (b"file modified: ", Change::Modified),
-        (b"file missing: ", Change::Missing),
+fn resource_changes(stdout: &str) -> Vec<ResourceChange> {
+    const PREFIXES: [(&str, Change); 3] = [
+        ("file added: ", Change::Added),
+        ("file modified: ", Change::Modified),
+        ("file missing: ", Change::Missing),
     ];
     stdout
-        .split(|&byte| byte == b'\n')
+        .lines()
         .filter_map(|line| {
             PREFIXES.iter().find_map(|&(prefix, change)| {
-                line.strip_prefix(prefix).map(|path| ResourceChange {
+                line.strip_prefix(prefix).map(|rest| ResourceChange {
                     change,
-                    path: PathBuf::from(OsStr::from_bytes(path)),
+                    path: PathBuf::from(rest),
                 })
             })
         })
