@@ -32,3 +32,32 @@ fn a_target_starting_with_a_dash_is_not_mistaken_for_an_option() {
     inspect::assert_valid(&target);
     assert_eq!(Signature::of(&target).identifier(), "com.example.dashed");
 }
+
+#[test]
+fn a_verified_target_starting_with_a_dash_is_not_mistaken_for_an_option() {
+    let _serialised = crate::serialised();
+
+    let workspace = Workspace::new();
+    let target = workspace.adhoc_signed("-signed.bin");
+    let unsigned = workspace.unsigned("-unsigned.bin");
+    let previous = env::current_dir().expect("no working directory");
+    env::set_current_dir(workspace.path()).expect("could not enter the workspace");
+
+    let valid = crate::runtime().block_on(Codesign::verify("-signed.bin").into_future());
+    let invalid = crate::runtime().block_on(Codesign::verify("-unsigned.bin").into_future());
+
+    env::set_current_dir(previous).expect("could not leave the workspace");
+    valid.expect("a dash-prefixed target did not verify");
+    assert!(target.exists());
+    // Read as an option, the name would be a syntax error rather than a verdict.
+    let error = invalid.unwrap_err();
+    assert!(
+        matches!(
+            error,
+            signers::Error::Codesign(signers::CodesignError::VerificationFailed { ref stderr })
+                if stderr.contains("not signed at all")
+        ),
+        "got {error:?}"
+    );
+    assert!(unsigned.exists());
+}

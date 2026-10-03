@@ -1,0 +1,159 @@
+//! `test_requirement`: a requirement the code must satisfy on top of a valid
+//! signature, and the exit codes that tell the two failures apart.
+
+use signers::Codesign;
+use signers::codesign::verify::Strict;
+
+use super::{requirement_unsatisfied, verification_failed};
+use crate::support::fixture::Workspace;
+
+/// Apple's own binaries are signed by Apple, which is the one requirement the
+/// fixture can't satisfy and `/bin/ls` always does.
+#[tokio::test]
+async fn a_binary_that_satisfies_the_requirement_verifies() {
+    Codesign::verify("/bin/ls")
+        .test_requirement("anchor apple")
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn a_binary_that_misses_the_requirement_is_an_unsatisfied_requirement() {
+    let workspace = Workspace::new();
+    let target = workspace.adhoc_signed("hello");
+
+    let error = Codesign::verify(&target)
+        .test_requirement("anchor apple")
+        .await
+        .unwrap_err();
+
+    let stderr = requirement_unsatisfied(error);
+    assert!(
+        stderr.contains("failed to satisfy specified code requirement"),
+        "got {stderr}"
+    );
+}
+
+#[tokio::test]
+async fn the_requirement_can_name_the_identifier_the_binary_was_signed_with() {
+    let workspace = Workspace::new();
+    let target = workspace.unsigned("hello");
+    Codesign::sign(&target, "-")
+        .identifier("com.example.required")
+        .await
+        .unwrap();
+
+    Codesign::verify(&target)
+        .test_requirement("identifier \"com.example.required\"")
+        .await
+        .unwrap();
+
+    let error = Codesign::verify(&target)
+        .test_requirement("identifier \"com.example.other\"")
+        .await
+        .unwrap_err();
+    requirement_unsatisfied(error);
+}
+
+/// The text goes to `codesign` as one argument, so quotes, spaces and
+/// operators survive intact.
+#[tokio::test]
+async fn a_compound_requirement_with_quotes_and_spaces_is_evaluated_whole() {
+    let workspace = Workspace::new();
+    let target = workspace.unsigned("hello");
+    Codesign::sign(&target, "-")
+        .identifier("com.example.compound")
+        .await
+        .unwrap();
+
+    Codesign::verify(&target)
+        .test_requirement("identifier \"com.example.compound\" or anchor apple")
+        .await
+        .unwrap();
+
+    let error = Codesign::verify(&target)
+        .test_requirement("identifier \"com.example.compound\" and anchor apple")
+        .await
+        .unwrap_err();
+    requirement_unsatisfied(error);
+}
+
+#[tokio::test]
+async fn a_requirement_that_does_not_compile_is_a_verification_failure() {
+    let workspace = Workspace::new();
+    let target = workspace.adhoc_signed("hello");
+
+    let error = Codesign::verify(&target)
+        .test_requirement("this is not a requirement ((")
+        .await
+        .unwrap_err();
+
+    let stderr = verification_failed(error);
+    assert!(stderr.contains("Requirement syntax error"), "got {stderr}");
+}
+
+/// `-` is requirement text here, not a request to read standard input: it fails
+/// to compile like any other garbage, and never hangs waiting for input.
+#[tokio::test]
+async fn a_lone_dash_is_requirement_text_not_stdin() {
+    let workspace = Workspace::new();
+    let target = workspace.adhoc_signed("hello");
+
+    let error = Codesign::verify(&target)
+        .test_requirement("-")
+        .await
+        .unwrap_err();
+
+    let stderr = verification_failed(error);
+    assert!(stderr.contains("Requirement syntax error"), "got {stderr}");
+}
+
+#[tokio::test]
+async fn a_requirement_is_not_checked_when_the_signature_itself_is_broken() {
+    let workspace = Workspace::new();
+    let target = workspace.unsigned("hello");
+
+    let error = Codesign::verify(&target)
+        .test_requirement("anchor apple")
+        .await
+        .unwrap_err();
+
+    verification_failed(error);
+}
+
+#[tokio::test]
+async fn the_last_requirement_wins() {
+    let workspace = Workspace::new();
+    let target = workspace.adhoc_signed("hello");
+
+    Codesign::verify(&target)
+        .test_requirement("anchor apple")
+        .test_requirement("!anchor apple")
+        .await
+        .unwrap();
+
+    let error = Codesign::verify("/bin/ls")
+        .test_requirement("!anchor apple")
+        .test_requirement("anchor apple")
+        .test_requirement("!anchor apple")
+        .await
+        .unwrap_err();
+    requirement_unsatisfied(error);
+}
+
+/// Meeting the requirement doesn't excuse a signature that doesn't verify.
+#[tokio::test]
+async fn a_satisfied_requirement_does_not_excuse_a_broken_signature() {
+    let workspace = Workspace::new();
+    let target = workspace.adhoc_signed("hello");
+    super::break_signature(&target);
+
+    let error = Codesign::verify(&target)
+        .deep(true)
+        .strict(Strict::All)
+        .test_requirement("!anchor apple")
+        .await
+        .unwrap_err();
+
+    verification_failed(error);
+}
