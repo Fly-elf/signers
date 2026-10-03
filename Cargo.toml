@@ -12,6 +12,7 @@ categories = ["os::macos-apis", "development-tools"]
 [dependencies]
 bitflags = "2.13"
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
+plist = "1.10"
 thiserror = "2.0"
 tokio = { version = "1.53", features = ["process", "fs"] }
 tracing = { version = "0.1", features = ["release_max_level_info"] }
