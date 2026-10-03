@@ -528,7 +528,7 @@ mod tests {
             Ok(outputs)
         }
 
-        fn failure(&self, code: i32, stderr: String) -> Error {
+        fn failure(&self, code: i32, _stdout: Vec<u8>, stderr: String) -> Error {
             CodesignError::UnexpectedOutput {
                 detail: format!("probe saw exit {code}: {stderr}"),
             }
