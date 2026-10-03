@@ -159,7 +159,7 @@ fn one_process_handles_every_target_unless_asked_otherwise() {
 }
 
 /// The same configuration, once per target, each process handed that target
-/// alone (ADR-0013) — and the option itself reaching none of them as a flag.
+/// alone — and the option itself reaching none of them as a flag.
 #[test]
 fn per_target_starts_one_process_for_each_target() {
     let _serialised = crate::serialised();
