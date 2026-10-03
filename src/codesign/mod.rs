@@ -6,6 +6,7 @@
 mod actions;
 pub mod remove_signature;
 pub mod sign;
+pub mod verify;
 
 use std::future::{Future, IntoFuture};
 use std::io::ErrorKind;
@@ -18,6 +19,7 @@ use std::process::Stdio;
 use futures_util::StreamExt;
 use remove_signature::RemoveSignature;
 use sign::Sign;
+use verify::Verify;
 
 use crate::errors::{CodesignError, Error, Result};
 use crate::target::{IntoTargets, Multi, One, Shape, sealed};
@@ -212,6 +214,10 @@ impl Codesign<()> {
     /// ```
     pub fn remove_signature<T: IntoTargets>(target: T) -> Codesign<RemoveSignature, T::Shape> {
         new(target, RemoveSignature::default())
+    }
+
+    pub fn verify<T: IntoTargets>(target: T) -> Codesign<Verify, T::Shape> {
+        new(target, Verify::default())
     }
 }
 
