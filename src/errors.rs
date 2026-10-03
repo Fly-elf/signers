@@ -178,6 +178,8 @@ pub struct ResourceChange {
     /// How the resource differs from what the signature sealed.
     pub change: Change,
     /// Absolute path, canonical: a temporary directory shows as `/private/var/...`.
+    ///
+    /// Read from `codesign`'s text output, so bytes that aren't valid UTF-8 become `U+FFFD`.
     pub path: PathBuf,
 }
 
