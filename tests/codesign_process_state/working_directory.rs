@@ -54,7 +54,7 @@ fn a_verified_target_starting_with_a_dash_is_not_mistaken_for_an_option() {
     assert!(
         matches!(
             error,
-            signers::Error::Codesign(signers::CodesignError::VerificationFailed { ref stderr })
+            signers::Error::Codesign(signers::CodesignError::VerificationFailed { ref stderr, .. })
                 if stderr.contains("not signed at all")
         ),
         "got {error:?}"

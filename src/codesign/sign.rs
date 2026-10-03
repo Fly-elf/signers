@@ -1022,12 +1022,16 @@ mod tests {
     }
 
     /// `sign` has no exit code of its own to tell apart, so every one of them
-    /// stays the generic failure.
+    /// stays the generic failure, whatever it printed on standard output.
     #[test]
     fn a_failed_run_is_reported_with_its_code_and_diagnostics() {
         let action = Codesign::sign("app", "-").action;
         for code in [1, 2, 3] {
-            match action.failure(code, "app: no identity found".into()) {
+            match action.failure(
+                code,
+                b"file modified: /x\n".to_vec(),
+                "app: no identity found".into(),
+            ) {
                 crate::errors::Error::Codesign(crate::errors::CodesignError::Failed {
                     code: reported,
                     stderr,
