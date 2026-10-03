@@ -35,8 +35,8 @@ pub use actions::Action;
 ///
 /// `S` is the shape of the targets, fixed by their type (see [`IntoTargets`]): `.await` yields
 /// one [`Output`](Action) for a single path, a `Vec` of them for a `Vec` or slice, an array of
-/// them for an array. For [`sign`](Codesign::sign) and
-/// [`remove_signature`](Codesign::remove_signature) the output is `()`.
+/// them for an array. For [`sign`](Codesign::sign), [`remove_signature`](Codesign::remove_signature)
+/// and [`verify`](Codesign::verify) the output is `()`.
 ///
 /// In the signatures, `S`, its default `One` and `S::Out` stand for that shape. They are
 /// internal, so let type inference fill them in; `Codesign<Sign>` is the builder for a single
@@ -51,7 +51,7 @@ pub use actions::Action;
 /// `Send + 'static`, so you can spawn it.
 ///
 /// `codesign` runs once over all the targets, unless [`per_target`](Codesign::per_target) runs it
-/// once per target.
+/// once per target. That is the default for [`verify`](Codesign::verify) on a collection.
 ///
 /// # Examples
 ///
@@ -83,10 +83,12 @@ pub use actions::Action;
 ///
 /// So far no target has been touched. Then `codesign` runs:
 ///
-/// - once over all the targets, by default and always for a single target. Its failure comes as
-///   [`Error::Codesign`]. It stops at the first target it rejects: the targets before that one
-///   have already been changed, the ones after it haven't.
-/// - once per target, with `per_target(true)`. Every target runs, and the failures come together
+/// - once over all the targets, by default (except for [`verify`](Codesign::verify)) and always
+///   for a single target. Its failure comes as [`Error::Codesign`]. It stops at the first target
+///   it rejects: the targets before that one have already been changed, the ones after it
+///   haven't.
+/// - once per target, with `per_target(true)`, which is the default for
+///   [`verify`](Codesign::verify). Every target runs, and the failures come together
 ///   as [`Error::Batch`]. If `codesign` can't start at all ([`CodesignError::NotFound`],
 ///   [`CodesignError::Spawn`]), that error comes alone instead.
 ///
@@ -216,6 +218,49 @@ impl Codesign<()> {
         new(target, RemoveSignature::default())
     }
 
+    /// Checks the signature of `target` (`--verify`), changing nothing.
+    ///
+    /// `.await` yields `()` per target when every one verifies. Without options it checks that the signature is intact and covers the code. Whether the
+    /// system would run the code is a different question: verified code can still be refused by
+    /// Gatekeeper.
+    ///
+    /// Given several targets, each is verified on its own by default, so one `.await` reports
+    /// every target that failed, as [`Error::Batch`]. [`per_target(false)`](Codesign::per_target)
+    /// runs one `codesign` instead, which stops at the first target it rejects.
+    ///
+    /// # Errors
+    ///
+    /// A target that doesn't verify fails with [`CodesignError::VerificationFailed`]: the
+    /// signature is invalid or modified, the target is unsigned, or the requirement text doesn't
+    /// compile. A valid signature that doesn't meet a requirement fails with
+    /// [`CodesignError::RequirementUnsatisfied`]. The checks made before `codesign` starts are
+    /// on [`Codesign`].
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn run() -> signers::Result<()> {
+    /// use signers::Codesign;
+    ///
+    /// Codesign::verify("MyApp.app").deep(true).await?;
+    /// # Ok(()) }
+    /// ```
+    ///
+    /// Tell a broken signature from a requirement that isn't met:
+    ///
+    /// ```no_run
+    /// # async fn run() -> signers::Result<()> {
+    /// use signers::{Codesign, CodesignError, Error};
+    ///
+    /// match Codesign::verify("mytool").test_requirement("anchor apple").await {
+    ///     Ok(()) => println!("signed by Apple"),
+    ///     Err(Error::Codesign(CodesignError::RequirementUnsatisfied { .. })) => {
+    ///         println!("validly signed, but not by Apple");
+    ///     }
+    ///     Err(error) => return Err(error),
+    /// }
+    /// # Ok(()) }
+    /// ```
     pub fn verify<T: IntoTargets>(target: T) -> Codesign<Verify, T::Shape> {
         new(target, Verify::default())
     }
@@ -229,7 +274,8 @@ impl<A: Action, S: Multi> Codesign<A, S> {
     /// every target runs, and the failures come together as [`Error::Batch`], in input order. At
     /// most [`available_parallelism`](std::thread::available_parallelism) processes run at a
     /// time. The default is `false` for [`sign`](Codesign::sign) and
-    /// [`remove_signature`](Codesign::remove_signature).
+    /// [`remove_signature`](Codesign::remove_signature), which change the targets in order, and
+    /// `true` for [`verify`](Codesign::verify), which only reads them.
     ///
     /// Only a `Vec`, slice or array of targets has this setter, even with one element: that is
     /// the `S: Multi` bound. A single target always runs one `codesign`:

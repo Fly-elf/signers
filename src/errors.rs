@@ -124,9 +124,21 @@ pub enum CodesignError {
     #[error("`codesign` produced output this crate can't read: {detail}")]
     UnexpectedOutput { detail: String },
 
+    /// [`verify`](crate::Codesign::verify) found the target's signature wanting.
+    ///
+    /// The signature is invalid or modified, the target is unsigned, or the requirement text of
+    /// [`test_requirement`](crate::Codesign::test_requirement) doesn't compile. `stderr` holds
+    /// the diagnostics `codesign` printed on standard error, trimmed.
     #[error("verification failed: {}", diagnostics(.stderr))]
     VerificationFailed { stderr: String },
 
+    /// [`verify`](crate::Codesign::verify) found a valid signature on code that doesn't meet the
+    /// requirement it was given.
+    ///
+    /// That requirement is the text of
+    /// [`test_requirement`](crate::Codesign::test_requirement) or, with
+    /// [`check_designated_requirement`](crate::Codesign::check_designated_requirement), the code's
+    /// own. `stderr` holds the diagnostics `codesign` printed on standard error, trimmed.
     #[error("validly signed, but the requirement isn't satisfied: {}", diagnostics(.stderr))]
     RequirementUnsatisfied { stderr: String },
 }

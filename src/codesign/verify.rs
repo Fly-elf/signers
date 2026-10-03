@@ -10,6 +10,44 @@ use crate::codesign::Codesign;
 use crate::errors::{CodesignError, Error};
 use crate::target::Shape;
 
+/// Options of the verification action: the `A` in `Codesign<Verify>`.
+///
+/// [`Codesign::verify`] creates it. You set its options with
+/// [the verification setters](Codesign#impl-Codesign%3CVerify,+S%3E). An option you never set keeps
+/// `codesign`'s default.
+///
+/// # Examples
+///
+/// Check a bundle as strictly as possible, nested code included, and keep going to the end of the
+/// list:
+///
+/// ```no_run
+/// # async fn run() -> signers::Result<()> {
+/// use signers::codesign::verify::Strict;
+/// use signers::{Codesign, Error};
+///
+/// let apps = vec!["A.app", "B.app"];
+/// match Codesign::verify(apps).deep(true).strict(Strict::All).await {
+///     Ok(_) => {}
+///     Err(Error::Batch(failures)) => {
+///         for (path, error) in &failures {
+///             eprintln!("{}: {error}", path.display());
+///         }
+///     }
+///     Err(error) => return Err(error),
+/// }
+/// # Ok(()) }
+/// ```
+///
+/// Check an unsigned file against the signature that was written for it separately:
+///
+/// ```no_run
+/// # async fn run() -> signers::Result<()> {
+/// use signers::Codesign;
+///
+/// Codesign::verify("mytool").detached("mytool.sig").await?;
+/// # Ok(()) }
+/// ```
 #[derive(Debug, Clone, Default)]
 pub struct Verify {
     deep: bool,
@@ -23,54 +61,121 @@ pub struct Verify {
     check_notarization: bool,
 }
 
+/// The extra restrictions that [`strict`](Codesign#method.strict) applies.
+///
+/// `codesign` takes one value here, so one is enough, and the last one set wins.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Strict {
+    /// Every strict check there is, now and in later macOS versions (`--strict`).
+    ///
+    /// A new macOS can add checks, so code that passes today can fail later.
     All,
+    /// Rejects a symbolic link in a bundle that is broken, points outside the bundle, or isn't
+    /// sealed by the signature (`--strict=symlinks`).
     Symlinks,
+    /// Rejects resource forks, Finder attributes and similar sideband data (`--strict=sideband`).
+    ///
+    /// Signing already enforces this, so it rarely changes a result.
     Sideband,
 }
 
+/// Options for [`verify`](Codesign::verify).
+///
+/// Each setter maps to one `codesign` flag. A later call replaces an earlier one, and `false`
+/// leaves a flag out.
 impl<S: Shape> Codesign<Verify, S> {
+    /// Also verifies nested code on its own, not only through the bundle's seal (`--deep`).
+    ///
+    /// Without it, nested code is checked only against the hash the bundle sealed, so a byte
+    /// changed inside a nested library can still pass.
     pub fn deep(mut self, deep: bool) -> Self {
         self.action.deep = deep;
         self
     }
 
+    /// Applies stricter checks than the default (`--strict`).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn run() -> signers::Result<()> {
+    /// use signers::Codesign;
+    /// use signers::codesign::verify::Strict;
+    ///
+    /// // Reject a symbolic link that leaves the bundle.
+    /// Codesign::verify("MyApp.app").strict(Strict::Symlinks).await?;
+    /// # Ok(()) }
+    /// ```
     pub fn strict(mut self, strict: Strict) -> Self {
         self.action.strict = Some(strict);
         self
     }
 
+    /// Skips the bundle's resources (`--ignore-resources`).
+    ///
+    /// A bundle with corrupted or tampered resources passes, so weigh the result accordingly. On a
+    /// large bundle it is much faster.
     pub fn ignore_resources(mut self, ignore_resources: bool) -> Self {
         self.action.ignore_resources = ignore_resources;
         self
     }
 
+    /// Verifies only this slice of a universal binary, e.g. `arm64` or `x86_64`
+    /// (`--architecture`).
+    ///
+    /// The default is every slice. A slice the binary doesn't have fails verification.
     pub fn architecture(mut self, architecture: impl Into<String>) -> Self {
         self.action.architecture = Some(architecture.into());
         self
     }
 
+    /// Verifies this version of a versioned bundle instead of `Current` (`--bundle-version`).
+    ///
+    /// A version the bundle doesn't have fails verification.
     pub fn bundle_version(mut self, version: impl Into<String>) -> Self {
         self.action.bundle_version = Some(version.into());
         self
     }
 
+    /// Also checks the code against its own designated requirement (`--verbose=1`).
     pub fn check_designated_requirement(mut self, check: bool) -> Self {
         self.action.check_designated_requirement = check;
         self
     }
 
+    /// Requires the code to satisfy this requirement, written as text (`-R=`).
+    ///
+    /// A valid signature that doesn't satisfy it fails as
+    /// [`CodesignError::RequirementUnsatisfied`], and text that doesn't compile as
+    /// [`CodesignError::VerificationFailed`]. The text is never a file name, and `-` is not
+    /// standard input.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn run() -> signers::Result<()> {
+    /// use signers::Codesign;
+    ///
+    /// Codesign::verify("MyApp.app")
+    ///     .test_requirement("identifier \"com.example.myapp\" and anchor apple generic")
+    ///     .await?;
+    /// # Ok(()) }
+    /// ```
     pub fn test_requirement(mut self, requirement: impl Into<String>) -> Self {
         self.action.test_requirement = Some(requirement.into());
         self
     }
 
+    /// Verifies an unsigned file against a detached signature written for it (`--detached`).
     pub fn detached(mut self, path: impl Into<PathBuf>) -> Self {
         self.action.detached = Some(path.into());
         self
     }
 
+    /// Forces an online check for a notarization ticket (`--check-notarization`).
+    ///
+    /// It contacts Apple's servers, so it needs network access. Don't rely on it to reject
+    /// unnotarized code: `codesign` accepted an unnotarized ad hoc binary with it.
     pub fn check_notarization(mut self, check: bool) -> Self {
         self.action.check_notarization = check;
         self
