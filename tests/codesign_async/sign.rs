@@ -9,6 +9,7 @@ mod builder_and_future;
 mod bundles;
 mod entitlements_and_requirements;
 mod kitchen_sink;
+mod per_target;
 mod preflight;
 mod preserve_metadata;
 mod rejected_by_codesign;

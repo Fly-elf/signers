@@ -10,8 +10,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Why an action failed.
 ///
-/// Every variant except [`Codesign`](Error::Codesign) comes from a check made before `codesign`
-/// starts, so no target has been touched.
+/// Every variant except [`Codesign`](Error::Codesign) and [`Batch`](Error::Batch) comes from a
+/// check made before `codesign` starts, so no target has been touched. The order of the checks
+/// is on [`Codesign`](crate::Codesign#errors).
 ///
 /// # Examples
 ///
@@ -30,9 +31,15 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum Error {
-    /// No target was given, or every target was an empty path.
+    /// No target was given: an empty `Vec`, slice or array.
     #[error("no targets to operate on")]
     NoTargets,
+
+    /// The target at this index is an empty path; index 0 for a single target.
+    ///
+    /// Only the first empty path is reported.
+    #[error("target {0} is an empty path")]
+    EmptyTarget(usize),
 
     /// This target doesn't exist.
     #[error("target does not exist: {0}")]
@@ -51,6 +58,23 @@ pub enum Error {
     #[error("file_list(\"-\") is not supported: pass a path instead of standard output")]
     FileListToStdout,
 
+    /// An option that writes one shared file was combined with
+    /// [`per_target(true)`](crate::Codesign::per_target).
+    ///
+    /// It holds the setter's name, `"file_list"` or `"detached"`. One process per target would
+    /// make every process write that same file.
+    #[error("{0} writes one shared file and can't be combined with per_target(true)")]
+    SharedOutputPerTarget(&'static str),
+
+    /// These targets failed in a [`per_target(true)`](crate::Codesign::per_target) run, each with
+    /// its own error, in input order.
+    ///
+    /// Every target ran, so the ones not listed succeeded; their outputs are dropped. One failing
+    /// target is enough to get this variant rather than its plain error. See
+    /// [`per_target`](crate::Codesign::per_target) for an example.
+    #[error("{} target(s) failed: {}", .0.len(), failures(.0))]
+    Batch(Vec<(PathBuf, Error)>),
+
     /// The `codesign` tool couldn't run, or it rejected the job.
     #[error(transparent)]
     Codesign(#[from] CodesignError),
@@ -65,8 +89,8 @@ pub enum CodesignError {
     /// `codesign` ships with macOS in `/usr/bin`. This error usually means `PATH` leaves out
     /// `/usr/bin`, or the system isn't macOS.
     #[error(
-        "the `codesign` binary was not found on PATH; \
-         install the Xcode Command Line Tools with `xcode-select --install`"
+        "`codesign` was not found on PATH; it ships with macOS in /usr/bin, \
+         so check that PATH includes /usr/bin"
     )]
     NotFound,
 
@@ -82,8 +106,8 @@ pub enum CodesignError {
 
     /// `codesign` exited with `code`. `stderr` holds its diagnostics, trimmed.
     ///
-    /// In a batch, the targets before the rejected one have already changed. See
-    /// [`Codesign`](crate::Codesign#errors).
+    /// When one `codesign` runs over several targets, the targets before the rejected one have
+    /// already changed. See [`Codesign`](crate::Codesign#errors).
     #[error("`codesign` exited with code {code}: {}", diagnostics(.stderr))]
     Failed { code: i32, stderr: String },
 
@@ -92,6 +116,13 @@ pub enum CodesignError {
     /// `status` holds the signal (`ExitStatusExt::signal`). `stderr` is usually empty.
     #[error("the `codesign` process terminated abnormally ({status}): {}", diagnostics(.stderr))]
     Terminated { status: ExitStatus, stderr: String },
+
+    /// `codesign` exited 0, but its output couldn't be read as the action's result.
+    ///
+    /// `detail` says what didn't match, e.g. the number of results against the number of
+    /// targets.
+    #[error("`codesign` produced output this crate can't read: {detail}")]
+    UnexpectedOutput { detail: String },
 }
 
 /// Returns `stderr`, or "no diagnostics" if it's empty, so a message never ends with a colon.
@@ -101,6 +132,15 @@ fn diagnostics(stderr: &str) -> &str {
     } else {
         stderr
     }
+}
+
+/// Joins the entries of a [`Batch`](Error::Batch) as `path: error`, separated by `; `.
+fn failures(failures: &[(PathBuf, Error)]) -> String {
+    failures
+        .iter()
+        .map(|(path, error)| format!("{}: {error}", path.display()))
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 #[cfg(test)]
@@ -154,12 +194,17 @@ mod tests {
         );
     }
 
-    /// The remedy is the whole point of the variant: without it the caller is
-    /// left to guess that this is a toolchain problem.
+    /// The remedy is the whole point of the variant (ADR-0017): `codesign` ships with macOS, so the
+    /// fix is `PATH`, never the Command Line Tools.
     #[test]
     fn a_missing_binary_names_the_remedy() {
         let message = CodesignError::NotFound.to_string();
-        assert!(message.contains("xcode-select --install"), "got {message}");
+        assert_eq!(
+            message,
+            "`codesign` was not found on PATH; it ships with macOS in /usr/bin, \
+             so check that PATH includes /usr/bin",
+        );
+        assert!(!message.contains("xcode-select"), "got {message}");
     }
 
     /// The outer `Error::Codesign` wrapper must forward `Display` unchanged, so callers who
@@ -168,5 +213,114 @@ mod tests {
     fn the_wrapper_variant_forwards_display_unchanged() {
         let error = Error::from(CodesignError::NotFound);
         assert_eq!(error.to_string(), CodesignError::NotFound.to_string());
+    }
+
+    /// A failing run of `code`, as a batch entry holds it.
+    fn failed(code: i32, stderr: &str) -> Error {
+        CodesignError::Failed {
+            code,
+            stderr: stderr.into(),
+        }
+        .into()
+    }
+
+    #[test]
+    fn an_empty_target_is_named_by_its_position() {
+        assert_eq!(
+            Error::EmptyTarget(0).to_string(),
+            "target 0 is an empty path"
+        );
+        assert_eq!(
+            Error::EmptyTarget(12).to_string(),
+            "target 12 is an empty path"
+        );
+    }
+
+    #[test]
+    fn a_shared_output_refusal_names_the_setter() {
+        assert_eq!(
+            Error::SharedOutputPerTarget("file_list").to_string(),
+            "file_list writes one shared file and can't be combined with per_target(true)",
+        );
+        assert_eq!(
+            Error::SharedOutputPerTarget("detached").to_string(),
+            "detached writes one shared file and can't be combined with per_target(true)",
+        );
+    }
+
+    #[test]
+    fn unreadable_output_says_what_was_wrong_with_it() {
+        let error = CodesignError::UnexpectedOutput {
+            detail: "2 outputs for 3 targets".into(),
+        };
+        assert_eq!(
+            error.to_string(),
+            "`codesign` produced output this crate can't read: 2 outputs for 3 targets",
+        );
+    }
+
+    /// The path prefix stays even where `codesign` repeats it: some of its
+    /// messages (a `-R` mismatch) name no target at all.
+    #[test]
+    fn a_batch_lists_every_failure_in_the_order_given() {
+        let error = Error::Batch(vec![
+            (PathBuf::from("b.dylib"), failed(1, "b.dylib: nope")),
+            (
+                PathBuf::from("My App.app"),
+                Error::TargetNotFound(PathBuf::from("My App.app")),
+            ),
+            (PathBuf::from("a"), failed(3, "")),
+        ]);
+
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "3 target(s) failed: \
+                 b.dylib: `codesign` exited with code 1: b.dylib: nope; \
+                 My App.app: {}; \
+                 a: `codesign` exited with code 3: no diagnostics",
+                Error::TargetNotFound(PathBuf::from("My App.app")),
+            ),
+        );
+    }
+
+    #[test]
+    fn a_batch_of_one_has_no_separator() {
+        let error = Error::Batch(vec![(PathBuf::from("a.app"), failed(1, "boom"))]);
+        assert_eq!(
+            error.to_string(),
+            "1 target(s) failed: a.app: `codesign` exited with code 1: boom",
+        );
+    }
+
+    #[test]
+    fn failures_are_joined_with_a_semicolon() {
+        assert_eq!(failures(&[]), "");
+        assert_eq!(
+            failures(&[(PathBuf::from("a"), Error::NoTargets)]),
+            format!("a: {}", Error::NoTargets),
+        );
+        assert_eq!(
+            failures(&[
+                (PathBuf::from("a"), Error::EmptyTarget(0)),
+                (PathBuf::from("dir/b c"), Error::EmptyTarget(1)),
+            ]),
+            "a: target 0 is an empty path; dir/b c: target 1 is an empty path",
+        );
+    }
+
+    /// A path is shown through `Path::display`, so bytes that are not UTF-8
+    /// cannot make the message itself unprintable.
+    #[cfg(unix)]
+    #[test]
+    fn a_failure_on_a_path_that_is_not_utf8_is_still_printable() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+
+        let path = PathBuf::from(OsString::from_vec(vec![b'a', 0xff, b'b']));
+        assert_eq!(
+            failures(&[(path.clone(), Error::EmptyTarget(0))]),
+            format!("{}: target 0 is an empty path", path.display()),
+        );
     }
 }

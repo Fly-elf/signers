@@ -12,9 +12,10 @@ use bitflags::Flags;
 /// An action type that [`Codesign`](crate::Codesign) can run, such as
 /// [`Sign`](crate::codesign::sign::Sign).
 ///
-/// Use it as a bound to accept any runnable `Codesign<A>`. `.await` on a `Codesign<A>` yields
-/// `Result<A::Output>`: `()` for the actions so far. It's sealed, so only this crate defines
-/// actions.
+/// Use it as a bound to accept a single-target `Codesign<A>` of any action. `A::Output` is what
+/// one target yields on success, `()` for the actions so far; `.await` returns it shaped like
+/// the targets (see [`IntoTargets`](crate::IntoTargets)). It's sealed, so only this crate
+/// defines actions.
 pub trait Action: sealed::ToArgs {}
 
 impl<T: sealed::ToArgs> Action for T {}
@@ -25,19 +26,35 @@ pub(crate) mod sealed {
     use std::ffi::OsStr;
     use std::path::PathBuf;
 
-    use crate::errors::Result;
+    use crate::errors::{CodesignError, Error, Result};
 
     /// Renders an action into `codesign` arguments and reads the result of its run.
-    pub trait ToArgs {
-        /// What `.await` yields when `codesign` succeeds.
+    ///
+    /// `Sync` because per-target runs share one action concurrently.
+    pub trait ToArgs: Sync {
+        /// What `.await` yields for each target when `codesign` succeeds.
         ///
         /// It depends on the action type only, never on the option values.
         type Output: Send + 'static;
+
+        /// The action's `per_target` default, for a collection of targets.
+        ///
+        /// `true` suits read-only actions; mutating ones keep `false`, so `codesign` handles their
+        /// targets in order. A single target always runs once, whatever this says.
+        const PER_TARGET: bool;
 
         /// Rejects options this crate can't honour, before any target is checked or `codesign`
         /// runs.
         fn validate(&self) -> Result<()> {
             Ok(())
+        }
+
+        /// Names the setter of an option set to write one file for all targets, if any.
+        ///
+        /// With `per_target(true)` the runner refuses it with [`Error::SharedOutputPerTarget`].
+        /// [`validate`](Self::validate) can't see `per_target`, hence a hook of its own.
+        fn shared_output(&self) -> Option<&'static str> {
+            None
         }
 
         /// Renders the arguments for `targets`, once [`validate`](Self::validate) has passed.
@@ -46,11 +63,27 @@ pub(crate) mod sealed {
         /// built here allocate.
         fn to_args<'a>(&'a self, targets: &'a [PathBuf]) -> Vec<Cow<'a, OsStr>>;
 
-        /// Builds the result from the raw stdout and stderr of a `codesign` run that exited 0.
+        /// Builds one output per target from the raw stdout and stderr of a run that exited 0.
         ///
-        /// Both streams are untrimmed bytes. A failed run never gets here: it becomes an error
-        /// before.
-        fn output(&self, stdout: Vec<u8>, stderr: Vec<u8>) -> Result<Self::Output>;
+        /// `targets` are the ones this run covered: all of them, or one per run with
+        /// `per_target`. The outputs must follow them in order; any other count becomes
+        /// [`CodesignError::UnexpectedOutput`]. Both streams are untrimmed bytes. A failed run
+        /// goes to [`failure`](Self::failure) instead.
+        fn output(
+            &self,
+            targets: &[PathBuf],
+            stdout: Vec<u8>,
+            stderr: Vec<u8>,
+        ) -> Result<Vec<Self::Output>>;
+
+        /// Turns a non-zero exit code into this action's error; by default
+        /// [`CodesignError::Failed`].
+        ///
+        /// `stderr` is already lossy-decoded and trimmed. A process killed by a signal has no
+        /// exit code and never gets here.
+        fn failure(&self, code: i32, stderr: String) -> Error {
+            CodesignError::Failed { code, stderr }.into()
+        }
     }
 }
 

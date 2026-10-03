@@ -16,6 +16,8 @@ mod preflight;
 mod remove_signature;
 mod sign;
 
+use std::path::PathBuf;
+
 use signers::{CodesignError, Error};
 
 /// Unwraps the `Error::Codesign` a failed run must produce, returning the
@@ -33,5 +35,14 @@ fn codesign_error(error: Error) -> String {
             stderr
         }
         other => panic!("expected the `codesign` run to fail, got {other:?}"),
+    }
+}
+
+/// Unwraps the `Error::Batch` a per-target run over a collection must produce
+/// as soon as one target fails, returning the failing targets with their errors.
+fn batch_failures(error: Error) -> Vec<(PathBuf, Error)> {
+    match error {
+        Error::Batch(failures) => failures,
+        other => panic!("expected the failures of a batch, got {other:?}"),
     }
 }

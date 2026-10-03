@@ -9,24 +9,138 @@
 /// ```
 macro_rules! preflight_tests {
     ($constructor:path) => {
+        // Every check below is made once, before any process starts, whether the
+        // run is one process for all targets or one per target (ADR-0013). So
+        // each is asserted in both modes, and always as a plain error: a
+        // refused run has no per-target failures to collect.
+        const MODES: [bool; 2] = [false, true];
+
         #[tokio::test]
         async fn an_empty_target_is_rejected() {
             let error = $constructor("").await.unwrap_err();
-            assert!(matches!(error, signers::Error::NoTargets), "got {error:?}");
+            assert!(
+                matches!(error, signers::Error::EmptyTarget(0)),
+                "got {error:?}",
+            );
+
+            for per_target in MODES {
+                let error = $constructor(vec![""])
+                    .per_target(per_target)
+                    .await
+                    .unwrap_err();
+                assert!(
+                    matches!(error, signers::Error::EmptyTarget(0)),
+                    "per_target({per_target}): got {error:?}",
+                );
+            }
         }
 
         #[tokio::test]
         async fn an_empty_target_list_is_rejected() {
-            let error = $constructor(Vec::<std::path::PathBuf>::new())
-                .await
-                .unwrap_err();
-            assert!(matches!(error, signers::Error::NoTargets), "got {error:?}");
+            for per_target in MODES {
+                let error = $constructor(Vec::<std::path::PathBuf>::new())
+                    .per_target(per_target)
+                    .await
+                    .unwrap_err();
+                assert!(
+                    matches!(error, signers::Error::NoTargets),
+                    "per_target({per_target}): got {error:?}",
+                );
+            }
+        }
+
+        #[tokio::test]
+        async fn an_empty_array_of_targets_is_rejected() {
+            for per_target in MODES {
+                let none: [std::path::PathBuf; 0] = [];
+                let error = $constructor(none)
+                    .per_target(per_target)
+                    .await
+                    .unwrap_err();
+                assert!(
+                    matches!(error, signers::Error::NoTargets),
+                    "per_target({per_target}): got {error:?}",
+                );
+            }
         }
 
         #[tokio::test]
         async fn a_list_of_nothing_but_empty_targets_is_rejected() {
-            let error = $constructor(vec!["", ""]).await.unwrap_err();
-            assert!(matches!(error, signers::Error::NoTargets), "got {error:?}");
+            for per_target in MODES {
+                let error = $constructor(vec!["", ""])
+                    .per_target(per_target)
+                    .await
+                    .unwrap_err();
+                assert!(
+                    matches!(error, signers::Error::EmptyTarget(0)),
+                    "per_target({per_target}): got {error:?}",
+                );
+            }
+        }
+
+        #[tokio::test]
+        async fn an_empty_target_among_others_is_reported_by_its_position() {
+            // The first empty path is the one named, and the targets around it
+            // are left alone: an empty path refuses the run, it is not skipped.
+            let workspace = crate::support::fixture::Workspace::new();
+            let present = [workspace.unsigned("unsigned"), workspace.adhoc_signed("signed")];
+            let before = present.each_ref().map(|path| std::fs::read(path).unwrap());
+            let empty = std::path::PathBuf::new();
+
+            for per_target in MODES {
+                let batch = vec![
+                    present[0].clone(),
+                    present[1].clone(),
+                    empty.clone(),
+                    present[0].clone(),
+                    empty.clone(),
+                ];
+                let error = $constructor(batch)
+                    .per_target(per_target)
+                    .await
+                    .unwrap_err();
+                assert!(
+                    matches!(error, signers::Error::EmptyTarget(2)),
+                    "per_target({per_target}): got {error:?}",
+                );
+
+                let batch = [empty.clone(), present[0].clone(), present[1].clone()];
+                let error = $constructor(batch)
+                    .per_target(per_target)
+                    .await
+                    .unwrap_err();
+                assert!(
+                    matches!(error, signers::Error::EmptyTarget(0)),
+                    "per_target({per_target}): got {error:?}",
+                );
+            }
+
+            for (path, before) in present.iter().zip(before) {
+                assert_eq!(
+                    std::fs::read(path).unwrap(),
+                    before,
+                    "{} changed although the batch was refused",
+                    path.display(),
+                );
+            }
+        }
+
+        #[tokio::test]
+        async fn an_empty_target_is_reported_before_a_missing_one() {
+            let workspace = crate::support::fixture::Workspace::new();
+            let missing = workspace.join("nowhere.bin");
+
+            for per_target in MODES {
+                let batch = vec![missing.clone(), std::path::PathBuf::new()];
+                let error = $constructor(batch)
+                    .per_target(per_target)
+                    .await
+                    .unwrap_err();
+                assert!(
+                    matches!(error, signers::Error::EmptyTarget(1)),
+                    "per_target({per_target}): got {error:?}",
+                );
+            }
         }
 
         #[tokio::test]
@@ -34,11 +148,21 @@ macro_rules! preflight_tests {
             let workspace = crate::support::fixture::Workspace::new();
             let missing = workspace.join("nowhere.bin");
 
-            let error = $constructor(missing.clone()).await.unwrap_err();
-
-            match error {
+            match $constructor(missing.clone()).await.unwrap_err() {
                 signers::Error::TargetNotFound(path) => assert_eq!(path, missing),
                 other => panic!("expected TargetNotFound, got {other:?}"),
+            }
+
+            for per_target in MODES {
+                let error = $constructor(vec![missing.clone()])
+                    .per_target(per_target)
+                    .await
+                    .unwrap_err();
+
+                match error {
+                    signers::Error::TargetNotFound(path) => assert_eq!(path, missing),
+                    other => panic!("per_target({per_target}): expected TargetNotFound, got {other:?}"),
+                }
             }
         }
 
@@ -66,13 +190,28 @@ macro_rules! preflight_tests {
             let before = present.each_ref().map(|path| std::fs::read(path).unwrap());
             let missing = workspace.join("missing");
 
-            let batch = vec![present[0].clone(), present[1].clone(), missing.clone()];
-            let error = $constructor(batch).await.unwrap_err();
+            for per_target in MODES {
+                let batch = vec![present[0].clone(), present[1].clone(), missing.clone()];
+                let error = $constructor(batch)
+                    .per_target(per_target)
+                    .await
+                    .unwrap_err();
+                assert!(
+                    matches!(&error, signers::Error::TargetNotFound(path) if *path == missing),
+                    "per_target({per_target}): got {error:?}",
+                );
 
-            assert!(
-                matches!(&error, signers::Error::TargetNotFound(path) if *path == missing),
-                "got {error:?}",
-            );
+                let batch = [present[0].clone(), missing.clone(), present[1].clone()];
+                let error = $constructor(batch)
+                    .per_target(per_target)
+                    .await
+                    .unwrap_err();
+                assert!(
+                    matches!(&error, signers::Error::TargetNotFound(path) if *path == missing),
+                    "per_target({per_target}): got {error:?}",
+                );
+            }
+
             for (path, before) in present.iter().zip(before) {
                 assert_eq!(
                     std::fs::read(path).unwrap(),
