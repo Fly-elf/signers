@@ -2,12 +2,13 @@
 
 use std::borrow::Cow;
 use std::ffi::OsStr;
+use std::os::unix::ffi::OsStrExt;
 use std::path::PathBuf;
 
 use super::actions::PushArgs;
 use super::actions::sealed::ToArgs;
 use crate::codesign::Codesign;
-use crate::errors::{CodesignError, Error};
+use crate::errors::{Change, CodesignError, Error, ResourceChange};
 use crate::target::Shape;
 
 /// Options of the verification action: the `A` in `Codesign<Verify>`.
@@ -237,14 +238,37 @@ impl ToArgs for Verify {
         Ok(vec![(); targets.len()])
     }
 
-    fn failure(&self, code: i32, stderr: String) -> Error {
+    fn failure(&self, code: i32, stdout: Vec<u8>, stderr: String) -> Error {
         match code {
-            1 => CodesignError::VerificationFailed { stderr },
+            1 => CodesignError::VerificationFailed {
+                stderr,
+                resources: resource_changes(&stdout),
+            },
             3 => CodesignError::RequirementUnsatisfied { stderr },
             _ => CodesignError::Failed { code, stderr },
         }
         .into()
     }
+}
+
+/// Reads the `file added|modified|missing: <path>` lines `--verbose=1` prints, in order.
+fn resource_changes(stdout: &[u8]) -> Vec<ResourceChange> {
+    const PREFIXES: [(&[u8], Change); 3] = [
+        (b"file added: ", Change::Added),
+        (b"file modified: ", Change::Modified),
+        (b"file missing: ", Change::Missing),
+    ];
+    stdout
+        .split(|&byte| byte == b'\n')
+        .filter_map(|line| {
+            PREFIXES.iter().find_map(|&(prefix, change)| {
+                line.strip_prefix(prefix).map(|path| ResourceChange {
+                    change,
+                    path: PathBuf::from(OsStr::from_bytes(path)),
+                })
+            })
+        })
+        .collect()
 }
 
 #[cfg(test)]

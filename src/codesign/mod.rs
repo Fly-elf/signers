@@ -450,7 +450,7 @@ async fn run<A: Action>(action: &A, targets: &[PathBuf]) -> Result<Vec<A::Output
 
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     Err(match output.status.code() {
-        Some(code) => action.failure(code, stderr),
+        Some(code) => action.failure(code, output.stdout, stderr),
         // No exit code at all: the process was killed before it could
         // exit, so this is not `codesign` rejecting anything.
         None => CodesignError::Terminated {

@@ -81,7 +81,7 @@ pub(crate) mod sealed {
         ///
         /// `stderr` is already lossy-decoded and trimmed. A process killed by a signal has no
         /// exit code and never gets here.
-        fn failure(&self, code: i32, stderr: String) -> Error {
+        fn failure(&self, code: i32, _stdout: Vec<u8>, stderr: String) -> Error {
             CodesignError::Failed { code, stderr }.into()
         }
     }
