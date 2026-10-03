@@ -129,6 +129,13 @@ pub enum CodesignError {
     /// The signature is invalid or modified, the target is unsigned, or the requirement text of
     /// [`test_requirement`](crate::Codesign::test_requirement) doesn't compile. `stderr` holds
     /// the diagnostics `codesign` printed on standard error, trimmed.
+    ///
+    /// `resources` names the sealed resources that were altered, in the order `codesign` printed
+    /// them, which can differ from run to run. It is filled only with
+    /// [`check_designated_requirement`](crate::Codesign::check_designated_requirement), and stays
+    /// empty when the damage is to nested code (see [`deep`](crate::Codesign::deep)) or when
+    /// nothing was altered. The message lists them after the diagnostics, as
+    /// `(modified: /path; added: /path)`.
     #[error("verification failed: {}{}", diagnostics(.stderr), changes(.resources))]
     VerificationFailed {
         stderr: String,
@@ -146,11 +153,31 @@ pub enum CodesignError {
     RequirementUnsatisfied { stderr: String },
 }
 
-/// A sealed resource that `codesign --verify` found altered.
+/// A sealed resource that [`verify`](crate::Codesign::verify) found altered.
+///
+/// It is found in [`CodesignError::VerificationFailed`].
+///
+/// # Examples
+///
+/// ```no_run
+/// # async fn run() -> signers::Result<()> {
+/// use signers::errors::Change;
+/// use signers::{Codesign, CodesignError, Error};
+///
+/// let result = Codesign::verify("MyApp.app").check_designated_requirement(true).await;
+/// if let Err(Error::Codesign(CodesignError::VerificationFailed { resources, .. })) = result {
+///     for resource in resources.iter().filter(|r| r.change == Change::Modified) {
+///         println!("tampered: {}", resource.path.display());
+///     }
+/// }
+/// # Ok(()) }
+/// ```
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResourceChange {
+    /// How the resource differs from what the signature sealed.
     pub change: Change,
+    /// Absolute path, canonical: a temporary directory shows as `/private/var/...`.
     pub path: PathBuf,
 }
 
@@ -158,8 +185,11 @@ pub struct ResourceChange {
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Change {
+    /// The bundle holds a file the signature doesn't cover.
     Added,
+    /// The file's contents differ from what was sealed.
     Modified,
+    /// A sealed file is gone.
     Missing,
 }
 

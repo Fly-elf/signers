@@ -139,6 +139,10 @@ impl<S: Shape> Codesign<Verify, S> {
     }
 
     /// Also checks the code against its own designated requirement (`--verbose=1`).
+    ///
+    /// It also makes a failed verification list the altered files in
+    /// [`VerificationFailed::resources`](CodesignError::VerificationFailed). Without it that list
+    /// is always empty.
     pub fn check_designated_requirement(mut self, check: bool) -> Self {
         self.action.check_designated_requirement = check;
         self
