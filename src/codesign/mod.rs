@@ -4,6 +4,7 @@
 //! Start at [`Codesign`].
 
 mod actions;
+pub mod display;
 pub mod remove_signature;
 pub mod sign;
 
@@ -15,6 +16,7 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::process::Stdio;
 
+use display::Display;
 use futures_util::StreamExt;
 use remove_signature::RemoveSignature;
 use sign::Sign;
@@ -212,6 +214,10 @@ impl Codesign<()> {
     /// ```
     pub fn remove_signature<T: IntoTargets>(target: T) -> Codesign<RemoveSignature, T::Shape> {
         new(target, RemoveSignature::default())
+    }
+
+    pub fn display<T: IntoTargets>(target: T) -> Codesign<Display, T::Shape> {
+        new(target, Display::default())
     }
 }
 
