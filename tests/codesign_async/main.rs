@@ -15,6 +15,7 @@ mod support;
 mod preflight;
 mod remove_signature;
 mod sign;
+mod verify;
 
 use std::path::PathBuf;
 

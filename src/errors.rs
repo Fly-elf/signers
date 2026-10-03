@@ -329,4 +329,56 @@ mod tests {
             format!("{}: target 0 is an empty path", path.display()),
         );
     }
+
+    #[test]
+    fn a_verification_failure_carries_its_diagnostics() {
+        let error = CodesignError::VerificationFailed {
+            stderr: "app: invalid signature (code or signature have been modified)".into(),
+        };
+        assert_eq!(
+            error.to_string(),
+            "verification failed: app: invalid signature (code or signature have been modified)",
+        );
+    }
+
+    #[test]
+    fn a_verification_failure_with_nothing_to_say_still_reads_as_a_sentence() {
+        let silent = CodesignError::VerificationFailed {
+            stderr: String::new(),
+        };
+        assert_eq!(silent.to_string(), "verification failed: no diagnostics");
+    }
+
+    #[test]
+    fn an_unsatisfied_requirement_says_the_signature_itself_is_fine() {
+        let error = CodesignError::RequirementUnsatisfied {
+            stderr: "test-requirement: code failed to satisfy specified code requirement(s)".into(),
+        };
+        assert_eq!(
+            error.to_string(),
+            "validly signed, but the requirement isn't satisfied: \
+             test-requirement: code failed to satisfy specified code requirement(s)",
+        );
+    }
+
+    #[test]
+    fn an_unsatisfied_requirement_with_nothing_to_say_still_reads_as_a_sentence() {
+        let silent = CodesignError::RequirementUnsatisfied {
+            stderr: String::new(),
+        };
+        assert_eq!(
+            silent.to_string(),
+            "validly signed, but the requirement isn't satisfied: no diagnostics",
+        );
+    }
+
+    #[test]
+    fn the_verification_variants_forward_display_through_the_wrapper() {
+        let failed = CodesignError::VerificationFailed { stderr: "x".into() };
+        let unsatisfied = CodesignError::RequirementUnsatisfied { stderr: "y".into() };
+        for inner in [failed, unsatisfied] {
+            let text = inner.to_string();
+            assert_eq!(Error::from(inner).to_string(), text);
+        }
+    }
 }
