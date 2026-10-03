@@ -193,12 +193,16 @@ mod tests {
     }
 
     /// A removal has no exit code of its own to tell apart, so every one of
-    /// them stays the generic failure.
+    /// them stays the generic failure, whatever it printed on standard output.
     #[test]
     fn a_failed_run_is_reported_with_its_code_and_diagnostics() {
         let action = Codesign::remove_signature("app").action;
         for code in [1, 2, 3] {
-            match action.failure(code, "app: bundle format unrecognized".into()) {
+            match action.failure(
+                code,
+                b"file modified: /x\n".to_vec(),
+                "app: bundle format unrecognized".into(),
+            ) {
                 crate::errors::Error::Codesign(crate::errors::CodesignError::Failed {
                     code: reported,
                     stderr,

@@ -109,7 +109,7 @@ async fn failures_are_not_mixed_up_between_targets() {
 
 fn verification_failed_text(error: &Error) -> &str {
     match error {
-        Error::Codesign(CodesignError::VerificationFailed { stderr }) => stderr,
+        Error::Codesign(CodesignError::VerificationFailed { stderr, .. }) => stderr,
         other => panic!("expected VerificationFailed, got {other:?}"),
     }
 }

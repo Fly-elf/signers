@@ -14,21 +14,34 @@ mod options;
 mod per_target;
 mod preflight;
 mod requirements;
+mod resources;
 mod verifying;
 
 use std::fs::OpenOptions;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
+use signers::errors::ResourceChange;
 use signers::{CodesignError, Error};
 
 /// Unwraps the `VerificationFailed` a target that does not verify must
 /// produce, returning its diagnostics.
 fn verification_failed(error: Error) -> String {
     match error {
-        Error::Codesign(CodesignError::VerificationFailed { stderr }) => {
+        Error::Codesign(CodesignError::VerificationFailed { stderr, .. }) => {
             assert!(!stderr.is_empty(), "the failure carried no diagnostics");
             stderr
+        }
+        other => panic!("expected VerificationFailed, got {other:?}"),
+    }
+}
+
+/// Unwraps the `VerificationFailed` a target that does not verify must
+/// produce, returning its diagnostics and the altered resources it names.
+fn verification_failed_with_resources(error: Error) -> (String, Vec<ResourceChange>) {
+    match error {
+        Error::Codesign(CodesignError::VerificationFailed { stderr, resources }) => {
+            (stderr, resources)
         }
         other => panic!("expected VerificationFailed, got {other:?}"),
     }
