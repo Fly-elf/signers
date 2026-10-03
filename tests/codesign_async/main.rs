@@ -12,6 +12,7 @@
 #[path = "../support/mod.rs"]
 mod support;
 
+mod display;
 mod preflight;
 mod remove_signature;
 mod sign;
