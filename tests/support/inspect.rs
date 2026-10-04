@@ -378,6 +378,84 @@ pub fn xattrs(path: &Path) -> Vec<String> {
         .collect()
 }
 
+/// The certificate chain embedded in `path`, as the DER files
+/// `codesign -d --extract-certificates` writes: leaf first, empty for ad hoc.
+pub fn certificates(path: &Path) -> Vec<Vec<u8>> {
+    let dir = tempfile::TempDir::new().expect("could not create a temporary directory");
+    let prefix = dir.path().join("cert");
+    let mut flag = std::ffi::OsString::from("--extract-certificates=");
+    flag.push(&prefix);
+    codesign(&["-d".as_ref(), flag.as_ref(), path.as_ref()])
+        .expect_success(&format!("extract the certificates of {}", path.display()));
+
+    (0..)
+        .map_while(|n| std::fs::read(dir.path().join(format!("cert{n}"))).ok())
+        .collect()
+}
+
+/// `der` as PEM, exactly as the system `openssl` writes a certificate.
+pub fn pem(der: &[u8]) -> String {
+    openssl(&["x509", "-inform", "der", "-outform", "pem"], der)
+}
+
+/// The DER bytes of a single PEM certificate, through the system `openssl`.
+pub fn der(pem: &str) -> Vec<u8> {
+    openssl_run(
+        &["x509", "-inform", "pem", "-outform", "der"],
+        pem.as_bytes(),
+    )
+}
+
+/// The subject and issuer `openssl` reads from a DER certificate.
+pub fn subject_and_issuer(der: &[u8]) -> (String, String) {
+    let text = openssl(
+        &["x509", "-inform", "der", "-noout", "-subject", "-issuer"],
+        der,
+    );
+    let field = |key: &str| {
+        text.lines()
+            .find_map(|line| line.strip_prefix(key))
+            .unwrap_or_else(|| panic!("no `{key}` in openssl's output: {text}"))
+            .trim()
+            .to_owned()
+    };
+    (field("subject="), field("issuer="))
+}
+
+fn openssl(args: &[&str], input: &[u8]) -> String {
+    String::from_utf8(openssl_run(args, input)).expect("openssl printed non-UTF-8 text")
+}
+
+/// Runs the system LibreSSL, so the result does not depend on which `openssl`
+/// comes first on PATH, feeding `input` on stdin.
+fn openssl_run(args: &[&str], input: &[u8]) -> Vec<u8> {
+    use std::io::Write as _;
+    use std::process::Stdio;
+
+    let mut child = Command::new("/usr/bin/openssl")
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("could not run /usr/bin/openssl");
+    child
+        .stdin
+        .take()
+        .expect("stdin is piped")
+        .write_all(input)
+        .expect("could not feed openssl");
+    let output = child
+        .wait_with_output()
+        .expect("could not wait for openssl");
+    assert!(
+        output.status.success(),
+        "openssl {args:?} failed: {}",
+        String::from_utf8_lossy(&output.stderr).trim(),
+    );
+    output.stdout
+}
+
 /// The value of a whitespace-separated `key=value` token inside `line`.
 fn token<'a>(line: &'a str, key: &str) -> Option<&'a str> {
     line.split_whitespace()
