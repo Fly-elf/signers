@@ -568,6 +568,8 @@ mod tests {
         file_list: bool,
     }
 
+    impl super::actions::sealed::SharedRun for Probe {}
+
     impl ToArgs for Probe {
         type Output = String;
         const PER_TARGET: bool = true;

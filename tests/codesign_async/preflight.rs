@@ -2,18 +2,27 @@
 //! once and stamped into each action's suite by [`preflight_tests!`].
 
 /// Expands to the shared pre-flight tests, driving `$constructor`: a
-/// `Codesign<()>` constructor that takes only the targets.
+/// `Codesign<()>` constructor that takes only the targets. An action that
+/// always runs one process per target, and so has no `per_target` setter, says
+/// so with `one_process_per_target`.
 ///
 /// ```ignore
 /// preflight_tests!(Codesign::remove_signature);
+/// preflight_tests!(Codesign::extract_certificates, one_process_per_target);
 /// ```
 macro_rules! preflight_tests {
+    // Every check below is made once, before any process starts, whether the
+    // run is one process for all targets or one per target. So
+    // each is asserted in every mode the action has, and always as a plain
+    // error: a refused run has no per-target failures to collect.
     ($constructor:path) => {
-        // Every check below is made once, before any process starts, whether the
-        // run is one process for all targets or one per target. So
-        // each is asserted in both modes, and always as a plain error: a
-        // refused run has no per-target failures to collect.
-        const MODES: [bool; 2] = [false, true];
+        crate::preflight::preflight_tests!(@tests $constructor, shared, [false, true]);
+    };
+    ($constructor:path, one_process_per_target) => {
+        crate::preflight::preflight_tests!(@tests $constructor, separate, [true]);
+    };
+    (@tests $constructor:path, $mode:ident, $modes:expr) => {
+        const MODES: &[bool] = &$modes;
 
         #[tokio::test]
         async fn an_empty_target_is_rejected() {
@@ -23,9 +32,8 @@ macro_rules! preflight_tests {
                 "got {error:?}",
             );
 
-            for per_target in MODES {
-                let error = $constructor(vec![""])
-                    .per_target(per_target)
+            for &per_target in MODES {
+                let error = crate::preflight::with_mode!($mode, $constructor(vec![""]), per_target)
                     .await
                     .unwrap_err();
                 assert!(
@@ -37,9 +45,8 @@ macro_rules! preflight_tests {
 
         #[tokio::test]
         async fn an_empty_target_list_is_rejected() {
-            for per_target in MODES {
-                let error = $constructor(Vec::<std::path::PathBuf>::new())
-                    .per_target(per_target)
+            for &per_target in MODES {
+                let error = crate::preflight::with_mode!($mode, $constructor(Vec::<std::path::PathBuf>::new()), per_target)
                     .await
                     .unwrap_err();
                 assert!(
@@ -51,10 +58,9 @@ macro_rules! preflight_tests {
 
         #[tokio::test]
         async fn an_empty_array_of_targets_is_rejected() {
-            for per_target in MODES {
+            for &per_target in MODES {
                 let none: [std::path::PathBuf; 0] = [];
-                let error = $constructor(none)
-                    .per_target(per_target)
+                let error = crate::preflight::with_mode!($mode, $constructor(none), per_target)
                     .await
                     .unwrap_err();
                 assert!(
@@ -66,9 +72,8 @@ macro_rules! preflight_tests {
 
         #[tokio::test]
         async fn a_list_of_nothing_but_empty_targets_is_rejected() {
-            for per_target in MODES {
-                let error = $constructor(vec!["", ""])
-                    .per_target(per_target)
+            for &per_target in MODES {
+                let error = crate::preflight::with_mode!($mode, $constructor(vec!["", ""]), per_target)
                     .await
                     .unwrap_err();
                 assert!(
@@ -87,7 +92,7 @@ macro_rules! preflight_tests {
             let before = present.each_ref().map(|path| std::fs::read(path).unwrap());
             let empty = std::path::PathBuf::new();
 
-            for per_target in MODES {
+            for &per_target in MODES {
                 let batch = vec![
                     present[0].clone(),
                     present[1].clone(),
@@ -95,8 +100,7 @@ macro_rules! preflight_tests {
                     present[0].clone(),
                     empty.clone(),
                 ];
-                let error = $constructor(batch)
-                    .per_target(per_target)
+                let error = crate::preflight::with_mode!($mode, $constructor(batch), per_target)
                     .await
                     .unwrap_err();
                 assert!(
@@ -105,8 +109,7 @@ macro_rules! preflight_tests {
                 );
 
                 let batch = [empty.clone(), present[0].clone(), present[1].clone()];
-                let error = $constructor(batch)
-                    .per_target(per_target)
+                let error = crate::preflight::with_mode!($mode, $constructor(batch), per_target)
                     .await
                     .unwrap_err();
                 assert!(
@@ -130,10 +133,9 @@ macro_rules! preflight_tests {
             let workspace = crate::support::fixture::Workspace::new();
             let missing = workspace.join("nowhere.bin");
 
-            for per_target in MODES {
+            for &per_target in MODES {
                 let batch = vec![missing.clone(), std::path::PathBuf::new()];
-                let error = $constructor(batch)
-                    .per_target(per_target)
+                let error = crate::preflight::with_mode!($mode, $constructor(batch), per_target)
                     .await
                     .unwrap_err();
                 assert!(
@@ -153,9 +155,8 @@ macro_rules! preflight_tests {
                 other => panic!("expected TargetNotFound, got {other:?}"),
             }
 
-            for per_target in MODES {
-                let error = $constructor(vec![missing.clone()])
-                    .per_target(per_target)
+            for &per_target in MODES {
+                let error = crate::preflight::with_mode!($mode, $constructor(vec![missing.clone()]), per_target)
                     .await
                     .unwrap_err();
 
@@ -190,10 +191,9 @@ macro_rules! preflight_tests {
             let before = present.each_ref().map(|path| std::fs::read(path).unwrap());
             let missing = workspace.join("missing");
 
-            for per_target in MODES {
+            for &per_target in MODES {
                 let batch = vec![present[0].clone(), present[1].clone(), missing.clone()];
-                let error = $constructor(batch)
-                    .per_target(per_target)
+                let error = crate::preflight::with_mode!($mode, $constructor(batch), per_target)
                     .await
                     .unwrap_err();
                 assert!(
@@ -202,8 +202,7 @@ macro_rules! preflight_tests {
                 );
 
                 let batch = [present[0].clone(), missing.clone(), present[1].clone()];
-                let error = $constructor(batch)
-                    .per_target(per_target)
+                let error = crate::preflight::with_mode!($mode, $constructor(batch), per_target)
                     .await
                     .unwrap_err();
                 assert!(
@@ -249,3 +248,15 @@ macro_rules! preflight_tests {
     };
 }
 pub(crate) use preflight_tests;
+
+/// `$builder` in the given run mode: `shared` sets `per_target`, `separate`
+/// leaves the builder alone, its action having one process per target only.
+macro_rules! with_mode {
+    (shared, $builder:expr, $per_target:expr) => {
+        $builder.per_target($per_target)
+    };
+    (separate, $builder:expr, $per_target:expr) => {
+        $builder
+    };
+}
+pub(crate) use with_mode;
