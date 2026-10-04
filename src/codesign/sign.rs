@@ -126,7 +126,8 @@ impl<S: Shape> Codesign<Sign, S> {
     /// (`--requirements`).
     ///
     /// The kinds of requirement you don't specify get `codesign`'s defaults. On the command line,
-    /// `-` reads from standard input. Here `codesign` gets no input, so `-` makes signing fail.
+    /// `-` reads from standard input. Here `codesign` gets no input, so `-` makes `.await` fail with
+    /// [`Error::StdioPath`](crate::Error::StdioPath) before anything runs.
     ///
     /// # Examples
     ///
@@ -360,7 +361,7 @@ impl<S: Shape> Codesign<Sign, S> {
     /// Any file not listed is unchanged. A listed file may be unchanged too.
     ///
     /// On the command line, `-` means standard output. Here the crate captures that output, so
-    /// `-` makes `.await` fail with [`Error::FileListToStdout`](crate::Error::FileListToStdout)
+    /// `-` makes `.await` fail with [`Error::StdioPath`](crate::Error::StdioPath)
     /// before anything runs. With [`per_target(true)`](Codesign::per_target) it fails with
     /// [`Error::SharedOutputPerTarget`](crate::Error::SharedOutputPerTarget), since every process
     /// would append to the same file.
@@ -376,7 +377,10 @@ impl ToArgs for Sign {
 
     fn validate(&self) -> crate::errors::Result<()> {
         if self.file_list.as_deref() == Some(Path::new("-")) {
-            return Err(crate::errors::Error::FileListToStdout);
+            return Err(crate::errors::Error::StdioPath("file_list"));
+        }
+        if self.requirements.as_deref() == Some("-") {
+            return Err(crate::errors::Error::StdioPath("requirements"));
         }
         Ok(())
     }
@@ -926,7 +930,7 @@ mod tests {
         let action = Codesign::sign("app", "-").file_list("-");
         let error = action.action.validate().unwrap_err();
         assert!(
-            matches!(error, crate::errors::Error::FileListToStdout),
+            matches!(error, crate::errors::Error::StdioPath("file_list")),
             "got {error:?}"
         );
     }
@@ -935,6 +939,58 @@ mod tests {
     fn a_file_list_pointing_at_a_real_path_passes_validation() {
         let action = Codesign::sign("app", "-").file_list("signed.txt");
         assert!(action.action.validate().is_ok());
+    }
+
+    #[test]
+    fn requirements_of_stdin_fail_validation() {
+        let action = Codesign::sign("app", "-").requirements("-");
+        let error = action.action.validate().unwrap_err();
+        assert!(
+            matches!(error, crate::errors::Error::StdioPath("requirements")),
+            "got {error:?}"
+        );
+    }
+
+    /// Only the exact value `-` reads standard input: source text, a path that
+    /// merely starts or ends with a dash, and the empty string are all fine.
+    #[test]
+    fn requirements_other_than_a_lone_dash_pass_validation() {
+        for value in ["=-", "= -", "-x", "--", "./-", "-/a.rqset", " -", "- ", ""] {
+            let action = Codesign::sign("app", "-").requirements(value);
+            assert!(action.action.validate().is_ok(), "{value:?}");
+        }
+    }
+
+    /// `codesign` reads these `-` as a plain file name, so they are not refused.
+    #[test]
+    fn a_dash_in_any_other_option_passes_validation() {
+        let action = Codesign::sign("app", "-")
+            .entitlements("-")
+            .detached("-")
+            .keychain("-")
+            .launch_constraint_self("-")
+            .launch_constraint_parent("-")
+            .launch_constraint_responsible("-")
+            .library_constraint("-")
+            .identifier("-")
+            .prefix("-");
+        assert!(action.action.validate().is_ok());
+    }
+
+    #[test]
+    fn requirements_source_text_is_one_argument_after_the_flag() {
+        let action = Codesign::sign("app", "-").requirements("=designated => anchor apple");
+        assert_eq!(
+            args_of(&action),
+            os(&[
+                "--sign",
+                "-",
+                "--requirements",
+                "=designated => anchor apple",
+                "--",
+                "app"
+            ])
+        );
     }
 
     #[test]

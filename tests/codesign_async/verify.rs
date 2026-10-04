@@ -15,6 +15,7 @@ mod per_target;
 mod preflight;
 mod requirements;
 mod resources;
+mod signature_slot;
 mod verifying;
 
 use std::fs::OpenOptions;
