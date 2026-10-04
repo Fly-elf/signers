@@ -339,6 +339,52 @@ impl Codesign<()> {
         new(target, Display::default())
     }
 
+    /// Checks that each plist is a valid launch or library constraint (`--validate-constraint`).
+    ///
+    /// A constraint plist holds the bare constraint dictionary, such as
+    /// `{ "team-identifier": "A1B2C3D4E5" }`. It is not the `ccat`/`comp`/`reqs` wrapper that
+    /// [`display`](Codesign::display) reports, which is rejected. `.await` yields `()` per plist.
+    ///
+    /// Given several plists, each is checked on its own by default, so one `.await` reports every
+    /// plist that failed, as [`Error::Batch`]. [`per_target(false)`](Codesign::per_target) runs one
+    /// `codesign` instead. Then the first plist `codesign` can't read stops the run, and the
+    /// plists after it go unchecked. The rejections of the plists before it can't be told apart:
+    /// the whole run fails with one [`CodesignError::ConstraintInvalid`].
+    ///
+    /// # Errors
+    ///
+    /// A constraint with an unknown key or an empty one fails with
+    /// [`CodesignError::ConstraintInvalid`]. A plist that is missing, or isn't a dictionary,
+    /// fails with [`CodesignError::Failed`], exit code 1. The checks made before `codesign`
+    /// starts are on [`Codesign`].
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn run() -> signers::Result<()> {
+    /// use signers::Codesign;
+    ///
+    /// Codesign::validate_constraint("launch-constraint.plist").await?;
+    /// # Ok(()) }
+    /// ```
+    ///
+    /// Check several plists and list the invalid ones:
+    ///
+    /// ```no_run
+    /// # async fn run() -> signers::Result<()> {
+    /// use signers::{Codesign, Error};
+    ///
+    /// match Codesign::validate_constraint(vec!["launch.plist", "library.plist"]).await {
+    ///     Ok(_) => {}
+    ///     Err(Error::Batch(failures)) => {
+    ///         for (path, error) in &failures {
+    ///             eprintln!("{}: {error}", path.display());
+    ///         }
+    ///     }
+    ///     Err(error) => return Err(error),
+    /// }
+    /// # Ok(()) }
+    /// ```
     pub fn validate_constraint<T: IntoTargets>(plist: T) -> Codesign<ValidateConstraint, T::Shape> {
         new(plist, ValidateConstraint)
     }
@@ -353,8 +399,8 @@ impl<A: Action, S: Multi> Codesign<A, S> {
     /// most [`available_parallelism`](std::thread::available_parallelism) processes run at a
     /// time. The default is `false` for [`sign`](Codesign::sign) and
     /// [`remove_signature`](Codesign::remove_signature), which change the targets in order, and
-    /// `true` for [`verify`](Codesign::verify) and [`display`](Codesign::display), which only
-    /// read them.
+    /// `true` for [`verify`](Codesign::verify), [`display`](Codesign::display) and
+    /// [`validate_constraint`](Codesign::validate_constraint), which only read them.
     ///
     /// Only a `Vec`, slice or array of targets has this setter, even with one element: that is
     /// the `S: Multi` bound. A single target always runs one `codesign`:

@@ -167,6 +167,16 @@ pub enum CodesignError {
     #[error("validly signed, but the requirement isn't satisfied: {}", diagnostics(.stderr))]
     RequirementUnsatisfied { stdout: String, stderr: String },
 
+    /// [`validate_constraint`](crate::Codesign::validate_constraint) found a constraint that
+    /// isn't valid.
+    ///
+    /// The plist has an unknown key or is empty. `stderr` holds the diagnostics `codesign`
+    /// printed on standard error and `stdout` what it printed on standard output, both trimmed.
+    /// Only `stderr` is part of the message.
+    ///
+    /// On macOS 27 `codesign` exits 0 and prints "Constraint validation failed" even for a valid
+    /// plist, so the exit code says nothing here. A plist is rejected only when `codesign` also
+    /// reports an error for it, and that report is what `stderr` keeps.
     #[error("invalid constraint: {}", diagnostics(.stderr))]
     ConstraintInvalid { stdout: String, stderr: String },
 }
