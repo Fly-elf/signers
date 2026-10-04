@@ -181,6 +181,9 @@ pub enum CodesignError {
     /// printed on standard output, both trimmed. Only `stderr` is part of the message.
     #[error("validly signed, but the requirement isn't satisfied: {}", diagnostics(.stderr))]
     RequirementUnsatisfied { stdout: String, stderr: String },
+
+    #[error("no signature: {}", diagnostics(.stderr))]
+    NoSignature { stdout: String, stderr: String },
 }
 
 /// A sealed resource that [`verify`](crate::Codesign::verify) found altered.
