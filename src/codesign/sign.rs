@@ -126,7 +126,8 @@ impl<S: Shape> Codesign<Sign, S> {
     /// (`--requirements`).
     ///
     /// The kinds of requirement you don't specify get `codesign`'s defaults. On the command line,
-    /// `-` reads from standard input. Here `codesign` gets no input, so `-` makes signing fail.
+    /// `-` reads from standard input. Here `codesign` gets no input, so `-` makes `.await` fail with
+    /// [`Error::StdioPath`](crate::Error::StdioPath) before anything runs.
     ///
     /// # Examples
     ///
@@ -360,7 +361,7 @@ impl<S: Shape> Codesign<Sign, S> {
     /// Any file not listed is unchanged. A listed file may be unchanged too.
     ///
     /// On the command line, `-` means standard output. Here the crate captures that output, so
-    /// `-` makes `.await` fail with [`Error::FileListToStdout`](crate::Error::FileListToStdout)
+    /// `-` makes `.await` fail with [`Error::StdioPath`](crate::Error::StdioPath)
     /// before anything runs. With [`per_target(true)`](Codesign::per_target) it fails with
     /// [`Error::SharedOutputPerTarget`](crate::Error::SharedOutputPerTarget), since every process
     /// would append to the same file.

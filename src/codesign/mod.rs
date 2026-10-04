@@ -79,7 +79,7 @@ pub use actions::SignatureSlot;
 ///
 /// `.await` stops at the first failure. Before starting `codesign` it checks, in this order:
 ///
-/// 1. that the options can be honoured, else e.g. [`Error::FileListToStdout`];
+/// 1. that the options can be honoured, else e.g. [`Error::StdioPath`];
 /// 2. with `per_target(true)`, that no option writes one shared file, else
 ///    [`Error::SharedOutputPerTarget`];
 /// 3. that there is a target at all, else [`Error::NoTargets`];
