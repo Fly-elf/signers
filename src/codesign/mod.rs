@@ -7,6 +7,7 @@ mod actions;
 pub mod display;
 pub mod extract_certificates;
 pub mod remove_signature;
+pub mod requirements;
 pub mod sign;
 pub mod verify;
 
@@ -22,6 +23,7 @@ use display::Display;
 use extract_certificates::ExtractCertificates;
 use futures_util::StreamExt;
 use remove_signature::RemoveSignature;
+use requirements::Requirements;
 use sign::Sign;
 use verify::Verify;
 
@@ -382,6 +384,10 @@ impl Codesign<()> {
         target: T,
     ) -> Codesign<ExtractCertificates, T::Shape> {
         new(target, ExtractCertificates::default())
+    }
+
+    pub fn internal_requirements<T: IntoTargets>(target: T) -> Codesign<Requirements, T::Shape> {
+        new(target, Requirements)
     }
 }
 
