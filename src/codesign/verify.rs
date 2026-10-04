@@ -4,8 +4,8 @@ use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 
-use super::actions::PushArgs;
 use super::actions::sealed::ToArgs;
+use super::actions::{PushArgs, SignatureSlot};
 use crate::codesign::Codesign;
 use crate::errors::{Change, CodesignError, Error, ResourceChange};
 use crate::target::Shape;
@@ -56,9 +56,16 @@ pub struct Verify {
     architecture: Option<String>,
     bundle_version: Option<String>,
     check_designated_requirement: bool,
-    test_requirement: Option<String>,
+    test_requirement: Option<TestRequirement>,
+    signature_slot: Option<SignatureSlot>,
     detached: Option<PathBuf>,
     check_notarization: bool,
+}
+
+#[derive(Debug, Clone)]
+enum TestRequirement {
+    Text(String),
+    File(PathBuf),
 }
 
 /// The extra restrictions that [`strict`](Codesign#method.strict) applies.
@@ -166,7 +173,26 @@ impl<S: Shape> Codesign<Verify, S> {
     /// # Ok(()) }
     /// ```
     pub fn test_requirement(mut self, requirement: impl Into<String>) -> Self {
-        self.action.test_requirement = Some(requirement.into());
+        self.action.test_requirement = Some(TestRequirement::Text(requirement.into()));
+        self
+    }
+
+    /// Requires the code to satisfy the requirement written in this file (`-R <path>`).
+    ///
+    /// Failures are the same as for [`test_requirement`](Codesign::test_requirement). It replaces
+    /// any earlier requirement, text or file. A path of `-` would read standard input, so it makes
+    /// `.await` fail with [`Error::StdioPath`] before anything runs.
+    pub fn test_requirement_file(mut self, path: impl Into<PathBuf>) -> Self {
+        self.action.test_requirement = Some(TestRequirement::File(path.into()));
+        self
+    }
+
+    /// Verifies this signature when the code carries two (`--signature-slot`).
+    ///
+    /// Without it `codesign` picks the slot itself. On code that carries only one signature,
+    /// [`Second`](SignatureSlot::Second) can fail as [`CodesignError::VerificationFailed`].
+    pub fn signature_slot(mut self, slot: SignatureSlot) -> Self {
+        self.action.signature_slot = Some(slot);
         self
     }
 
@@ -189,6 +215,15 @@ impl<S: Shape> Codesign<Verify, S> {
 impl ToArgs for Verify {
     type Output = ();
     const PER_TARGET: bool = true;
+
+    fn validate(&self) -> crate::errors::Result<()> {
+        match &self.test_requirement {
+            Some(TestRequirement::File(path)) if path.as_os_str() == "-" => {
+                Err(Error::StdioPath("test_requirement_file"))
+            }
+            _ => Ok(()),
+        }
+    }
 
     fn to_args<'a>(&'a self, targets: &'a [PathBuf]) -> Vec<Cow<'a, OsStr>> {
         let mut args: Vec<Cow<'a, OsStr>> = Vec::new();
@@ -217,9 +252,14 @@ impl ToArgs for Verify {
         if self.check_designated_requirement {
             args.flag("--verbose=1");
         }
-        if let Some(requirement) = &self.test_requirement {
+        match &self.test_requirement {
             // `-R` takes `=text` only in this single-argument form; a space would make it a file path.
-            args.built(format!("-R={requirement}"));
+            Some(TestRequirement::Text(text)) => args.built(format!("-R={text}")),
+            Some(TestRequirement::File(path)) => args.option("-R", path),
+            None => {}
+        }
+        if let Some(slot) = self.signature_slot {
+            args.option("--signature-slot", slot.as_str());
         }
         if let Some(path) = &self.detached {
             args.option("--detached", path);
@@ -323,6 +363,7 @@ mod tests {
             .check_notarization(true)
             .detached("app.sig")
             .test_requirement("anchor apple")
+            .signature_slot(SignatureSlot::Second)
             .check_designated_requirement(true)
             .bundle_version("A")
             .architecture("arm64")
@@ -342,6 +383,8 @@ mod tests {
                 "A",
                 "--verbose=1",
                 "-R=anchor apple",
+                "--signature-slot",
+                "2",
                 "--detached",
                 "app.sig",
                 "--check-notarization",
@@ -353,7 +396,7 @@ mod tests {
 
     #[test]
     fn each_option_renders_alone_in_its_own_form() {
-        let cases: [(Codesign<Verify>, &[&str]); 9] = [
+        let cases: [(Codesign<Verify>, &[&str]); 12] = [
             (Codesign::verify("app").deep(true), &["--deep"]),
             (Codesign::verify("app").strict(Strict::All), &["--strict"]),
             (
@@ -375,6 +418,18 @@ mod tests {
             (
                 Codesign::verify("app").test_requirement("anchor apple"),
                 &["-R=anchor apple"],
+            ),
+            (
+                Codesign::verify("app").test_requirement_file("req.txt"),
+                &["-R", "req.txt"],
+            ),
+            (
+                Codesign::verify("app").signature_slot(SignatureSlot::First),
+                &["--signature-slot", "1"],
+            ),
+            (
+                Codesign::verify("app").signature_slot(SignatureSlot::Second),
+                &["--signature-slot", "2"],
             ),
             (
                 Codesign::verify("app").detached("sig"),
@@ -433,6 +488,8 @@ mod tests {
             .bundle_version("B")
             .test_requirement("anchor apple")
             .test_requirement("anchor trusted")
+            .signature_slot(SignatureSlot::First)
+            .signature_slot(SignatureSlot::Second)
             .detached("one.sig")
             .detached("two.sig");
         assert_eq!(
@@ -445,6 +502,8 @@ mod tests {
                 "--bundle-version",
                 "B",
                 "-R=anchor trusted",
+                "--signature-slot",
+                "2",
                 "--detached",
                 "two.sig",
                 "--",
@@ -471,6 +530,110 @@ mod tests {
                 os(&["--verify", &format!("-R={text}"), "--", "app"]),
             );
         }
+    }
+
+    /// The requirement file is a path: two arguments, the path untouched.
+    #[test]
+    fn a_requirement_file_is_a_flag_and_its_path() {
+        for path in [
+            "req.txt",
+            "dir/my requirement.txt",
+            "=anchor apple",
+            "-R=x",
+            "--verify",
+            "-x",
+            "./-",
+            "héllo ✓.txt",
+        ] {
+            assert_eq!(
+                args_of(&Codesign::verify("app").test_requirement_file(path)),
+                os(&["--verify", "-R", path, "--", "app"]),
+                "{path}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_requirement_file_path_that_is_not_utf8_is_kept_byte_for_byte() {
+        use std::os::unix::ffi::OsStringExt;
+        let path = OsString::from_vec(b"req\xff\xfe.txt".to_vec());
+        let args = args_of(&Codesign::verify("app").test_requirement_file(&path));
+        assert_eq!(args[1], OsString::from("-R"));
+        assert_eq!(args[2], path);
+    }
+
+    #[test]
+    fn requirement_text_and_requirement_file_share_one_slot_and_the_last_call_wins() {
+        let text_then_file = Codesign::verify("app")
+            .test_requirement("anchor apple")
+            .test_requirement_file("req.txt");
+        assert_eq!(
+            args_of(&text_then_file),
+            os(&["--verify", "-R", "req.txt", "--", "app"])
+        );
+
+        let file_then_text = Codesign::verify("app")
+            .test_requirement_file("req.txt")
+            .test_requirement("anchor apple");
+        assert_eq!(
+            args_of(&file_then_text),
+            os(&["--verify", "-R=anchor apple", "--", "app"])
+        );
+
+        let file_twice = Codesign::verify("app")
+            .test_requirement_file("one.txt")
+            .test_requirement_file("two.txt");
+        assert_eq!(
+            args_of(&file_twice),
+            os(&["--verify", "-R", "two.txt", "--", "app"])
+        );
+    }
+
+    #[test]
+    fn a_requirement_file_of_stdin_fails_validation_and_names_its_setter() {
+        let action = Codesign::verify("app").test_requirement_file("-");
+        let error = action.action.validate().unwrap_err();
+        assert!(
+            matches!(error, Error::StdioPath("test_requirement_file")),
+            "got {error:?}"
+        );
+    }
+
+    /// A later text requirement replaces the refused file path, so nothing
+    /// is left that would read standard input.
+    #[test]
+    fn replacing_a_refused_requirement_file_makes_validation_pass() {
+        let action = Codesign::verify("app")
+            .test_requirement_file("-")
+            .test_requirement("anchor apple");
+        assert!(action.action.validate().is_ok());
+    }
+
+    /// Only the file setter reads `-` as stdin: as text it is requirement
+    /// source, and any other file name containing a dash is a plain path.
+    #[test]
+    fn requirements_other_than_a_lone_dash_file_pass_validation() {
+        assert!(
+            Codesign::verify("app")
+                .test_requirement("-")
+                .action
+                .validate()
+                .is_ok()
+        );
+        for path in ["=-", "-x", "--", "./-", "-/req", " -", "- ", ""] {
+            let action = Codesign::verify("app").test_requirement_file(path);
+            assert!(action.action.validate().is_ok(), "{path:?}");
+        }
+        assert!(Codesign::verify("app").action.validate().is_ok());
+    }
+
+    #[test]
+    fn a_dash_in_any_other_verify_option_passes_validation() {
+        let action = Codesign::verify("app")
+            .detached("-")
+            .architecture("-")
+            .bundle_version("-");
+        assert!(action.action.validate().is_ok());
     }
 
     #[test]
