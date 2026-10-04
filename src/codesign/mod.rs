@@ -567,7 +567,7 @@ mod tests {
 
         fn validate(&self) -> Result<()> {
             if self.invalid {
-                Err(Error::FileListToStdout)
+                Err(Error::StdioPath("probe"))
             } else {
                 Ok(())
             }
@@ -600,7 +600,7 @@ mod tests {
             stderr: String,
         ) -> Result<Vec<String>> {
             if self.unreadable {
-                return Err(Error::FileListToStdout);
+                return Err(Error::StdioPath("probe"));
             }
             let mut outputs: Vec<String> = stderr.lines().map(str::to_owned).collect();
             if self.drop_last_output {
@@ -807,14 +807,17 @@ mod tests {
         };
 
         let single = new(SIGNED[0], unreadable.clone()).await.unwrap_err();
-        assert!(matches!(single, Error::FileListToStdout), "got {single:?}");
+        assert!(
+            matches!(single, Error::StdioPath("probe")),
+            "got {single:?}"
+        );
 
         let one_process = new(SIGNED.to_vec(), unreadable.clone())
             .per_target(false)
             .await
             .unwrap_err();
         assert!(
-            matches!(one_process, Error::FileListToStdout),
+            matches!(one_process, Error::StdioPath("probe")),
             "got {one_process:?}"
         );
 
@@ -825,7 +828,7 @@ mod tests {
         let failed: Vec<PathBuf> = failures
             .into_iter()
             .map(|(path, error)| {
-                assert!(matches!(error, Error::FileListToStdout), "got {error:?}");
+                assert!(matches!(error, Error::StdioPath("probe")), "got {error:?}");
                 path
             })
             .collect();
@@ -862,7 +865,7 @@ mod tests {
             ..sharing
         };
         let error = new(SIGNED.to_vec(), invalid).await.unwrap_err();
-        assert!(matches!(error, Error::FileListToStdout), "got {error:?}");
+        assert!(matches!(error, Error::StdioPath("probe")), "got {error:?}");
     }
 
     /// One target is one process, so there is no second process to
@@ -882,7 +885,7 @@ mod tests {
             ..sharing
         };
         let error = new(SIGNED[0], invalid).await.unwrap_err();
-        assert!(matches!(error, Error::FileListToStdout), "got {error:?}");
+        assert!(matches!(error, Error::StdioPath("probe")), "got {error:?}");
     }
 
     /// `A::PER_TARGET` is true for the probe, yet a single target never
