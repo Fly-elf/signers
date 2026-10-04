@@ -5,6 +5,7 @@
 
 mod actions;
 pub mod display;
+pub mod extract_certificates;
 pub mod remove_signature;
 pub mod sign;
 pub mod verify;
@@ -18,6 +19,7 @@ use std::pin::Pin;
 use std::process::Stdio;
 
 use display::Display;
+use extract_certificates::ExtractCertificates;
 use futures_util::StreamExt;
 use remove_signature::RemoveSignature;
 use sign::Sign;
@@ -40,7 +42,9 @@ pub use actions::SignatureSlot;
 /// one [`Output`](Action) for a single path, a `Vec` of them for a `Vec` or slice, an array of
 /// them for an array. For [`sign`](Codesign::sign), [`remove_signature`](Codesign::remove_signature)
 /// and [`verify`](Codesign::verify) the output is `()`; for [`display`](Codesign::display) it is
-/// a [`Signature`](display::Signature).
+/// a [`Signature`](display::Signature); for
+/// [`extract_certificates`](Codesign::extract_certificates) it is a `Vec` of
+/// [`Certificate`](extract_certificates::Certificate).
 ///
 /// In the signatures, `S`, its default `One` and `S::Out` stand for that shape. They are
 /// internal, so let type inference fill them in; `Codesign<Sign>` is the builder for a single
@@ -57,6 +61,7 @@ pub use actions::SignatureSlot;
 /// `codesign` runs once over all the targets, unless [`per_target`](Codesign::per_target) runs it
 /// once per target. That is the default for [`verify`](Codesign::verify) and
 /// [`display`](Codesign::display) on a collection.
+/// [`extract_certificates`](Codesign::extract_certificates) always runs one per target.
 ///
 /// # Examples
 ///
@@ -79,7 +84,9 @@ pub use actions::SignatureSlot;
 ///
 /// `.await` stops at the first failure. Before starting `codesign` it checks, in this order:
 ///
-/// 1. that the options can be honoured, else e.g. [`Error::FileListToStdout`];
+/// 1. that the options can be honoured, else e.g. [`Error::FileListToStdout`], or
+///    [`Error::Io`] if [`extract_certificates`](Codesign::extract_certificates) can't use the
+///    system's temporary directory;
 /// 2. with `per_target(true)`, that no option writes one shared file, else
 ///    [`Error::SharedOutputPerTarget`];
 /// 3. that there is a target at all, else [`Error::NoTargets`];
@@ -337,10 +344,49 @@ impl Codesign<()> {
     pub fn display<T: IntoTargets>(target: T) -> Codesign<Display, T::Shape> {
         new(target, Display::default())
     }
+
+    /// Reads the certificate chain that signed `target`, leaf first (`--extract-certificates`).
+    ///
+    /// `.await` yields one `Vec` of [`Certificate`](extract_certificates::Certificate) per target,
+    /// the signing certificate first and the root last. A target signed ad hoc has none, so its
+    /// `Vec` is empty. [`save_to`](Codesign::save_to) also writes the chains to PEM files.
+    ///
+    /// Given several targets, each is read on its own, concurrently, and every one that failed is
+    /// reported together as [`Error::Batch`]. One `codesign` over several targets would write
+    /// every chain to the same files, so this action always runs one per target and has no
+    /// [`per_target`](Codesign::per_target) setter:
+    ///
+    /// ```compile_fail,E0599
+    /// signers::Codesign::extract_certificates(vec!["a"]).per_target(false);
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// An unsigned target fails with [`CodesignError::Failed`], exit code 1. A file that can't be
+    /// read or written fails with [`Error::Io`], also when the system's temporary directory can't
+    /// be used. The checks made before `codesign` starts are on [`Codesign`].
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn run() -> signers::Result<()> {
+    /// use signers::Codesign;
+    ///
+    /// let chains = Codesign::extract_certificates(vec!["A.app", "B.app"]).await?;
+    /// for chain in &chains {
+    ///     println!("{} certificates", chain.len());
+    /// }
+    /// # Ok(()) }
+    /// ```
+    pub fn extract_certificates<T: IntoTargets>(
+        target: T,
+    ) -> Codesign<ExtractCertificates, T::Shape> {
+        new(target, ExtractCertificates::default())
+    }
 }
 
 /// Options for a `Vec`, slice or array of targets.
-impl<A: Action, S: Multi> Codesign<A, S> {
+impl<A: Action + actions::sealed::SharedRun, S: Multi> Codesign<A, S> {
     /// Runs one `codesign` per target, concurrently, instead of one for all of them.
     ///
     /// One process stops at the first target it rejects and reports that one only. Per target,
@@ -357,6 +403,9 @@ impl<A: Action, S: Multi> Codesign<A, S> {
     /// ```compile_fail,E0599
     /// signers::Codesign::sign("a", "-").per_target(true);
     /// ```
+    ///
+    /// [`extract_certificates`](Codesign::extract_certificates) has no such setter either: it
+    /// always runs one `codesign` per target.
     ///
     /// An option that writes one shared file, [`file_list`](Codesign::file_list) or
     /// [`detached`](Codesign::detached), makes `.await` fail with
@@ -560,6 +609,8 @@ mod tests {
         unreadable: bool,
         file_list: bool,
     }
+
+    impl super::actions::sealed::SharedRun for Probe {}
 
     impl ToArgs for Probe {
         type Output = String;
