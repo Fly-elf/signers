@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- The wrapper `codesign -d` dumps a constraint in (`ccat`/`comp`/`reqs`/`vers`),
+     not the bare constraint dict the validator reads: rejected. -->
+<plist version="1.0">
+<dict>
+	<key>ccat</key>
+	<integer>1</integer>
+	<key>comp</key>
+	<dict>
+		<key>team-identifier</key>
+		<string>ABCDE12345</string>
+	</dict>
+	<key>reqs</key>
+	<dict/>
+	<key>vers</key>
+	<integer>1</integer>
+</dict>
+</plist>

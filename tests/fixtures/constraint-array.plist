@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- A well-formed plist whose top level is not a dict: cannot be read as a
+     constraint at all. -->
+<plist version="1.0">
+<array>
+	<string>team-identifier</string>
+</array>
+</plist>
