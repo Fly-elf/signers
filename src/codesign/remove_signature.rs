@@ -68,8 +68,8 @@ impl ToArgs for RemoveSignature {
     fn output(
         &self,
         targets: &[PathBuf],
-        _stdout: Vec<u8>,
-        _stderr: Vec<u8>,
+        _stdout: String,
+        _stderr: String,
     ) -> crate::errors::Result<Vec<()>> {
         Ok(vec![(); targets.len()])
     }
@@ -154,13 +154,15 @@ mod tests {
         let action = Codesign::remove_signature("app").action;
         let targets = [PathBuf::from("a"), PathBuf::from("b"), PathBuf::from("c")];
 
-        let silent: Vec<()> = action.output(&targets, Vec::new(), Vec::new()).unwrap();
+        let silent: Vec<()> = action
+            .output(&targets, String::new(), String::new())
+            .unwrap();
         assert_eq!(silent.len(), 3);
 
-        let noisy = action.output(&targets[..1], b"noise".to_vec(), vec![0xff, 0xfe]);
+        let noisy = action.output_bytes(&targets[..1], b"noise".to_vec(), vec![0xff, 0xfe]);
         assert_eq!(noisy.unwrap().len(), 1);
 
-        let none = action.output(&[], b"noise".to_vec(), Vec::new());
+        let none = action.output(&[], "noise".into(), String::new());
         assert_eq!(none.unwrap().len(), 0);
     }
 
@@ -205,9 +207,11 @@ mod tests {
             ) {
                 crate::errors::Error::Codesign(crate::errors::CodesignError::Failed {
                     code: reported,
+                    stdout,
                     stderr,
                 }) => {
                     assert_eq!(reported, code);
+                    assert_eq!(stdout, "file modified: /x");
                     assert_eq!(stderr, "app: bundle format unrecognized");
                 }
                 other => panic!("expected Failed, got {other:?}"),

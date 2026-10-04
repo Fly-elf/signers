@@ -235,20 +235,28 @@ impl ToArgs for Verify {
     fn output(
         &self,
         targets: &[PathBuf],
-        _stdout: Vec<u8>,
-        _stderr: Vec<u8>,
+        _stdout: String,
+        _stderr: String,
     ) -> crate::errors::Result<Vec<()>> {
         Ok(vec![(); targets.len()])
     }
 
     fn failure(&self, code: i32, stdout: String, stderr: String) -> Error {
         match code {
-            1 => CodesignError::VerificationFailed {
+            1 => {
+                let resources = resource_changes(&stdout);
+                CodesignError::VerificationFailed {
+                    stdout,
+                    stderr,
+                    resources,
+                }
+            }
+            3 => CodesignError::RequirementUnsatisfied { stdout, stderr },
+            _ => CodesignError::Failed {
+                code,
+                stdout,
                 stderr,
-                resources: resource_changes(&stdout),
             },
-            3 => CodesignError::RequirementUnsatisfied { stderr },
-            _ => CodesignError::Failed { code, stderr },
         }
         .into()
     }
@@ -295,7 +303,7 @@ mod tests {
 
     fn code_of(error: Error) -> Option<(i32, String)> {
         match error {
-            Error::Codesign(CodesignError::Failed { code, stderr }) => Some((code, stderr)),
+            Error::Codesign(CodesignError::Failed { code, stderr, .. }) => Some((code, stderr)),
             _ => None,
         }
     }
@@ -520,14 +528,16 @@ mod tests {
         let targets = [PathBuf::from("a"), PathBuf::from("b"), PathBuf::from("c")];
 
         assert_eq!(
-            action.output(&targets, Vec::new(), Vec::new()).unwrap(),
+            action
+                .output(&targets, String::new(), String::new())
+                .unwrap(),
             [(), (), ()]
         );
-        let noisy = action.output(&targets[..1], b"noise".to_vec(), vec![0xff, 0xfe]);
+        let noisy = action.output_bytes(&targets[..1], b"noise".to_vec(), vec![0xff, 0xfe]);
         assert_eq!(noisy.unwrap(), [()]);
         assert!(
             action
-                .output(&[], Vec::new(), Vec::new())
+                .output(&[], String::new(), String::new())
                 .unwrap()
                 .is_empty()
         );
@@ -555,7 +565,12 @@ mod tests {
     fn exit_one_means_the_signature_did_not_verify() {
         let action = Codesign::verify("app").action;
         match action.failure(1, String::new(), "app: invalid signature".into()) {
-            Error::Codesign(CodesignError::VerificationFailed { stderr, resources }) => {
+            Error::Codesign(CodesignError::VerificationFailed {
+                stdout,
+                stderr,
+                resources,
+            }) => {
+                assert_eq!(stdout, "");
                 assert_eq!(stderr, "app: invalid signature");
                 assert!(resources.is_empty());
             }
@@ -572,7 +587,15 @@ mod tests {
             stdout,
             "app: a sealed resource is missing or invalid".into(),
         ) {
-            Error::Codesign(CodesignError::VerificationFailed { stderr, resources }) => {
+            Error::Codesign(CodesignError::VerificationFailed {
+                stdout,
+                stderr,
+                resources,
+            }) => {
+                assert_eq!(
+                    stdout,
+                    "file modified: /x/app/r.txt\nfile added: /x/app/new.txt"
+                );
                 assert_eq!(stderr, "app: a sealed resource is missing or invalid");
                 assert_eq!(
                     pairs(&resources),
@@ -587,12 +610,13 @@ mod tests {
     }
 
     #[test]
-    fn exit_three_ignores_stdout() {
+    fn exit_three_keeps_stdout_without_reading_resources() {
         let action = Codesign::verify("app").action;
         let error = action.failure(3, "file modified: /x".into(), "no".into());
         assert!(matches!(
             error,
-            Error::Codesign(CodesignError::RequirementUnsatisfied { ref stderr }) if stderr == "no"
+            Error::Codesign(CodesignError::RequirementUnsatisfied { ref stdout, ref stderr })
+                if stdout == "file modified: /x" && stderr == "no"
         ));
     }
 
@@ -678,8 +702,9 @@ mod tests {
     #[test]
     fn exit_three_means_the_requirement_was_not_satisfied() {
         let action = Codesign::verify("app").action;
-        match action.failure(3, String::new(), "test-requirement: failed".into()) {
-            Error::Codesign(CodesignError::RequirementUnsatisfied { stderr }) => {
+        match action.failure(3, "file /x: ok".into(), "test-requirement: failed".into()) {
+            Error::Codesign(CodesignError::RequirementUnsatisfied { stdout, stderr }) => {
+                assert_eq!(stdout, "file /x: ok");
                 assert_eq!(stderr, "test-requirement: failed");
             }
             other => panic!("got {other:?}"),
