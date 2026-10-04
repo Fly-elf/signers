@@ -371,6 +371,8 @@ impl<S: Shape> Codesign<Sign, S> {
     }
 }
 
+impl super::actions::sealed::SharedRun for Sign {}
+
 impl ToArgs for Sign {
     type Output = ();
     const PER_TARGET: bool = false;

@@ -212,6 +212,8 @@ impl<S: Shape> Codesign<Verify, S> {
     }
 }
 
+impl super::actions::sealed::SharedRun for Verify {}
+
 impl ToArgs for Verify {
     type Output = ();
     const PER_TARGET: bool = true;
