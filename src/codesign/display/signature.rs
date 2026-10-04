@@ -10,7 +10,7 @@ use crate::errors::{CodesignError, Error, Result};
 ///
 /// Each field comes from a line of the report; fields that are `Option` or empty are for lines
 /// `codesign` prints only for some signatures. Nothing is lost to the typed view: [`raw`] returns
-/// the report as printed and [`field`] looks up any line, mapped or not. A line this crate doesn't
+/// the report as printed, minus trailing whitespace, and [`field`] looks up any line, mapped or not. A line this crate doesn't
 /// know is ignored.
 ///
 /// The type is `#[non_exhaustive]`, so a later version can add fields. Read it, don't build it.
@@ -129,7 +129,9 @@ pub struct Signature {
 }
 
 impl Signature {
-    /// Returns this target's report, as `codesign` printed it.
+    /// Returns this target's report, as `codesign` printed it, minus trailing whitespace.
+    ///
+    /// It is the same in every run mode, whether the target ran alone or with others.
     pub fn raw(&self) -> &str {
         &self.raw
     }

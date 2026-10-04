@@ -225,9 +225,9 @@ impl Codesign<()> {
 
     /// Checks the signature of `target` (`--verify`), changing nothing.
     ///
-    /// `.await` yields `()` per target when every one verifies. Without options it checks that the signature is intact and covers the code. Whether the
-    /// system would run the code is a different question: verified code can still be refused by
-    /// Gatekeeper.
+    /// `.await` yields `()` per target when every one verifies. Without options it checks that
+    /// the signature is intact and covers the code. Whether the system would run the code is a
+    /// different question: verified code can still be refused by Gatekeeper.
     ///
     /// Given several targets, each is verified on its own by default, so one `.await` reports
     /// every target that failed, as [`Error::Batch`]. [`per_target(false)`](Codesign::per_target)
