@@ -7,6 +7,7 @@ mod actions;
 pub mod display;
 pub mod remove_signature;
 pub mod sign;
+pub mod validate_constraint;
 pub mod verify;
 
 use std::future::{Future, IntoFuture};
@@ -21,6 +22,7 @@ use display::Display;
 use futures_util::StreamExt;
 use remove_signature::RemoveSignature;
 use sign::Sign;
+use validate_constraint::ValidateConstraint;
 use verify::Verify;
 
 use crate::errors::{CodesignError, Error, Result};
@@ -335,6 +337,10 @@ impl Codesign<()> {
     /// ```
     pub fn display<T: IntoTargets>(target: T) -> Codesign<Display, T::Shape> {
         new(target, Display::default())
+    }
+
+    pub fn validate_constraint<T: IntoTargets>(plist: T) -> Codesign<ValidateConstraint, T::Shape> {
+        new(plist, ValidateConstraint)
     }
 }
 
