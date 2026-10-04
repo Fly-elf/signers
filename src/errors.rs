@@ -53,6 +53,12 @@ pub enum Error {
         source: std::io::Error,
     },
 
+    #[error("I/O error on {path}: {source}")]
+    Io {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+
     /// [`file_list`](crate::Codesign::file_list) was `-`, but the crate captures standard output,
     /// so the list would be lost.
     #[error("file_list(\"-\") is not supported: pass a path instead of standard output")]

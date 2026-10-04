@@ -5,6 +5,7 @@
 
 mod actions;
 pub mod display;
+pub mod extract_certificates;
 pub mod remove_signature;
 pub mod sign;
 pub mod verify;
@@ -18,6 +19,7 @@ use std::pin::Pin;
 use std::process::Stdio;
 
 use display::Display;
+use extract_certificates::ExtractCertificates;
 use futures_util::StreamExt;
 use remove_signature::RemoveSignature;
 use sign::Sign;
@@ -336,10 +338,16 @@ impl Codesign<()> {
     pub fn display<T: IntoTargets>(target: T) -> Codesign<Display, T::Shape> {
         new(target, Display::default())
     }
+
+    pub fn extract_certificates<T: IntoTargets>(
+        target: T,
+    ) -> Codesign<ExtractCertificates, T::Shape> {
+        new(target, ExtractCertificates::default())
+    }
 }
 
 /// Options for a `Vec`, slice or array of targets.
-impl<A: Action, S: Multi> Codesign<A, S> {
+impl<A: Action + actions::sealed::SharedRun, S: Multi> Codesign<A, S> {
     /// Runs one `codesign` per target, concurrently, instead of one for all of them.
     ///
     /// One process stops at the first target it rejects and reports that one only. Per target,

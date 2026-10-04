@@ -91,6 +91,8 @@ impl<S: Shape> Codesign<Display, S> {
     }
 }
 
+impl super::actions::sealed::SharedRun for Display {}
+
 impl ToArgs for Display {
     type Output = Signature;
     const PER_TARGET: bool = true;
