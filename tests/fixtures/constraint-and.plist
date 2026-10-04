@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Facts combined with `$and`: valid. -->
+<plist version="1.0">
+<dict>
+	<key>$and</key>
+	<dict>
+		<key>team-identifier</key>
+		<string>ABCDE12345</string>
+		<key>signing-identifier</key>
+		<string>com.example.constrained</string>
+	</dict>
+</dict>
+</plist>

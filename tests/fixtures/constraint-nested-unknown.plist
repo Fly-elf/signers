@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- An unknown key nested under `$or`: rejected, naming the whole path. -->
+<plist version="1.0">
+<dict>
+	<key>$or</key>
+	<dict>
+		<key>team-identifier</key>
+		<string>ABCDE12345</string>
+		<key>bogus-key-xyz</key>
+		<true/>
+	</dict>
+</dict>
+</plist>
