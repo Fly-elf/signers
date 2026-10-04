@@ -185,7 +185,7 @@ fn reports(stderr: &str) -> Vec<&str> {
     starts.push(stderr.len());
     starts
         .windows(2)
-        .map(|bounds| &stderr[bounds[0]..bounds[1]])
+        .map(|bounds| stderr[bounds[0]..bounds[1]].trim_end())
         .collect()
 }
 
