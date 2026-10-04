@@ -4,8 +4,8 @@ use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 
-use super::actions::PushArgs;
 use super::actions::sealed::ToArgs;
+use super::actions::{PushArgs, SignatureSlot};
 use crate::codesign::Codesign;
 use crate::errors::{CodesignError, Result};
 use crate::target::Shape;
@@ -52,6 +52,7 @@ pub struct Display {
     bundle_version: Option<String>,
     deep: bool,
     detached: Option<PathBuf>,
+    signature_slot: Option<SignatureSlot>,
 }
 
 /// Options for [`display`](Codesign::display).
@@ -89,6 +90,15 @@ impl<S: Shape> Codesign<Display, S> {
         self.action.detached = Some(path.into());
         self
     }
+
+    /// Reads this signature when the code carries two (`--signature-slot`).
+    ///
+    /// Code with one signature has only [`SignatureSlot::First`]. Asking for the second fails with
+    /// [`CodesignError::NoSignature`].
+    pub fn signature_slot(mut self, slot: SignatureSlot) -> Self {
+        self.action.signature_slot = Some(slot);
+        self
+    }
 }
 
 impl super::actions::sealed::SharedRun for Display {}
@@ -114,6 +124,9 @@ impl ToArgs for Display {
         }
         if let Some(detached) = &self.detached {
             args.option("--detached", detached);
+        }
+        if let Some(slot) = self.signature_slot {
+            args.option("--signature-slot", slot.as_str());
         }
 
         // Over several targets `codesign` prints one plist per target that
@@ -141,6 +154,15 @@ impl ToArgs for Display {
                 detail: format!("{} reports for {} targets", reports.len(), targets.len()),
             }
             .into());
+        }
+
+        // `--signature-slot` past the last signature exits 0 and prints
+        // `<path>: no signature` in place of the `Signature=` line.
+        if reports.iter().any(|report| {
+            !report.lines().any(|line| line.starts_with("Signature="))
+                && report.lines().any(|line| line.ends_with(": no signature"))
+        }) {
+            return Err(CodesignError::NoSignature { stdout, stderr }.into());
         }
 
         let mut signatures = reports
@@ -277,7 +299,8 @@ Chosen signature=1
             .architecture("x86_64")
             .bundle_version("B")
             .deep(true)
-            .detached("app.sig");
+            .detached("app.sig")
+            .signature_slot(SignatureSlot::Second);
 
         assert_eq!(
             args_of(&builder),
@@ -291,6 +314,8 @@ Chosen signature=1
                 "--deep",
                 "--detached",
                 "app.sig",
+                "--signature-slot",
+                "2",
                 "--entitlements",
                 "-",
                 "--xml",
@@ -310,7 +335,9 @@ Chosen signature=1
             .deep(true)
             .deep(false)
             .detached("first.sig")
-            .detached("second.sig");
+            .detached("second.sig")
+            .signature_slot(SignatureSlot::Second)
+            .signature_slot(SignatureSlot::First);
 
         assert_eq!(
             args_of(&builder),
@@ -323,6 +350,8 @@ Chosen signature=1
                 "B",
                 "--detached",
                 "second.sig",
+                "--signature-slot",
+                "1",
                 "--",
                 "a",
                 "b",
@@ -567,5 +596,98 @@ Chosen signature=1
             .unwrap();
 
         assert_eq!(signatures[0].executable, PathBuf::from("/x/caf\u{FFFD}"));
+    }
+
+    fn without_signature(executable: &str) -> String {
+        report(executable, "first").replace(
+            "Signature=adhoc\n",
+            &format!("{executable}: no signature\n"),
+        )
+    }
+
+    fn no_signature(result: Result<Vec<Signature>>) -> (String, String) {
+        match result {
+            Err(crate::Error::Codesign(CodesignError::NoSignature { stdout, stderr })) => {
+                (stdout, stderr)
+            }
+            other => panic!("expected NoSignature, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_report_that_says_no_signature_in_place_of_the_signature_line_is_no_signature() {
+        let stderr = without_signature("/x/a");
+
+        let (out, err) = no_signature(Display::default().output(
+            &paths(&["a"]),
+            ENTITLEMENTS.to_owned(),
+            stderr.clone(),
+        ));
+
+        assert_eq!(out, ENTITLEMENTS);
+        assert_eq!(err, stderr);
+    }
+
+    #[test]
+    fn one_target_without_a_signature_fails_the_whole_run_with_both_streams() {
+        let stderr = format!("{}{}", report("/x/a", "first"), without_signature("/x/b"));
+
+        let (out, err) = no_signature(Display::default().output(
+            &paths(&["a", "b"]),
+            "out".to_owned(),
+            stderr.clone(),
+        ));
+
+        assert_eq!(out, "out");
+        assert_eq!(err, stderr);
+    }
+
+    #[test]
+    fn a_missing_signature_line_without_the_no_signature_note_is_unexpected_output() {
+        let stderr = report("/x/a", "first").replace("Signature=adhoc\n", "");
+
+        let detail =
+            unexpected_output(Display::default().output(&paths(&["a"]), String::new(), stderr));
+
+        assert!(detail.contains("Signature"), "{detail}");
+    }
+
+    #[test]
+    fn the_no_signature_note_beside_a_signature_line_is_not_an_error() {
+        let stderr = report("/x/a", "first").replace(
+            "Info.plist=not bound\n",
+            "/x/a: no signature\nInfo.plist=not bound\n",
+        );
+
+        let signatures = Display::default()
+            .output(&paths(&["a"]), String::new(), stderr)
+            .unwrap();
+
+        assert_eq!(signatures[0].signature, SignatureKind::AdHoc);
+    }
+
+    #[test]
+    fn a_line_that_only_mentions_no_signature_is_not_the_note() {
+        let stderr = report("/x/a", "first").replace("Signature=adhoc\n", "no signature at all\n");
+
+        unexpected_output(Display::default().output(&paths(&["a"]), String::new(), stderr));
+    }
+
+    #[test]
+    fn the_signature_slot_renders_one_or_two() {
+        for (slot, number) in [(SignatureSlot::First, "1"), (SignatureSlot::Second, "2")] {
+            assert_eq!(
+                args_of(&Codesign::display(vec!["a", "b"]).signature_slot(slot)),
+                os(&[
+                    "--display",
+                    "--verbose=4",
+                    "--signature-slot",
+                    number,
+                    "--",
+                    "a",
+                    "b"
+                ])
+            );
+        }
     }
 }
