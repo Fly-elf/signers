@@ -1,5 +1,3 @@
-//! The requirements action and the [`Requirement`]s it returns (`--display -r-`).
-
 use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;
@@ -22,7 +20,7 @@ use crate::errors::Result;
 /// ```no_run
 /// # async fn run() -> signers::Result<()> {
 /// use signers::Codesign;
-/// use signers::codesign::requirements::RequirementKind;
+/// use signers::codesign::RequirementKind;
 ///
 /// let requirements = Codesign::internal_requirements("MyApp.app").await?;
 /// for requirement in &requirements {

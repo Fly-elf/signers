@@ -1,5 +1,3 @@
-//! The constraint-validation action (`--validate-constraint`).
-
 use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;

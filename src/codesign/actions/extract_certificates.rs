@@ -1,5 +1,3 @@
-//! The certificate-extraction action and the [`Certificate`] it returns (`--extract-certificates`).
-
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};

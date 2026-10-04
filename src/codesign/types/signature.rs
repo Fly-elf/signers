@@ -20,8 +20,8 @@ use crate::errors::{CodesignError, Error, Result};
 /// ```no_run
 /// # async fn run() -> signers::Result<()> {
 /// use signers::Codesign;
-/// use signers::codesign::display::SignatureKind;
-/// use signers::codesign::sign::SigningFlags;
+/// use signers::codesign::SignatureKind;
+/// use signers::codesign::SigningFlags;
 ///
 /// let signature = Codesign::display("MyApp.app").await?;
 ///
@@ -377,6 +377,8 @@ pub struct SealedResources {
 }
 
 /// How many requirements a signature embeds, and their size (`Internal requirements`).
+///
+/// [`InternalRequirements`](crate::codesign::InternalRequirements) reads the requirements themselves.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RequirementsSummary {
@@ -396,7 +398,7 @@ bitflags! {
     /// ```no_run
     /// # async fn run() -> signers::Result<()> {
     /// use signers::Codesign;
-    /// use signers::codesign::display::Constraints;
+    /// use signers::codesign::Constraints;
     ///
     /// let signature = Codesign::display("MyApp.app").await?;
     /// if signature.constraints.contains(Constraints::LAUNCH_SELF) {

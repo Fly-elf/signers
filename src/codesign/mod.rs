@@ -45,11 +45,11 @@ pub use types::{
 /// one [`Output`](Action) for a single path, a `Vec` of them for a `Vec` or slice, an array of
 /// them for an array. For [`sign`](Codesign::sign), [`remove_signature`](Codesign::remove_signature)
 /// and [`verify`](Codesign::verify) the output is `()`; for [`display`](Codesign::display) it is
-/// a [`Signature`](display::Signature); for
+/// a [`Signature`]; for
 /// [`extract_certificates`](Codesign::extract_certificates) it is a `Vec` of
-/// [`Certificate`](extract_certificates::Certificate); for
+/// [`Certificate`]; for
 /// [`internal_requirements`](Codesign::internal_requirements) it is a `Vec` of
-/// [`Requirement`](requirements::Requirement).
+/// [`Requirement`].
 ///
 /// In the signatures, `S`, its default `One` and `S::Out` stand for that shape. They are
 /// internal, so let type inference fill them in; `Codesign<Sign>` is the builder for a single
@@ -76,7 +76,7 @@ pub use types::{
 /// ```no_run
 /// # async fn run(hardened: bool) -> signers::Result<()> {
 /// use signers::Codesign;
-/// use signers::codesign::sign::SigningFlags;
+/// use signers::codesign::SigningFlags;
 ///
 /// let mut signing = Codesign::sign_adhoc("mytool").identifier("com.example.mytool");
 /// if hardened {
@@ -200,7 +200,7 @@ impl Codesign<()> {
     /// ```no_run
     /// # async fn run() -> signers::Result<()> {
     /// use signers::Codesign;
-    /// use signers::codesign::sign::SigningFlags;
+    /// use signers::codesign::SigningFlags;
     ///
     /// Codesign::sign_for_distribution("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
     ///     .entitlements("MyApp.entitlements")
@@ -284,19 +284,19 @@ impl Codesign<()> {
         new(target, Verify::default())
     }
 
-    /// Reads the signature of `target` as a [`Signature`](display::Signature) (`--display`),
+    /// Reads the signature of `target` as a [`Signature`] (`--display`),
     /// changing nothing.
     ///
-    /// `.await` yields one [`Signature`](display::Signature) per target: identifier, signing
+    /// `.await` yields one [`Signature`] per target: identifier, signing
     /// flags, hashes, the certificate chain, entitlements and more.
-    /// [`Signature::raw`](display::Signature::raw) and
-    /// [`Signature::field`](display::Signature::field) reach whatever the typed fields don't.
+    /// [`Signature::raw`](Signature::raw) and
+    /// [`Signature::field`](Signature::field) reach whatever the typed fields don't.
     ///
     /// Given several targets, each is read on its own by default, so one `.await` reports every
     /// target that failed, as [`Error::Batch`]. The signatures of the targets that did read are
     /// dropped with it. [`per_target(false)`](Codesign::per_target) runs one `codesign` instead:
     /// it stops at the first target it rejects, and the entitlements of every target stay
-    /// [`None`](display::Signature#structfield.entitlements).
+    /// [`None`](Signature#structfield.entitlements).
     ///
     /// # Errors
     ///
@@ -312,7 +312,7 @@ impl Codesign<()> {
     /// ```no_run
     /// # async fn run() -> signers::Result<()> {
     /// use signers::Codesign;
-    /// use signers::codesign::display::SignatureKind;
+    /// use signers::codesign::SignatureKind;
     ///
     /// let signature = Codesign::display("MyApp.app").await?;
     /// if signature.signature == SignatureKind::AdHoc {
@@ -404,7 +404,7 @@ impl Codesign<()> {
 
     /// Reads the certificate chain that signed `target`, leaf first (`--extract-certificates`).
     ///
-    /// `.await` yields one `Vec` of [`Certificate`](extract_certificates::Certificate) per target,
+    /// `.await` yields one `Vec` of [`Certificate`] per target,
     /// the signing certificate first and the root last. A target signed ad hoc has none, so its
     /// `Vec` is empty. [`save_to`](Codesign::save_to) also writes the chains to PEM files.
     ///
@@ -443,12 +443,12 @@ impl Codesign<()> {
 
     /// Reads the requirements of the signature of `target` (`--display -r-`).
     ///
-    /// `.await` yields one `Vec` of [`Requirement`](requirements::Requirement) per target, in the order `codesign` keeps the requirements, which
+    /// `.await` yields one `Vec` of [`Requirement`] per target, in the order `codesign` keeps the requirements, which
     /// is not the order given to [`requirements`](Codesign::requirements) when signing. A
     /// requirement the signature doesn't embed, but the system supplies, is marked
-    /// [`implicit`](requirements::Requirement#structfield.implicit). The `Vec` is empty when
+    /// [`implicit`](Requirement#structfield.implicit). The `Vec` is empty when
     /// `codesign` prints none. [`display`](Codesign::display) reports only how many
-    /// requirements there are, in [`Signature::internal_requirements`](display::Signature#structfield.internal_requirements).
+    /// requirements there are, in [`Signature::internal_requirements`](Signature#structfield.internal_requirements).
     ///
     /// Given several targets, each is read on its own, concurrently, and every one that failed is
     /// reported together as [`Error::Batch`]. `codesign` prints the requirements of all targets

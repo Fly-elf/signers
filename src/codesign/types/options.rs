@@ -21,7 +21,7 @@ impl SignatureSlot {
     }
 }
 
-/// Where [`timestamp`](Codesign::timestamp) gets a secure timestamp from, if anywhere.
+/// Where [`timestamp`](crate::Codesign::timestamp) gets a secure timestamp from, if anywhere.
 ///
 /// Leaving the option unset isn't the same as [`Disabled`](Timestamp::Disabled): unset lets
 /// `codesign` decide.
@@ -31,7 +31,7 @@ impl SignatureSlot {
 /// ```no_run
 /// # async fn run() -> signers::Result<()> {
 /// use signers::Codesign;
-/// use signers::codesign::sign::Timestamp;
+/// use signers::codesign::Timestamp;
 ///
 /// let identity = "Developer ID Application: Jane Doe (A1B2C3D4E5)";
 ///
@@ -66,7 +66,7 @@ bitflags! {
     /// ```no_run
     /// # async fn run() -> signers::Result<()> {
     /// use signers::Codesign;
-    /// use signers::codesign::sign::SigningFlags;
+    /// use signers::codesign::SigningFlags;
     ///
     /// Codesign::sign("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
     ///     .options(SigningFlags::RUNTIME | SigningFlags::LIBRARY)
@@ -112,7 +112,7 @@ bitflags! {
     /// ```no_run
     /// # async fn run() -> signers::Result<()> {
     /// use signers::Codesign;
-    /// use signers::codesign::sign::PreserveMetadata;
+    /// use signers::codesign::PreserveMetadata;
     ///
     /// // Re-sign a patched binary and keep the identifier and entitlements it had.
     /// Codesign::sign_adhoc("patched")
@@ -150,7 +150,7 @@ bitflags! {
     }
 }
 
-/// The extra restrictions that [`strict`](Codesign#method.strict) applies.
+/// The extra restrictions that [`strict`](crate::Codesign#method.strict) applies.
 ///
 /// `codesign` takes one value here, so one is enough, and the last one set wins.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
