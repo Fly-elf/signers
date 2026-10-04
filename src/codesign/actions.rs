@@ -13,9 +13,10 @@ use bitflags::Flags;
 /// [`Sign`](crate::codesign::sign::Sign).
 ///
 /// Use it as a bound to accept a single-target `Codesign<A>` of any action. `A::Output` is what
-/// one target yields on success, `()` for the actions so far; `.await` returns it shaped like
-/// the targets (see [`IntoTargets`](crate::IntoTargets)). It's sealed, so only this crate
-/// defines actions.
+/// one target yields on success, `()` for the actions with nothing to return, and a
+/// [`Signature`](crate::codesign::display::Signature) for [`display`](crate::Codesign::display);
+/// `.await` returns it shaped like the targets (see [`IntoTargets`](crate::IntoTargets)). It's
+/// sealed, so only this crate defines actions.
 pub trait Action: sealed::ToArgs {}
 
 impl<T: sealed::ToArgs> Action for T {}
