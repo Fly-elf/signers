@@ -361,9 +361,29 @@ Chosen signature=1
         let identifiers: Vec<&str> = signatures.iter().map(|s| s.identifier.as_str()).collect();
         assert_eq!(identifiers, ["first", "second"]);
         assert_eq!(signatures[0].executable, PathBuf::from("/x/a"));
-        assert_eq!(signatures[0].raw(), report("/x/a", "first"));
-        assert_eq!(signatures[1].raw(), report("/x/b", "second"));
+        assert_eq!(signatures[0].raw(), report("/x/a", "first").trim_end());
+        assert_eq!(signatures[1].raw(), report("/x/b", "second").trim_end());
+        assert!(signatures.iter().all(|s| s.raw() == s.raw().trim_end()));
         assert!(signatures.iter().all(|s| s.entitlements.is_none()));
+    }
+
+    #[test]
+    fn no_report_keeps_trailing_whitespace_whatever_the_run_printed() {
+        let stderr = format!(
+            "{}\n\n{}  \n",
+            report("/x/a", "first"),
+            report("/x/b", "second")
+        );
+
+        for blocks in [reports(&stderr), reports(&format!("{stderr}\n"))] {
+            assert_eq!(blocks.len(), 2);
+            assert!(blocks.iter().all(|b| *b == b.trim_end()), "{blocks:?}");
+            assert!(blocks[0].ends_with("Chosen signature=1"));
+        }
+        let signatures = Display::default()
+            .output(&paths(&["a", "b"]), String::new(), stderr)
+            .unwrap();
+        assert!(signatures.iter().all(|s| s.raw() == s.raw().trim_end()));
     }
 
     #[test]
