@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use bitflags::bitflags;
 
-use crate::codesign::sign::SigningFlags;
+use super::options::SigningFlags;
 use crate::errors::{CodesignError, Error, Result};
 
 /// The signature of one target, as `codesign --display` reports it.
@@ -20,8 +20,8 @@ use crate::errors::{CodesignError, Error, Result};
 /// ```no_run
 /// # async fn run() -> signers::Result<()> {
 /// use signers::Codesign;
-/// use signers::codesign::display::SignatureKind;
-/// use signers::codesign::sign::SigningFlags;
+/// use signers::codesign::SignatureKind;
+/// use signers::codesign::SigningFlags;
 ///
 /// let signature = Codesign::display("MyApp.app").await?;
 ///
@@ -104,7 +104,7 @@ pub struct Signature {
     /// How many requirements the signature embeds, and their size; `None` when there are none
     /// (`Internal requirements`). [`internal_requirements`](crate::Codesign::internal_requirements)
     /// reads the requirements themselves.
-    pub internal_requirements: Option<InternalRequirements>,
+    pub internal_requirements: Option<RequirementsSummary>,
     /// The number of signatures in the code (`Total signatures`).
     ///
     /// `None` when the report has no such line, as for code signed by the linker.
@@ -377,9 +377,11 @@ pub struct SealedResources {
 }
 
 /// How many requirements a signature embeds, and their size (`Internal requirements`).
+///
+/// [`InternalRequirements`](crate::codesign::InternalRequirements) reads the requirements themselves.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct InternalRequirements {
+pub struct RequirementsSummary {
     /// How many requirements there are.
     pub count: u32,
     /// Their size in bytes.
@@ -396,7 +398,7 @@ bitflags! {
     /// ```no_run
     /// # async fn run() -> signers::Result<()> {
     /// use signers::Codesign;
-    /// use signers::codesign::display::Constraints;
+    /// use signers::codesign::Constraints;
     ///
     /// let signature = Codesign::display("MyApp.app").await?;
     /// if signature.constraints.contains(Constraints::LAUNCH_SELF) {
@@ -515,7 +517,7 @@ pub(crate) fn parse_report(report: &str) -> Result<Signature> {
                 });
             }
             "Internal requirements count" => {
-                internal_requirements = Some(InternalRequirements {
+                internal_requirements = Some(RequirementsSummary {
                     count: number(line, token(line, line, "count")?)?,
                     size: number(line, token(line, line, "size")?)?,
                 });
@@ -922,7 +924,7 @@ Chosen signature=1
             team_identifier: None,
             runtime_version: None,
             sealed_resources: None,
-            internal_requirements: Some(InternalRequirements { count: 0, size: 12 }),
+            internal_requirements: Some(RequirementsSummary { count: 0, size: 12 }),
             total_signatures: Some(1),
             chosen_signature: Some(1),
             nested: vec![],
@@ -972,7 +974,7 @@ Chosen signature=1
         assert_eq!(signature.timestamp, None);
         assert_eq!(
             signature.internal_requirements,
-            Some(InternalRequirements { count: 1, size: 60 })
+            Some(RequirementsSummary { count: 1, size: 60 })
         );
     }
 
@@ -1446,7 +1448,7 @@ Chosen signature=1
                 "Internal requirements count=2 size=176"
             ))
             .internal_requirements,
-            Some(InternalRequirements {
+            Some(RequirementsSummary {
                 count: 2,
                 size: 176
             })
