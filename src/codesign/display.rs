@@ -130,10 +130,9 @@ impl ToArgs for Display {
     fn output(
         &self,
         targets: &[PathBuf],
-        stdout: Vec<u8>,
-        stderr: Vec<u8>,
+        stdout: String,
+        stderr: String,
     ) -> Result<Vec<Signature>> {
-        let stderr = String::from_utf8_lossy(&stderr);
         let reports = reports(&stderr);
         if reports.len() != targets.len() {
             return Err(CodesignError::UnexpectedOutput {
@@ -150,7 +149,7 @@ impl ToArgs for Display {
         if let [signature] = signatures.as_mut_slice()
             && let Some(plist) = plist_start(&stdout)
         {
-            let entitlements = plist::from_bytes(&stdout[plist..]).map_err(|error| {
+            let entitlements = plist::from_bytes(&stdout.as_bytes()[plist..]).map_err(|error| {
                 CodesignError::UnexpectedOutput {
                     detail: format!("unreadable entitlements: {error}"),
                 }
@@ -164,10 +163,11 @@ impl ToArgs for Display {
 
 // `--verbose=4` prints a text dump of the constraint dictionaries before the
 // plist, which always starts on its own line.
-fn plist_start(stdout: &[u8]) -> Option<usize> {
-    const MARKER: &[u8] = b"<?xml";
+fn plist_start(stdout: &str) -> Option<usize> {
+    const MARKER: &str = "<?xml";
+    let bytes = stdout.as_bytes();
     (0..stdout.len())
-        .filter(|&i| i == 0 || stdout[i - 1] == b'\n')
+        .filter(|&i| i == 0 || bytes[i - 1] == b'\n')
         .find(|&i| stdout[i..].starts_with(MARKER))
 }
 
