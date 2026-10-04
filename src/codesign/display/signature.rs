@@ -125,6 +125,7 @@ pub struct Signature {
     /// [`per_target(false)`](crate::Codesign::per_target) and several targets, this is `None` for
     /// all of them.
     pub entitlements: Option<plist::Dictionary>,
+    pub requirements: Option<Vec<Requirement>>,
     raw: String,
 }
 
@@ -385,6 +386,54 @@ pub struct InternalRequirements {
     pub size: u32,
 }
 
+/// A requirement embedded in a signature, as `codesign -r-` prints it.
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Requirement {
+    pub kind: RequirementKind,
+    pub expression: String,
+    pub implicit: bool,
+}
+
+/// What a [`Requirement`] is for.
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RequirementKind {
+    Designated,
+    Host,
+    Guest,
+    Library,
+    Plugin,
+    Other(String),
+}
+
+impl Requirement {
+    pub(super) fn parse(line: &str) -> Result<Self> {
+        let (line, implicit) = match line.strip_prefix("# ") {
+            Some(rest) => (rest, true),
+            None => (line, false),
+        };
+        let (kind, expression) =
+            line.split_once(" => ")
+                .ok_or_else(|| CodesignError::UnexpectedOutput {
+                    detail: format!("unreadable requirement: {line}"),
+                })?;
+        let kind = match kind {
+            "designated" => RequirementKind::Designated,
+            "host" => RequirementKind::Host,
+            "guest" => RequirementKind::Guest,
+            "library" => RequirementKind::Library,
+            "plugin" => RequirementKind::Plugin,
+            other => RequirementKind::Other(other.to_owned()),
+        };
+        Ok(Self {
+            kind,
+            expression: expression.to_owned(),
+            implicit,
+        })
+    }
+}
+
 bitflags! {
     /// The launch and library constraints that code carries.
     ///
@@ -585,6 +634,7 @@ pub(crate) fn parse_report(report: &str) -> Result<Signature> {
         nested,
         constraints,
         entitlements: None,
+        requirements: None,
         raw: report.to_owned(),
     })
 }

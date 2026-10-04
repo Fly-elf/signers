@@ -4,8 +4,8 @@ use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 
-use super::actions::PushArgs;
 use super::actions::sealed::ToArgs;
+use super::actions::{PushArgs, SignatureSlot};
 use crate::codesign::Codesign;
 use crate::errors::{CodesignError, Result};
 use crate::target::Shape;
@@ -52,6 +52,7 @@ pub struct Display {
     bundle_version: Option<String>,
     deep: bool,
     detached: Option<PathBuf>,
+    signature_slot: Option<SignatureSlot>,
 }
 
 /// Options for [`display`](Codesign::display).
@@ -89,6 +90,11 @@ impl<S: Shape> Codesign<Display, S> {
         self.action.detached = Some(path.into());
         self
     }
+
+    pub fn signature_slot(mut self, slot: SignatureSlot) -> Self {
+        self.action.signature_slot = Some(slot);
+        self
+    }
 }
 
 impl ToArgs for Display {
@@ -113,11 +119,16 @@ impl ToArgs for Display {
         if let Some(detached) = &self.detached {
             args.option("--detached", detached);
         }
+        if let Some(slot) = self.signature_slot {
+            args.option("--signature-slot", slot.as_str());
+        }
 
         // Over several targets `codesign` prints one plist per target that
-        // has entitlements and nothing for the others, so they can't be
-        // matched back to their targets.
+        // has entitlements and nothing for the others, and all requirement
+        // lines after the last report, so neither can be matched back to its
+        // target.
         if targets.len() == 1 {
+            args.flag("-r-");
             args.flag("--entitlements");
             args.flag("-");
             args.flag("--xml");
@@ -146,15 +157,18 @@ impl ToArgs for Display {
             .map(parse_report)
             .collect::<Result<Vec<_>>>()?;
 
-        if let [signature] = signatures.as_mut_slice()
-            && let Some(plist) = plist_start(&stdout)
-        {
-            let entitlements = plist::from_bytes(&stdout.as_bytes()[plist..]).map_err(|error| {
-                CodesignError::UnexpectedOutput {
-                    detail: format!("unreadable entitlements: {error}"),
-                }
-            })?;
-            signature.entitlements = Some(entitlements);
+        if let [signature] = signatures.as_mut_slice() {
+            let plist = plist_start(&stdout);
+            signature.requirements = Some(requirements(&stdout[..plist.unwrap_or(stdout.len())])?);
+            if let Some(plist) = plist {
+                let entitlements =
+                    plist::from_bytes(&stdout.as_bytes()[plist..]).map_err(|error| {
+                        CodesignError::UnexpectedOutput {
+                            detail: format!("unreadable entitlements: {error}"),
+                        }
+                    })?;
+                signature.entitlements = Some(entitlements);
+            }
         }
 
         Ok(signatures)
@@ -169,6 +183,17 @@ fn plist_start(stdout: &str) -> Option<usize> {
     (0..stdout.len())
         .filter(|&i| i == 0 || bytes[i - 1] == b'\n')
         .find(|&i| stdout[i..].starts_with(MARKER))
+}
+
+// What precedes the plist is the constraint dump and then one line per
+// requirement. Dump lines are tab-indented `[Tag]` lines, but the stream is
+// trimmed, which takes the tab off the first one.
+fn requirements(stdout: &str) -> Result<Vec<Requirement>> {
+    stdout
+        .lines()
+        .filter(|line| !line.starts_with(['\t', '[']) && !line.trim().is_empty())
+        .map(Requirement::parse)
+        .collect()
 }
 
 // Each report starts at its `Executable=` line; anything before the first
