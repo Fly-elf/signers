@@ -177,13 +177,20 @@ impl<S: Shape> Codesign<Verify, S> {
         self
     }
 
-    /// Requires the code to satisfy the requirement in this file (`-R <path>`).
+    /// Requires the code to satisfy the requirement written in this file (`-R <path>`).
+    ///
+    /// Failures are the same as for [`test_requirement`](Codesign::test_requirement). It replaces
+    /// any earlier requirement, text or file. A path of `-` would read standard input, so it makes
+    /// `.await` fail with [`Error::StdioPath`] before anything runs.
     pub fn test_requirement_file(mut self, path: impl Into<PathBuf>) -> Self {
         self.action.test_requirement = Some(TestRequirement::File(path.into()));
         self
     }
 
     /// Verifies this signature when the code carries two (`--signature-slot`).
+    ///
+    /// Without it `codesign` picks the slot itself. On code that carries only one signature,
+    /// [`Second`](SignatureSlot::Second) can fail as [`CodesignError::VerificationFailed`].
     pub fn signature_slot(mut self, slot: SignatureSlot) -> Self {
         self.action.signature_slot = Some(slot);
         self

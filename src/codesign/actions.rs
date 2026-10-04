@@ -9,10 +9,15 @@ use std::path::PathBuf;
 
 use bitflags::Flags;
 
-/// Which signature of the code to read when it carries two (`--signature-slot`).
+/// Which of the two signatures of a code object to use (`--signature-slot`).
+///
+/// Code carries two signatures only when it was signed with a hybrid post-quantum identity. Pass
+/// it to [`verify`](crate::Codesign::verify).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SignatureSlot {
+    /// The first signature (`1`).
     First,
+    /// The second signature (`2`).
     Second,
 }
 
