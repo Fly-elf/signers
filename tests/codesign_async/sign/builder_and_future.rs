@@ -3,7 +3,7 @@
 
 use std::future::IntoFuture;
 
-use signers::codesign::sign::Sign;
+use signers::codesign::Sign;
 use signers::{Codesign, IntoTargets};
 
 use crate::support::fixture::Workspace;

@@ -3,7 +3,7 @@
 //! get there.
 
 use signers::Codesign;
-use signers::codesign::sign::SigningFlags;
+use signers::codesign::SigningFlags;
 
 use crate::support::fixture::{Workspace, output_of};
 use crate::support::inspect::{self, Signature};

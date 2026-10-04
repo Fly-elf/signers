@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use signers::Codesign;
-use signers::codesign::display::Signature;
+use signers::codesign::Signature;
 
 use crate::support::fixture::{Workspace, fixture_str};
 use crate::support::inspect;

@@ -5,7 +5,7 @@ use std::future::IntoFuture;
 use std::path::{Path, PathBuf};
 
 use signers::Codesign;
-use signers::codesign::extract_certificates::Certificate;
+use signers::codesign::Certificate;
 
 use super::{PLATFORM_BINARY, ders, platform_copy};
 use crate::support::fixture::Workspace;
