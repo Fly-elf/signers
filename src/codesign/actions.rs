@@ -29,6 +29,8 @@ pub(crate) mod sealed {
 
     use crate::errors::{CodesignError, Error, Result};
 
+    pub trait SharedRun {}
+
     /// Renders an action into `codesign` arguments and reads the result of its run.
     ///
     /// `Sync` because per-target runs share one action concurrently.
