@@ -235,20 +235,28 @@ impl ToArgs for Verify {
     fn output(
         &self,
         targets: &[PathBuf],
-        _stdout: Vec<u8>,
-        _stderr: Vec<u8>,
+        _stdout: String,
+        _stderr: String,
     ) -> crate::errors::Result<Vec<()>> {
         Ok(vec![(); targets.len()])
     }
 
     fn failure(&self, code: i32, stdout: String, stderr: String) -> Error {
         match code {
-            1 => CodesignError::VerificationFailed {
+            1 => {
+                let resources = resource_changes(&stdout);
+                CodesignError::VerificationFailed {
+                    stdout,
+                    stderr,
+                    resources,
+                }
+            }
+            3 => CodesignError::RequirementUnsatisfied { stdout, stderr },
+            _ => CodesignError::Failed {
+                code,
+                stdout,
                 stderr,
-                resources: resource_changes(&stdout),
             },
-            3 => CodesignError::RequirementUnsatisfied { stderr },
-            _ => CodesignError::Failed { code, stderr },
         }
         .into()
     }

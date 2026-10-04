@@ -73,8 +73,8 @@ pub(crate) mod sealed {
         fn output(
             &self,
             targets: &[PathBuf],
-            stdout: Vec<u8>,
-            stderr: Vec<u8>,
+            stdout: String,
+            stderr: String,
         ) -> Result<Vec<Self::Output>>;
 
         /// Turns a non-zero exit code into this action's error; by default
@@ -83,10 +83,32 @@ pub(crate) mod sealed {
         /// Both streams are already lossy-decoded and trimmed; the default ignores `stdout`.
         /// A process killed by a signal has no
         /// exit code and never gets here.
-        fn failure(&self, code: i32, _stdout: String, stderr: String) -> Error {
-            CodesignError::Failed { code, stderr }.into()
+        fn failure(&self, code: i32, stdout: String, stderr: String) -> Error {
+            CodesignError::Failed {
+                code,
+                stdout,
+                stderr,
+            }
+            .into()
+        }
+
+        fn output_bytes(
+            &self,
+            targets: &[PathBuf],
+            stdout: Vec<u8>,
+            stderr: Vec<u8>,
+        ) -> Result<Vec<Self::Output>> {
+            self.output(targets, super::decode(stdout), super::decode(stderr))
+        }
+
+        fn failure_bytes(&self, code: i32, stdout: Vec<u8>, stderr: Vec<u8>) -> Error {
+            self.failure(code, super::decode(stdout), super::decode(stderr))
         }
     }
+}
+
+pub(crate) fn decode(bytes: Vec<u8>) -> String {
+    String::from_utf8_lossy(&bytes).trim().to_string()
 }
 
 /// Appends `codesign` arguments, so that each option renders in one line.
