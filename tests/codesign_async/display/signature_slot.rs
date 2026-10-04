@@ -2,7 +2,7 @@
 //! reported. Every signature this machine can make is a single one, so the
 //! second slot is only ever checked against what `codesign` itself answers.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use signers::Codesign;
 use signers::codesign::SignatureSlot;
@@ -58,7 +58,6 @@ async fn the_first_slot_reads_the_same_report_as_no_slot() {
 
         assert_eq!(first.raw(), default.raw(), "{}", path.display());
         assert_reads_slot(&first, path, "1");
-        assert_eq!(first.requirements, default.requirements);
     }
 }
 
@@ -143,4 +142,108 @@ async fn a_slot_combines_with_the_other_display_options() {
         .unwrap();
 
     assert_eq!(signature.identifier, "com.example.Host");
+}
+
+/// What `codesign` prints for `--signature-slot 2` over `paths`, with the
+/// arguments `signers` passes, as trimmed `(stdout, stderr)`.
+fn second_slot_run(paths: &[&str]) -> (String, String) {
+    let mut argv: Vec<&std::ffi::OsStr> = vec![
+        "--display".as_ref(),
+        "--verbose=4".as_ref(),
+        "--signature-slot".as_ref(),
+        "2".as_ref(),
+    ];
+    if let [_] = paths {
+        argv.extend(["--entitlements", "-", "--xml"].map(std::ffi::OsStr::new));
+    }
+    argv.push("--".as_ref());
+    argv.extend(paths.iter().map(std::ffi::OsStr::new));
+    let run = inspect::codesign(&argv);
+    assert!(run.success, "{}", run.stderr);
+    (run.stdout.trim().to_owned(), run.stderr.trim().to_owned())
+}
+
+fn no_signature(error: signers::Error) -> (String, String) {
+    match error {
+        signers::Error::Codesign(signers::CodesignError::NoSignature { stdout, stderr }) => {
+            (stdout, stderr)
+        }
+        other => panic!("expected NoSignature, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn a_slot_the_target_has_no_signature_in_is_no_signature() {
+    let error = Codesign::display("/bin/ls")
+        .signature_slot(SignatureSlot::Second)
+        .await
+        .unwrap_err();
+
+    let (stdout, stderr) = no_signature(error);
+
+    let (expected_stdout, expected_stderr) = second_slot_run(&["/bin/ls"]);
+    assert_eq!(stdout, expected_stdout);
+    assert_eq!(stderr, expected_stderr);
+    assert!(stderr.contains("/bin/ls: no signature"), "{stderr}");
+}
+
+#[tokio::test]
+async fn no_signature_says_so_in_its_message() {
+    let error = Codesign::display("/bin/ls")
+        .signature_slot(SignatureSlot::Second)
+        .await
+        .unwrap_err();
+
+    assert!(error.to_string().contains("no signature"), "{error}");
+}
+
+#[tokio::test]
+async fn the_first_slot_of_the_same_binary_is_not_an_error() {
+    let signature = Codesign::display("/bin/ls")
+        .signature_slot(SignatureSlot::First)
+        .await
+        .unwrap();
+
+    assert_eq!(signature.identifier, "com.apple.ls");
+}
+
+#[tokio::test]
+async fn one_run_over_several_targets_fails_as_a_whole_with_both_reports() {
+    let workspace = Workspace::new();
+    let target = workspace.presigned("hello", &["-i", "com.example.slot"]);
+    let path = target.to_str().unwrap();
+
+    let error = Codesign::display(vec![path, "/bin/ls"])
+        .signature_slot(SignatureSlot::Second)
+        .per_target(false)
+        .await
+        .unwrap_err();
+
+    let (stdout, stderr) = no_signature(error);
+
+    let (expected_stdout, expected_stderr) = second_slot_run(&[path, "/bin/ls"]);
+    assert_eq!(stdout, expected_stdout);
+    assert_eq!(stderr, expected_stderr);
+    assert_eq!(stderr.matches("Executable=").count(), 2, "{stderr}");
+}
+
+#[tokio::test]
+async fn per_target_collects_the_targets_without_a_signature() {
+    let workspace = Workspace::new();
+    let target = workspace.presigned("hello", &["-i", "com.example.slot"]);
+
+    let error = Codesign::display(vec![target.clone(), PathBuf::from("/bin/ls")])
+        .signature_slot(SignatureSlot::Second)
+        .await
+        .unwrap_err();
+
+    let failures = crate::batch_failures(error);
+    let [(failed, error)] = &failures[..] else {
+        panic!("{failures:?}")
+    };
+    assert_eq!(failed, Path::new("/bin/ls"));
+    assert!(matches!(
+        error,
+        signers::Error::Codesign(signers::CodesignError::NoSignature { .. })
+    ));
 }

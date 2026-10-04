@@ -9,7 +9,6 @@ mod per_target;
 mod preflight;
 mod reading;
 mod rejected_by_codesign;
-mod requirements;
 mod signature_slot;
 mod with_identity;
 

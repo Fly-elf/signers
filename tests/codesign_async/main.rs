@@ -3,7 +3,7 @@
 //! the result.
 //!
 //! One module per action (`sign`, `remove_signature`, `verify`, `display`,
-//! `extract_certificates`), plus the pre-flight checks they share. Anything
+//! `extract_certificates`, `internal_requirements`), plus the pre-flight checks they share. Anything
 //! that mutates process-global state (the working directory, `PATH`, `TMPDIR`)
 //! lives in `tests/codesign_process_state/` instead, so this binary stays
 //! parallel-safe.
@@ -15,6 +15,7 @@ mod support;
 
 mod display;
 mod extract_certificates;
+mod internal_requirements;
 mod preflight;
 mod remove_signature;
 mod sign;
