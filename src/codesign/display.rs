@@ -268,10 +268,11 @@ Chosen signature=1
     }
 
     #[test]
-    fn one_target_also_asks_for_its_entitlements() {
+    fn one_target_also_asks_for_its_requirements_and_entitlements() {
         let expected = os(&[
             "--display",
             "--verbose=4",
+            "-r-",
             "--entitlements",
             "-",
             "--xml",
@@ -285,7 +286,7 @@ Chosen signature=1
     }
 
     #[test]
-    fn several_targets_in_one_run_do_not_ask_for_entitlements() {
+    fn several_targets_in_one_run_do_not_ask_for_requirements_or_entitlements() {
         assert_eq!(
             args_of(&Codesign::display(vec!["a", "b"])),
             os(&["--display", "--verbose=4", "--", "a", "b"])
@@ -300,7 +301,8 @@ Chosen signature=1
             .architecture("x86_64")
             .bundle_version("B")
             .deep(true)
-            .detached("app.sig");
+            .detached("app.sig")
+            .signature_slot(SignatureSlot::Second);
 
         assert_eq!(
             args_of(&builder),
@@ -314,6 +316,9 @@ Chosen signature=1
                 "--deep",
                 "--detached",
                 "app.sig",
+                "--signature-slot",
+                "2",
+                "-r-",
                 "--entitlements",
                 "-",
                 "--xml",
@@ -333,7 +338,9 @@ Chosen signature=1
             .deep(true)
             .deep(false)
             .detached("first.sig")
-            .detached("second.sig");
+            .detached("second.sig")
+            .signature_slot(SignatureSlot::Second)
+            .signature_slot(SignatureSlot::First);
 
         assert_eq!(
             args_of(&builder),
@@ -346,6 +353,8 @@ Chosen signature=1
                 "B",
                 "--detached",
                 "second.sig",
+                "--signature-slot",
+                "1",
                 "--",
                 "a",
                 "b",
@@ -360,6 +369,7 @@ Chosen signature=1
             os(&[
                 "--display",
                 "--verbose=4",
+                "-r-",
                 "--entitlements",
                 "-",
                 "--xml",
@@ -533,7 +543,17 @@ Chosen signature=1
     #[test]
     fn a_constraint_dump_without_a_plist_has_no_entitlements() {
         assert_eq!(entitlement_keys(DUMP.to_owned()), None);
-        assert_eq!(entitlement_keys(format!("{DUMP}  <?xml indented\n")), None);
+    }
+
+    #[test]
+    fn an_indented_line_that_is_not_a_dump_line_is_not_the_plist() {
+        let stdout = format!("{DUMP}  <?xml indented\n");
+
+        unexpected_output(Display::default().output(
+            &paths(&["a"]),
+            stdout,
+            report("/x/a", "first"),
+        ));
     }
 
     #[test]
@@ -590,5 +610,168 @@ Chosen signature=1
             .unwrap();
 
         assert_eq!(signatures[0].executable, PathBuf::from("/x/caf\u{FFFD}"));
+    }
+
+    const DESIGNATED: &str = r#"designated => identifier "com.apple.ls" and anchor apple"#;
+
+    fn requirements_of(stdout: &str) -> Option<Vec<Requirement>> {
+        let signatures = Display::default()
+            .output(&paths(&["a"]), stdout.to_owned(), report("/x/a", "first"))
+            .unwrap();
+        signatures.into_iter().next().unwrap().requirements
+    }
+
+    fn kinds_and_flags(requirements: &[Requirement]) -> Vec<(RequirementKind, bool)> {
+        requirements
+            .iter()
+            .map(|r| (r.kind.clone(), r.implicit))
+            .collect()
+    }
+
+    #[test]
+    fn a_single_target_reads_its_requirements_in_printed_order() {
+        let stdout = format!(
+            "host => anchor apple\n{DESIGNATED}\n# library => cdhash H\"00\"\nweird => x\n"
+        );
+
+        let found = requirements_of(&stdout).expect("no requirements");
+
+        assert_eq!(
+            kinds_and_flags(&found),
+            [
+                (RequirementKind::Host, false),
+                (RequirementKind::Designated, false),
+                (RequirementKind::Library, true),
+                (RequirementKind::Other("weird".into()), false),
+            ]
+        );
+        assert_eq!(
+            found[1].expression,
+            r#"identifier "com.apple.ls" and anchor apple"#
+        );
+        assert_eq!(found[2].expression, r#"cdhash H"00""#);
+    }
+
+    #[test]
+    fn a_single_target_with_nothing_on_stdout_has_no_requirements_but_an_empty_list() {
+        assert_eq!(requirements_of(""), Some(vec![]));
+        assert_eq!(requirements_of("\n\n"), Some(vec![]));
+        assert_eq!(requirements_of(ENTITLEMENTS), Some(vec![]));
+    }
+
+    #[test]
+    fn requirements_and_entitlements_are_read_from_the_same_stdout() {
+        let stdout = format!("{DESIGNATED}\n{ENTITLEMENTS}");
+
+        let signatures = Display::default()
+            .output(&paths(&["a"]), stdout, report("/x/a", "first"))
+            .unwrap();
+
+        let [signature] = &signatures[..] else {
+            panic!("{signatures:?}")
+        };
+        assert_eq!(
+            kinds_and_flags(signature.requirements.as_ref().unwrap()),
+            [(RequirementKind::Designated, false)]
+        );
+        assert_eq!(signature.entitlements.as_ref().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn the_constraint_dump_ahead_of_the_requirements_is_not_one() {
+        let stdout = format!("{DUMP}{DUMP}{DESIGNATED}\n# host => anchor apple\n{ENTITLEMENTS}");
+
+        let signatures = Display::default()
+            .output(&paths(&["a"]), stdout, report("/x/a", "first"))
+            .unwrap();
+
+        let found = signatures[0].requirements.as_ref().unwrap();
+        assert_eq!(
+            kinds_and_flags(found),
+            [
+                (RequirementKind::Designated, false),
+                (RequirementKind::Host, true)
+            ]
+        );
+        assert_eq!(signatures[0].entitlements.as_ref().unwrap().len(), 2);
+    }
+
+    /// The stream is trimmed, so the first dump line has lost its tab.
+    #[test]
+    fn a_dump_whose_first_tab_is_gone_is_still_skipped() {
+        let dump = DUMP.trim();
+        assert!(dump.starts_with('['));
+
+        let stdout = format!("{dump}\n{DESIGNATED}\n");
+
+        assert_eq!(
+            kinds_and_flags(&requirements_of(&stdout).unwrap()),
+            [(RequirementKind::Designated, false)]
+        );
+        assert_eq!(requirements_of(dump), Some(vec![]));
+    }
+
+    #[test]
+    fn a_malformed_requirement_line_is_rejected() {
+        for stdout in [
+            "designated\n",
+            "garbage line\n<?xml version=\"1.0\"?><plist version=\"1.0\"><dict/></plist>",
+            &format!("{DESIGNATED}\nnot a requirement\n{ENTITLEMENTS}"),
+        ] {
+            let detail = unexpected_output(Display::default().output(
+                &paths(&["a"]),
+                stdout.to_owned(),
+                report("/x/a", "first"),
+            ));
+            assert!(detail.contains("requirement"), "{detail}");
+        }
+    }
+
+    /// One process over several targets prints every requirement after every
+    /// report, so none can be attributed, and nothing is parsed.
+    #[test]
+    fn several_targets_in_one_run_have_no_requirements() {
+        let stderr = format!("{}{}", report("/x/a", "first"), report("/x/b", "second"));
+
+        let signatures = Display::default()
+            .output(
+                &paths(&["a", "b"]),
+                format!("{DESIGNATED}\ngarbage\n"),
+                stderr,
+            )
+            .unwrap();
+
+        assert!(signatures.iter().all(|s| s.requirements.is_none()));
+    }
+
+    #[test]
+    fn requirements_do_not_change_the_raw_report() {
+        let signatures = Display::default()
+            .output(
+                &paths(&["a"]),
+                DESIGNATED.to_owned(),
+                report("/x/a", "first"),
+            )
+            .unwrap();
+
+        assert_eq!(signatures[0].raw(), report("/x/a", "first").trim_end());
+    }
+
+    #[test]
+    fn the_signature_slot_renders_one_or_two() {
+        for (slot, number) in [(SignatureSlot::First, "1"), (SignatureSlot::Second, "2")] {
+            assert_eq!(
+                args_of(&Codesign::display(vec!["a", "b"]).signature_slot(slot)),
+                os(&[
+                    "--display",
+                    "--verbose=4",
+                    "--signature-slot",
+                    number,
+                    "--",
+                    "a",
+                    "b"
+                ])
+            );
+        }
     }
 }
