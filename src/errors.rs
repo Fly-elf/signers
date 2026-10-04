@@ -104,7 +104,10 @@ pub enum CodesignError {
     #[error("failed while running the `codesign` process: {0}")]
     Run(#[source] std::io::Error),
 
-    /// `codesign` exited with `code`. `stderr` holds its diagnostics, trimmed.
+    /// `codesign` exited with `code`.
+    ///
+    /// `stderr` holds its diagnostics and `stdout` what it printed on standard output, both
+    /// trimmed. Only `stderr` is part of the message.
     ///
     /// When one `codesign` runs over several targets, the targets before the rejected one have
     /// already changed. See [`Codesign`](crate::Codesign#errors).
@@ -117,7 +120,8 @@ pub enum CodesignError {
 
     /// `codesign` was killed by a signal before it could exit.
     ///
-    /// `status` holds the signal (`ExitStatusExt::signal`). `stderr` is usually empty.
+    /// `status` holds the signal (`ExitStatusExt::signal`). `stderr` is usually empty. `stdout`
+    /// holds what `codesign` printed on standard output, trimmed; it isn't part of the message.
     #[error("the `codesign` process terminated abnormally ({status}): {}", diagnostics(.stderr))]
     Terminated {
         status: ExitStatus,
@@ -136,7 +140,8 @@ pub enum CodesignError {
     ///
     /// The signature is invalid or modified, the target is unsigned, or the requirement text of
     /// [`test_requirement`](crate::Codesign::test_requirement) doesn't compile. `stderr` holds
-    /// the diagnostics `codesign` printed on standard error, trimmed.
+    /// the diagnostics `codesign` printed on standard error and `stdout` what it printed on standard
+    /// output, both trimmed. Only `stderr` is part of the message.
     ///
     /// `resources` names the sealed resources that were altered, in the order `codesign` printed
     /// them, which can differ from run to run. It is filled only with
@@ -157,7 +162,8 @@ pub enum CodesignError {
     /// That requirement is the text of
     /// [`test_requirement`](crate::Codesign::test_requirement) or, with
     /// [`check_designated_requirement`](crate::Codesign::check_designated_requirement), the code's
-    /// own. `stderr` holds the diagnostics `codesign` printed on standard error, trimmed.
+    /// own. `stderr` holds the diagnostics `codesign` printed on standard error and `stdout` what it
+    /// printed on standard output, both trimmed. Only `stderr` is part of the message.
     #[error("validly signed, but the requirement isn't satisfied: {}", diagnostics(.stderr))]
     RequirementUnsatisfied { stdout: String, stderr: String },
 }
