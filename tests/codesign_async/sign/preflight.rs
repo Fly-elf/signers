@@ -1,5 +1,6 @@
 //! What the builder rejects before it ever spawns `codesign`: the checks every
-//! action shares, and option values this crate cannot honour (`file_list("-")`).
+//! action shares, and option values this crate cannot honour (`file_list("-")`,
+//! `requirements("-")`).
 
 use signers::{Codesign, Error};
 
@@ -19,11 +20,115 @@ async fn a_file_list_of_standard_output_is_rejected() {
         .await
         .unwrap_err();
 
-    assert!(matches!(error, Error::FileListToStdout), "got {error:?}");
+    assert!(
+        matches!(error, Error::StdioPath("file_list")),
+        "got {error:?}"
+    );
     assert!(
         !inspect::is_signed(&target),
         "the target was signed despite the rejected option"
     );
+}
+
+/// `--requirements -` is the one option value `codesign` reads from standard
+/// input; with none attached it fails late and obscurely, so it is refused first.
+#[tokio::test]
+async fn requirements_read_from_standard_input_are_rejected() {
+    let workspace = Workspace::new();
+    let target = workspace.unsigned("hello");
+
+    let error = Codesign::sign(&target, "-")
+        .requirements("-")
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(error, Error::StdioPath("requirements")),
+        "got {error:?}"
+    );
+    assert!(
+        !inspect::is_signed(&target),
+        "the target was signed despite the rejected option"
+    );
+}
+
+#[tokio::test]
+async fn a_refused_stdio_path_fails_the_whole_run_in_every_mode() {
+    let workspace = Workspace::new();
+    let targets = vec![workspace.unsigned("first"), workspace.unsigned("second")];
+
+    for per_target in [false, true] {
+        let error = Codesign::sign(targets.clone(), "-")
+            .requirements("-")
+            .per_target(per_target)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(error, Error::StdioPath("requirements")),
+            "per_target({per_target}): got {error:?}"
+        );
+        let error = Codesign::sign(targets.clone(), "-")
+            .file_list("-")
+            .per_target(per_target)
+            .await;
+        let error = error.unwrap_err();
+        assert!(
+            matches!(error, Error::StdioPath("file_list")),
+            "per_target({per_target}): got {error:?}"
+        );
+    }
+    for target in &targets {
+        assert!(
+            !inspect::is_signed(target),
+            "{} was signed",
+            target.display()
+        );
+    }
+}
+
+/// Only the exact value `-` is refused: requirement source starting with `=`
+/// and a path that contains a dash are still honoured.
+#[tokio::test]
+async fn requirements_that_only_look_like_a_dash_are_accepted() {
+    let workspace = Workspace::new();
+    let target = workspace.unsigned("hello");
+    let file = workspace.write("-reqs.txt", "designated => identifier \"-\"\n");
+
+    Codesign::sign(&target, "-")
+        .requirements(file.to_str().unwrap())
+        .await
+        .unwrap();
+    assert!(inspect::is_signed(&target));
+
+    let target = workspace.unsigned("second");
+    Codesign::sign(&target, "-")
+        .requirements("=designated => identifier \"-\"")
+        .await
+        .unwrap();
+    assert!(inspect::is_signed(&target));
+}
+
+/// Every other `-` value is a file name for `codesign`, which then fails on it
+/// itself: this crate neither refuses nor rewrites it.
+#[tokio::test]
+async fn a_dash_entitlements_path_reaches_codesign_as_a_file_name() {
+    let workspace = Workspace::new();
+    let target = workspace.unsigned("hello");
+
+    let error = Codesign::sign(&target, "-")
+        .entitlements("-")
+        .await
+        .unwrap_err();
+
+    match error {
+        Error::Codesign(signers::CodesignError::Failed { stderr, .. }) => {
+            assert!(
+                stderr.contains("cannot read entitlement data"),
+                "got {stderr}"
+            );
+        }
+        other => panic!("expected Failed, got {other:?}"),
+    }
 }
 
 /// One `codesign` per target would have each process overwrite the file the
@@ -159,7 +264,10 @@ async fn the_checks_made_before_running_come_in_a_fixed_order() {
         .await
         .unwrap_err();
     assert!(
-        matches!(invalid_option_and_shared_output, Error::FileListToStdout),
+        matches!(
+            invalid_option_and_shared_output,
+            Error::StdioPath("file_list")
+        ),
         "got {invalid_option_and_shared_output:?}"
     );
 
@@ -168,7 +276,7 @@ async fn the_checks_made_before_running_come_in_a_fixed_order() {
         .await
         .unwrap_err();
     assert!(
-        matches!(invalid_option_and_no_targets, Error::FileListToStdout),
+        matches!(invalid_option_and_no_targets, Error::StdioPath("file_list")),
         "got {invalid_option_and_no_targets:?}"
     );
 
