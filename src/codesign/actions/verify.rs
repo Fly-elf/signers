@@ -4,9 +4,10 @@ use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 
-use super::actions::sealed::ToArgs;
-use super::actions::{PushArgs, SignatureSlot};
 use crate::codesign::Codesign;
+use crate::codesign::action::PushArgs;
+use crate::codesign::action::sealed::{SharedRun, ToArgs};
+use crate::codesign::{SignatureSlot, Strict};
 use crate::errors::{Change, CodesignError, Error, ResourceChange};
 use crate::target::Shape;
 
@@ -66,24 +67,6 @@ pub struct Verify {
 enum TestRequirement {
     Text(String),
     File(PathBuf),
-}
-
-/// The extra restrictions that [`strict`](Codesign#method.strict) applies.
-///
-/// `codesign` takes one value here, so one is enough, and the last one set wins.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Strict {
-    /// Every strict check there is, now and in later macOS versions (`--strict`).
-    ///
-    /// A new macOS can add checks, so code that passes today can fail later.
-    All,
-    /// Rejects a symbolic link in a bundle that is broken, points outside the bundle, or isn't
-    /// sealed by the signature (`--strict=symlinks`).
-    Symlinks,
-    /// Rejects resource forks, Finder attributes and similar sideband data (`--strict=sideband`).
-    ///
-    /// Signing already enforces this, so it rarely changes a result.
-    Sideband,
 }
 
 /// Options for [`verify`](Codesign::verify).
@@ -212,7 +195,7 @@ impl<S: Shape> Codesign<Verify, S> {
     }
 }
 
-impl super::actions::sealed::SharedRun for Verify {}
+impl SharedRun for Verify {}
 
 impl ToArgs for Verify {
     type Output = ();

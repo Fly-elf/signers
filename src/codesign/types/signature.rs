@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use bitflags::bitflags;
 
-use crate::codesign::sign::SigningFlags;
+use super::options::SigningFlags;
 use crate::errors::{CodesignError, Error, Result};
 
 /// The signature of one target, as `codesign --display` reports it.
@@ -104,7 +104,7 @@ pub struct Signature {
     /// How many requirements the signature embeds, and their size; `None` when there are none
     /// (`Internal requirements`). [`internal_requirements`](crate::Codesign::internal_requirements)
     /// reads the requirements themselves.
-    pub internal_requirements: Option<InternalRequirements>,
+    pub internal_requirements: Option<RequirementsSummary>,
     /// The number of signatures in the code (`Total signatures`).
     ///
     /// `None` when the report has no such line, as for code signed by the linker.
@@ -379,7 +379,7 @@ pub struct SealedResources {
 /// How many requirements a signature embeds, and their size (`Internal requirements`).
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct InternalRequirements {
+pub struct RequirementsSummary {
     /// How many requirements there are.
     pub count: u32,
     /// Their size in bytes.
@@ -515,7 +515,7 @@ pub(crate) fn parse_report(report: &str) -> Result<Signature> {
                 });
             }
             "Internal requirements count" => {
-                internal_requirements = Some(InternalRequirements {
+                internal_requirements = Some(RequirementsSummary {
                     count: number(line, token(line, line, "count")?)?,
                     size: number(line, token(line, line, "size")?)?,
                 });

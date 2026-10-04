@@ -4,11 +4,9 @@ use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use bitflags::bitflags;
-
-use super::actions::sealed::ToArgs;
-use super::actions::{PushArgs, joined};
-use crate::codesign::Codesign;
+use crate::codesign::action::sealed::{SharedRun, ToArgs};
+use crate::codesign::action::{PushArgs, joined};
+use crate::codesign::{Codesign, PreserveMetadata, SigningFlags, Timestamp};
 use crate::target::Shape;
 
 /// Options of the signing action: the `A` in `Codesign<Sign>`.
@@ -371,7 +369,7 @@ impl<S: Shape> Codesign<Sign, S> {
     }
 }
 
-impl super::actions::sealed::SharedRun for Sign {}
+impl SharedRun for Sign {}
 
 impl ToArgs for Sign {
     type Output = ();
@@ -505,135 +503,6 @@ impl ToArgs for Sign {
         _stderr: String,
     ) -> crate::errors::Result<Vec<()>> {
         Ok(vec![(); targets.len()])
-    }
-}
-
-/// Where [`timestamp`](Codesign::timestamp) gets a secure timestamp from, if anywhere.
-///
-/// Leaving the option unset isn't the same as [`Disabled`](Timestamp::Disabled): unset lets
-/// `codesign` decide.
-///
-/// # Examples
-///
-/// ```no_run
-/// # async fn run() -> signers::Result<()> {
-/// use signers::Codesign;
-/// use signers::codesign::sign::Timestamp;
-///
-/// let identity = "Developer ID Application: Jane Doe (A1B2C3D4E5)";
-///
-/// // An offline build: no timestamp server is contacted.
-/// Codesign::sign("MyApp.app", identity)
-///     .timestamp(Timestamp::Disabled)
-///     .await?;
-///
-/// // Your own timestamp authority instead of Apple's.
-/// Codesign::sign("MyApp.app", identity)
-///     .timestamp(Timestamp::ServerUrl("http://tsa.example.com".into()))
-///     .await?;
-/// # Ok(()) }
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Timestamp {
-    /// Apple's timestamp server (`--timestamp`).
-    Enabled,
-    /// The timestamp server at this URL (`--timestamp=<url>`).
-    ServerUrl(String),
-    /// No timestamp (`--timestamp=none`).
-    Disabled,
-}
-
-bitflags! {
-    /// Code signing flags that [`options`](Codesign::options) seals into the signature.
-    ///
-    /// Combine them with `|`. The bits are the ones `codesign -dv` prints as `flags=0x…`.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
-    /// use signers::codesign::sign::SigningFlags;
-    ///
-    /// Codesign::sign("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
-    ///     .options(SigningFlags::RUNTIME | SigningFlags::LIBRARY)
-    ///     .await?;
-    /// # Ok(()) }
-    /// ```
-    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
-    pub struct SigningFlags: u32 {
-        /// Lets the code host guest code (`host`).
-        #[bitflags(flag_name = "host")]
-        const HOST = 0x0001;
-        /// Asks the system to deny the process a resource rather than invalidate its identity
-        /// (`hard`).
-        #[bitflags(flag_name = "hard")]
-        const HARD = 0x0100;
-        /// Kills the process as soon as its signature becomes invalid (`kill`).
-        #[bitflags(flag_name = "kill")]
-        const KILL = 0x0200;
-        /// Fails verification once any certificate in the chain has expired (`expires`).
-        #[bitflags(flag_name = "expires")]
-        const EXPIRES = 0x0400;
-        /// Lets the executable load only system libraries or its own team's (`library`).
-        #[bitflags(flag_name = "library")]
-        const LIBRARY = 0x2000;
-        /// Opts into the hardened runtime, which notarization requires (`runtime`).
-        #[bitflags(flag_name = "runtime")]
-        const RUNTIME = 0x1_0000;
-        /// Marks the signature as the linker's: replaced without `force`, never preserved
-        /// (`linker-signed`).
-        #[bitflags(flag_name = "linker-signed")]
-        const LINKER_SIGNED = 0x2_0000;
-    }
-}
-
-bitflags! {
-    /// Parts of the old signature that [`preserve_metadata`](Codesign::preserve_metadata)
-    /// carries over.
-    ///
-    /// Combine them with `|`.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
-    /// use signers::codesign::sign::PreserveMetadata;
-    ///
-    /// // Re-sign a patched binary and keep the identifier and entitlements it had.
-    /// Codesign::sign_adhoc("patched")
-    ///     .force(true)
-    ///     .preserve_metadata(PreserveMetadata::IDENTIFIER | PreserveMetadata::ENTITLEMENTS)
-    ///     .await?;
-    /// # Ok(()) }
-    /// ```
-    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
-    pub struct PreserveMetadata: u8 {
-        /// The signing identifier (`identifier`).
-        #[bitflags(flag_name = "identifier")]
-        const IDENTIFIER = 1 << 0;
-        /// The entitlements (`entitlements`).
-        #[bitflags(flag_name = "entitlements")]
-        const ENTITLEMENTS = 1 << 1;
-        /// All the internal requirements, since they can't be picked one by one
-        /// (`requirements`).
-        #[bitflags(flag_name = "requirements")]
-        const REQUIREMENTS = 1 << 2;
-        /// The code signing flags (`flags`).
-        #[bitflags(flag_name = "flags")]
-        const FLAGS = 1 << 3;
-        /// The hardened runtime version (`runtime`).
-        #[bitflags(flag_name = "runtime")]
-        const RUNTIME = 1 << 4;
-        /// The launch constraints, unless a `launch_constraint_*` option is set
-        /// (`launch-constraints`).
-        #[bitflags(flag_name = "launch-constraints")]
-        const LAUNCH_CONSTRAINTS = 1 << 5;
-        /// The library constraint, unless
-        /// [`library_constraint`](Codesign::library_constraint) is set (`library-constraints`).
-        #[bitflags(flag_name = "library-constraints")]
-        const LIBRARY_CONSTRAINTS = 1 << 6;
     }
 }
 

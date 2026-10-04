@@ -4,8 +4,8 @@ use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 
-use super::actions::PushArgs;
-use super::actions::sealed::ToArgs;
+use crate::codesign::action::PushArgs;
+use crate::codesign::action::sealed::{SharedRun, ToArgs};
 use crate::errors::CodesignError;
 
 /// The action of [`Codesign::validate_constraint`](crate::Codesign::validate_constraint): the `A` in `Codesign<ValidateConstraint>`.
@@ -25,7 +25,7 @@ use crate::errors::CodesignError;
 #[derive(Debug, Clone, Default)]
 pub struct ValidateConstraint;
 
-impl super::actions::sealed::SharedRun for ValidateConstraint {}
+impl SharedRun for ValidateConstraint {}
 
 impl ToArgs for ValidateConstraint {
     type Output = ();

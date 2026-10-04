@@ -9,27 +9,6 @@ use std::path::PathBuf;
 
 use bitflags::Flags;
 
-/// Which of the two signatures of a code object to use (`--signature-slot`).
-///
-/// Without it, `codesign` uses the slot the system prefers. The second slot exists only if the
-/// code carries two signatures. Pass it to [`verify`](crate::Codesign::verify).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SignatureSlot {
-    /// The first signature (`1`).
-    First,
-    /// The second signature (`2`).
-    Second,
-}
-
-impl SignatureSlot {
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Self::First => "1",
-            Self::Second => "2",
-        }
-    }
-}
-
 /// An action type that [`Codesign`](crate::Codesign) can run, such as
 /// [`Sign`](crate::codesign::sign::Sign).
 ///
