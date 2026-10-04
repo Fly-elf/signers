@@ -11,7 +11,7 @@ mod reading;
 
 use std::path::Path;
 
-use signers::codesign::requirements::{Requirement, RequirementKind};
+use signers::codesign::{Requirement, RequirementKind};
 
 use crate::support::inspect;
 

@@ -3,7 +3,7 @@
 
 use std::fs;
 
-use signers::codesign::verify::Strict;
+use signers::codesign::Strict;
 use signers::{Codesign, CodesignError, Error};
 
 use super::{break_signature, requirement_unsatisfied, verification_failed};

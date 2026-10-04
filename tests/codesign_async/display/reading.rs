@@ -5,7 +5,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use signers::Codesign;
-use signers::codesign::display::{
+use signers::codesign::{
     Authority, Constraints, Format, HashType, InfoPlist, Location, OsVersion, Signature,
     SignatureKind,
 };
@@ -136,7 +136,7 @@ async fn the_hardened_runtime_shows_as_a_flag_and_a_runtime_version() {
         signature
             .code_directory
             .flags
-            .contains(signers::codesign::sign::SigningFlags::RUNTIME)
+            .contains(signers::codesign::SigningFlags::RUNTIME)
     );
 }
 

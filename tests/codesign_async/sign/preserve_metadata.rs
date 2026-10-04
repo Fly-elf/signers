@@ -2,7 +2,7 @@
 //! forced re-sign.
 
 use signers::Codesign;
-use signers::codesign::sign::PreserveMetadata;
+use signers::codesign::PreserveMetadata;
 
 use crate::support::fixture::{Workspace, fixture_str};
 use crate::support::inspect::{self, Signature};
