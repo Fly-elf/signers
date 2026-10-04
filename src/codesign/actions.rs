@@ -11,8 +11,8 @@ use bitflags::Flags;
 
 /// Which of the two signatures of a code object to use (`--signature-slot`).
 ///
-/// Code carries two signatures only when it was signed with a hybrid post-quantum identity. Pass
-/// it to [`verify`](crate::Codesign::verify).
+/// Without it, `codesign` uses the slot the system prefers. The second slot exists only if the
+/// code carries two signatures. Pass it to [`verify`](crate::Codesign::verify).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SignatureSlot {
     /// The first signature (`1`).
