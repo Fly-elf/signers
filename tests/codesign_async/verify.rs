@@ -40,9 +40,9 @@ fn verification_failed(error: Error) -> String {
 /// produce, returning its diagnostics and the altered resources it names.
 fn verification_failed_with_resources(error: Error) -> (String, Vec<ResourceChange>) {
     match error {
-        Error::Codesign(CodesignError::VerificationFailed { stderr, resources }) => {
-            (stderr, resources)
-        }
+        Error::Codesign(CodesignError::VerificationFailed {
+            stderr, resources, ..
+        }) => (stderr, resources),
         other => panic!("expected VerificationFailed, got {other:?}"),
     }
 }
@@ -51,7 +51,7 @@ fn verification_failed_with_resources(error: Error) -> (String, Vec<ResourceChan
 /// requirement must produce, returning its diagnostics.
 fn requirement_unsatisfied(error: Error) -> String {
     match error {
-        Error::Codesign(CodesignError::RequirementUnsatisfied { stderr }) => {
+        Error::Codesign(CodesignError::RequirementUnsatisfied { stderr, .. }) => {
             assert!(!stderr.is_empty(), "the failure carried no diagnostics");
             stderr
         }

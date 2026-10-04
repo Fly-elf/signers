@@ -171,7 +171,9 @@ impl Signature {
     pub fn of(path: &Path) -> Self {
         let run = codesign(&["-dvvvv".as_ref(), path.as_ref()])
             .expect_success(&format!("read the signature of {}", path.display()));
-        Self { raw: run.stderr }
+        Self {
+            raw: run.stderr.trim().to_owned(),
+        }
     }
 
     /// The signature on one slice of a universal binary, which carries its own
@@ -184,10 +186,13 @@ impl Signature {
             path.as_ref(),
         ])
         .expect_success(&format!("read the {arch} slice of {}", path.display()));
-        Self { raw: run.stderr }
+        Self {
+            raw: run.stderr.trim().to_owned(),
+        }
     }
 
-    /// The full report, for the occasional assertion with no accessor of its own.
+    /// The full report without its surrounding whitespace, for the occasional assertion with no
+    /// accessor of its own.
     pub fn raw(&self) -> &str {
         &self.raw
     }
