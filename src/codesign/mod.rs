@@ -7,6 +7,7 @@ mod actions;
 pub mod display;
 pub mod extract_certificates;
 pub mod remove_signature;
+pub mod requirements;
 pub mod sign;
 pub mod validate_constraint;
 pub mod verify;
@@ -23,6 +24,7 @@ use display::Display;
 use extract_certificates::ExtractCertificates;
 use futures_util::StreamExt;
 use remove_signature::RemoveSignature;
+use requirements::Requirements;
 use sign::Sign;
 use validate_constraint::ValidateConstraint;
 use verify::Verify;
@@ -46,7 +48,9 @@ pub use actions::SignatureSlot;
 /// and [`verify`](Codesign::verify) the output is `()`; for [`display`](Codesign::display) it is
 /// a [`Signature`](display::Signature); for
 /// [`extract_certificates`](Codesign::extract_certificates) it is a `Vec` of
-/// [`Certificate`](extract_certificates::Certificate).
+/// [`Certificate`](extract_certificates::Certificate); for
+/// [`internal_requirements`](Codesign::internal_requirements) it is a `Vec` of
+/// [`Requirement`](requirements::Requirement).
 ///
 /// In the signatures, `S`, its default `One` and `S::Out` stand for that shape. They are
 /// internal, so let type inference fill them in; `Codesign<Sign>` is the builder for a single
@@ -63,7 +67,8 @@ pub use actions::SignatureSlot;
 /// `codesign` runs once over all the targets, unless [`per_target`](Codesign::per_target) runs it
 /// once per target. That is the default for [`verify`](Codesign::verify) and
 /// [`display`](Codesign::display) on a collection.
-/// [`extract_certificates`](Codesign::extract_certificates) always runs one per target.
+/// [`extract_certificates`](Codesign::extract_certificates) and
+/// [`internal_requirements`](Codesign::internal_requirements) always run one per target.
 ///
 /// # Examples
 ///
@@ -298,7 +303,8 @@ impl Codesign<()> {
     ///
     /// An unsigned target fails with [`CodesignError::Failed`], exit code 1. With one `codesign`
     /// over several targets, its `stderr` also holds the reports of the targets before the unsigned
-    /// one. A report or entitlements that can't be read fails with
+    /// one. A [`signature_slot`](Codesign::signature_slot) the code has no signature in fails with
+    /// [`CodesignError::NoSignature`]. A report or entitlements that can't be read fails with
     /// [`CodesignError::UnexpectedOutput`]. The checks made before `codesign` starts are on
     /// [`Codesign`].
     ///
@@ -435,6 +441,45 @@ impl Codesign<()> {
     ) -> Codesign<ExtractCertificates, T::Shape> {
         new(target, ExtractCertificates::default())
     }
+
+    /// Reads the requirements of the signature of `target` (`--display -r-`).
+    ///
+    /// `.await` yields one `Vec` of [`Requirement`](requirements::Requirement) per target, in the order `codesign` keeps the requirements, which
+    /// is not the order given to [`requirements`](Codesign::requirements) when signing. A
+    /// requirement the signature doesn't embed, but the system supplies, is marked
+    /// [`implicit`](requirements::Requirement#structfield.implicit). The `Vec` is empty when
+    /// `codesign` prints none. [`display`](Codesign::display) reports only how many
+    /// requirements there are, in [`Signature::internal_requirements`](display::Signature#structfield.internal_requirements).
+    ///
+    /// Given several targets, each is read on its own, concurrently, and every one that failed is
+    /// reported together as [`Error::Batch`]. `codesign` prints the requirements of all targets
+    /// together, with nothing to tell which target a line belongs to, so this action always runs one
+    /// per target and has no [`per_target`](Codesign::per_target) setter:
+    ///
+    /// ```compile_fail,E0599
+    /// signers::Codesign::internal_requirements(vec!["a"]).per_target(false);
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// An unsigned target fails with [`CodesignError::Failed`], exit code 1. A line that can't be
+    /// read as a requirement fails with [`CodesignError::UnexpectedOutput`]. The checks made before
+    /// `codesign` starts are on [`Codesign`].
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn run() -> signers::Result<()> {
+    /// use signers::Codesign;
+    ///
+    /// for requirement in Codesign::internal_requirements("MyApp.app").await? {
+    ///     println!("{:?}: {}", requirement.kind, requirement.expression);
+    /// }
+    /// # Ok(()) }
+    /// ```
+    pub fn internal_requirements<T: IntoTargets>(target: T) -> Codesign<Requirements, T::Shape> {
+        new(target, Requirements)
+    }
 }
 
 /// Options for a `Vec`, slice or array of targets.
@@ -456,8 +501,9 @@ impl<A: Action + actions::sealed::SharedRun, S: Multi> Codesign<A, S> {
     /// signers::Codesign::sign("a", "-").per_target(true);
     /// ```
     ///
-    /// [`extract_certificates`](Codesign::extract_certificates) has no such setter either: it
-    /// always runs one `codesign` per target.
+    /// [`extract_certificates`](Codesign::extract_certificates) and
+    /// [`internal_requirements`](Codesign::internal_requirements) have no such setter either: they
+    /// always run one `codesign` per target.
     ///
     /// An option that writes one shared file, [`file_list`](Codesign::file_list) or
     /// [`detached`](Codesign::detached), makes `.await` fail with
