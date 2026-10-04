@@ -64,12 +64,12 @@ pub(crate) mod sealed {
         /// built here allocate.
         fn to_args<'a>(&'a self, targets: &'a [PathBuf]) -> Vec<Cow<'a, OsStr>>;
 
-        /// Builds one output per target from the raw stdout and stderr of a run that exited 0.
+        /// Builds one output per target from the stdout and stderr of a run that exited 0.
         ///
         /// `targets` are the ones this run covered: all of them, or one per run with
         /// `per_target`. The outputs must follow them in order; any other count becomes
-        /// [`CodesignError::UnexpectedOutput`]. Both streams are untrimmed bytes. A failed run
-        /// goes to [`failure`](Self::failure) instead.
+        /// [`CodesignError::UnexpectedOutput`]. Both streams are lossy-decoded and trimmed. A
+        /// failed run goes to [`failure`](Self::failure) instead.
         fn output(
             &self,
             targets: &[PathBuf],
@@ -80,9 +80,8 @@ pub(crate) mod sealed {
         /// Turns a non-zero exit code into this action's error; by default
         /// [`CodesignError::Failed`].
         ///
-        /// Both streams are already lossy-decoded and trimmed; the default ignores `stdout`.
-        /// A process killed by a signal has no
-        /// exit code and never gets here.
+        /// Both streams are already lossy-decoded and trimmed; the default keeps them as they
+        /// are. A process killed by a signal has no exit code and never gets here.
         fn failure(&self, code: i32, stdout: String, stderr: String) -> Error {
             CodesignError::Failed {
                 code,
@@ -92,6 +91,9 @@ pub(crate) mod sealed {
             .into()
         }
 
+        /// Decodes both streams with [`decode`](super::decode), then calls [`output`](Self::output).
+        ///
+        /// The runner calls this, never `output`; actions don't override it.
         fn output_bytes(
             &self,
             targets: &[PathBuf],
@@ -101,12 +103,17 @@ pub(crate) mod sealed {
             self.output(targets, super::decode(stdout), super::decode(stderr))
         }
 
+        /// Decodes both streams with [`decode`](super::decode), then calls
+        /// [`failure`](Self::failure). The runner calls this; actions don't override it.
         fn failure_bytes(&self, code: i32, stdout: Vec<u8>, stderr: Vec<u8>) -> Error {
             self.failure(code, super::decode(stdout), super::decode(stderr))
         }
     }
 }
 
+/// Turns a stream into text: invalid UTF-8 becomes U+FFFD, surrounding whitespace is dropped.
+///
+/// The only place the crate decodes `codesign` output.
 pub(crate) fn decode(bytes: Vec<u8>) -> String {
     String::from_utf8_lossy(&bytes).trim().to_string()
 }
