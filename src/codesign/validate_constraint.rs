@@ -1,3 +1,5 @@
+//! The constraint-validation action (`--validate-constraint`).
+
 use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;
@@ -6,6 +8,20 @@ use super::actions::PushArgs;
 use super::actions::sealed::ToArgs;
 use crate::errors::CodesignError;
 
+/// The action of [`Codesign::validate_constraint`](crate::Codesign::validate_constraint): the `A` in `Codesign<ValidateConstraint>`.
+///
+/// It has no options, so there are no setters to chain; [`per_target`](crate::Codesign::per_target) is the only one,
+/// for several plists.
+///
+/// # Examples
+///
+/// ```no_run
+/// # async fn run() -> signers::Result<()> {
+/// use signers::Codesign;
+///
+/// Codesign::validate_constraint(["launch.plist", "library.plist"]).await?;
+/// # Ok(()) }
+/// ```
 #[derive(Debug, Clone, Default)]
 pub struct ValidateConstraint;
 
