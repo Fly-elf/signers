@@ -196,6 +196,18 @@ pub enum CodesignError {
     /// reports an error for it, and that report is what `stderr` keeps.
     #[error("invalid constraint: {}", diagnostics(.stderr))]
     ConstraintInvalid { stdout: String, stderr: String },
+
+    /// [`display`](crate::Codesign::display) found no signature in the
+    /// [`signature_slot`](crate::Codesign::signature_slot) it was asked for.
+    ///
+    /// Code with one signature has nothing in the second slot. `codesign` exits 0 for it, and
+    /// reports `no signature` in place of the signature, so this crate fails instead of returning
+    /// one with nothing in it. Unsigned code is a different failure: [`CodesignError::Failed`].
+    /// `stderr` and `stdout` hold what `codesign` printed on each stream during the whole run,
+    /// trimmed, so with one run over several targets they also cover targets that read fine. Only
+    /// `stderr` is part of the message.
+    #[error("no signature: {}", diagnostics(.stderr))]
+    NoSignature { stdout: String, stderr: String },
 }
 
 /// A sealed resource that [`verify`](crate::Codesign::verify) found altered.

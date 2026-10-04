@@ -172,6 +172,44 @@ async fn embedded_requirements_are_counted() {
 }
 
 #[tokio::test]
+async fn a_system_binary_reports_its_requirements_count_and_size() {
+    let path = std::path::Path::new("/bin/ls");
+
+    let signature = Codesign::display(path).await.unwrap();
+
+    assert_agrees_with_codesign(&signature, path);
+    let found = signature.internal_requirements.expect("no count read");
+    assert_eq!((found.count, found.size), (1, 60));
+}
+
+#[tokio::test]
+async fn the_requirements_count_is_the_same_in_every_run_mode() {
+    let workspace = Workspace::new();
+    let target = workspace.presigned(
+        "hello",
+        &["-r=designated => identifier \"com.example.hello\""],
+    );
+
+    let single = Codesign::display(&target).await.unwrap();
+    let separate = Codesign::display(vec![target.clone()]).await.unwrap();
+    let shared = Codesign::display(vec![target])
+        .per_target(false)
+        .await
+        .unwrap();
+
+    assert!(single.internal_requirements.is_some());
+    assert_eq!(
+        single.internal_requirements,
+        separate[0].internal_requirements
+    );
+    assert_eq!(
+        single.internal_requirements,
+        shared[0].internal_requirements
+    );
+    assert_eq!(single.raw(), shared[0].raw());
+}
+
+#[tokio::test]
 async fn every_constraint_kind_is_read_back() {
     let constraint = fixture_str("launch-constraint.plist");
     let cases = [

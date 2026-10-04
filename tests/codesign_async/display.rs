@@ -9,6 +9,7 @@ mod per_target;
 mod preflight;
 mod reading;
 mod rejected_by_codesign;
+mod signature_slot;
 mod with_identity;
 
 use std::ffi::OsStr;
