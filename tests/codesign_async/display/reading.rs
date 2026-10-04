@@ -200,6 +200,32 @@ async fn every_constraint_kind_is_read_back() {
     }
 }
 
+/// The constraint dump that `codesign` prints on standard output ahead of the
+/// entitlements must not hide them.
+#[tokio::test]
+async fn entitlements_are_read_back_beside_a_launch_constraint() {
+    let workspace = Workspace::new();
+    let entitlements = fixture_str("entitlements.plist");
+    let constraint = fixture_str("launch-constraint.plist");
+    let target = workspace.presigned(
+        "hello",
+        &[
+            "--entitlements",
+            &entitlements,
+            "--launch-constraint-self",
+            &constraint,
+        ],
+    );
+
+    let signature = Codesign::display(&target).await.unwrap();
+
+    let expected: plist::Dictionary =
+        plist::from_bytes(inspect::entitlements(&target).as_bytes()).unwrap();
+    assert!(!expected.is_empty());
+    assert_eq!(signature.entitlements, Some(expected));
+    assert_eq!(signature.constraints, Constraints::LAUNCH_SELF);
+}
+
 #[tokio::test]
 async fn a_plain_file_is_a_generic_target() {
     let workspace = Workspace::new();

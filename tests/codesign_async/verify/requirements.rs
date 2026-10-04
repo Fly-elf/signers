@@ -1,8 +1,8 @@
 //! `test_requirement`: a requirement the code must satisfy on top of a valid
 //! signature, and the exit codes that tell the two failures apart.
 
-use signers::Codesign;
 use signers::codesign::verify::Strict;
+use signers::{Codesign, CodesignError, Error};
 
 use super::{requirement_unsatisfied, verification_failed};
 use crate::support::fixture::Workspace;
@@ -156,4 +156,31 @@ async fn a_satisfied_requirement_does_not_excuse_a_broken_signature() {
         .unwrap_err();
 
     verification_failed(error);
+}
+
+/// The verdict comes with whatever `codesign` printed on standard output as
+/// well, trimmed.
+#[tokio::test]
+async fn an_unsatisfied_requirement_keeps_what_codesign_printed_on_stdout() {
+    let workspace = Workspace::new();
+    let target = workspace.adhoc_signed("hello");
+    let oracle = crate::support::inspect::codesign(&[
+        "--verify".as_ref(),
+        "--test-requirement".as_ref(),
+        "=anchor apple".as_ref(),
+        target.as_ref(),
+    ]);
+    assert!(!oracle.success);
+
+    let error = Codesign::verify(&target)
+        .test_requirement("anchor apple")
+        .await
+        .unwrap_err();
+
+    match error {
+        Error::Codesign(CodesignError::RequirementUnsatisfied { stdout, .. }) => {
+            assert_eq!(stdout, oracle.stdout.trim());
+        }
+        other => panic!("expected RequirementUnsatisfied, got {other:?}"),
+    }
 }
