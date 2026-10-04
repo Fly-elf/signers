@@ -1,5 +1,3 @@
-//! The signature-removal action (`--remove-signature`).
-
 use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;

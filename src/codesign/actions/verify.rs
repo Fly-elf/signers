@@ -1,5 +1,3 @@
-//! The verification action and the types its options take (`--verify`).
-
 use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;
@@ -24,7 +22,7 @@ use crate::target::Shape;
 ///
 /// ```no_run
 /// # async fn run() -> signers::Result<()> {
-/// use signers::codesign::verify::Strict;
+/// use signers::codesign::Strict;
 /// use signers::{Codesign, Error};
 ///
 /// let apps = vec!["A.app", "B.app"];
@@ -90,7 +88,7 @@ impl<S: Shape> Codesign<Verify, S> {
     /// ```no_run
     /// # async fn run() -> signers::Result<()> {
     /// use signers::Codesign;
-    /// use signers::codesign::verify::Strict;
+    /// use signers::codesign::Strict;
     ///
     /// // Reject a symbolic link that leaves the bundle.
     /// Codesign::verify("MyApp.app").strict(Strict::Symlinks).await?;

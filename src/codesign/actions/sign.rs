@@ -1,5 +1,3 @@
-//! The signing action and the types its options take (`--sign`).
-
 use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
