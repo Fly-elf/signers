@@ -239,7 +239,7 @@ async fn options_apply_to_every_target() {
 
     Codesign::verify(targets)
         .deep(true)
-        .strict(signers::codesign::verify::Strict::All)
+        .strict(signers::codesign::Strict::All)
         .test_requirement("!anchor apple")
         .await
         .unwrap();

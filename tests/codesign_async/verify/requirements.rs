@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use signers::codesign::verify::Strict;
+use signers::codesign::Strict;
 use signers::{Codesign, CodesignError, Error};
 
 use super::{requirement_unsatisfied, verification_failed};

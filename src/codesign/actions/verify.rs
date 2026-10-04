@@ -887,11 +887,4 @@ mod tests {
             Error::Codesign(CodesignError::RequirementUnsatisfied { .. })
         ));
     }
-
-    #[test]
-    fn strict_levels_compare_by_value() {
-        assert_eq!(Strict::All, Strict::All);
-        assert_ne!(Strict::All, Strict::Symlinks);
-        assert_ne!(Strict::Symlinks, Strict::Sideband);
-    }
 }

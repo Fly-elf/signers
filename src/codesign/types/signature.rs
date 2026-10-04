@@ -922,7 +922,7 @@ Chosen signature=1
             team_identifier: None,
             runtime_version: None,
             sealed_resources: None,
-            internal_requirements: Some(InternalRequirements { count: 0, size: 12 }),
+            internal_requirements: Some(RequirementsSummary { count: 0, size: 12 }),
             total_signatures: Some(1),
             chosen_signature: Some(1),
             nested: vec![],
@@ -972,7 +972,7 @@ Chosen signature=1
         assert_eq!(signature.timestamp, None);
         assert_eq!(
             signature.internal_requirements,
-            Some(InternalRequirements { count: 1, size: 60 })
+            Some(RequirementsSummary { count: 1, size: 60 })
         );
     }
 
@@ -1446,7 +1446,7 @@ Chosen signature=1
                 "Internal requirements count=2 size=176"
             ))
             .internal_requirements,
-            Some(InternalRequirements {
+            Some(RequirementsSummary {
                 count: 2,
                 size: 176
             })

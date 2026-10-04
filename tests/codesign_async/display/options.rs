@@ -3,7 +3,7 @@
 //! handed the same flag.
 
 use signers::Codesign;
-use signers::codesign::display::{Format, Location};
+use signers::codesign::{Format, Location};
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect;

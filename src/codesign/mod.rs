@@ -695,7 +695,7 @@ mod tests {
     use std::ffi::OsStr;
     use std::path::Path;
 
-    use super::actions::sealed::ToArgs;
+    use super::action::sealed::ToArgs;
     use super::*;
 
     /// Displays its targets, yielding the `Executable=<path>` line `codesign`
@@ -709,7 +709,7 @@ mod tests {
         file_list: bool,
     }
 
-    impl super::actions::sealed::SharedRun for Probe {}
+    impl super::action::sealed::SharedRun for Probe {}
 
     impl ToArgs for Probe {
         type Output = String;

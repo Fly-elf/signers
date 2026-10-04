@@ -15,7 +15,7 @@ mod with_identity;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use signers::codesign::extract_certificates::Certificate;
+use signers::codesign::Certificate;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect;
