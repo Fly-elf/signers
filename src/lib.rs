@@ -23,8 +23,8 @@
 //!   `codesign` per target of a collection.
 //! - [`Sign`](codesign::sign::Sign), [`RemoveSignature`](codesign::remove_signature::RemoveSignature),
 //!   [`Verify`](codesign::verify::Verify), [`Display`](codesign::display::Display),
-//!   [`ExtractCertificates`](codesign::extract_certificates::ExtractCertificates): more examples
-//!   for each action.
+//!   [`ExtractCertificates`](codesign::extract_certificates::ExtractCertificates),
+//!   [`Requirements`](codesign::requirements::Requirements): more examples for each action.
 //! - [`IntoTargets`]: what you can pass as targets. One path yields one result; a `Vec`, slice
 //!   or array yields one per target, in a `Vec` or an array.
 //! - [`Error`]: what can fail.

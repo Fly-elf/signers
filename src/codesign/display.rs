@@ -91,6 +91,10 @@ impl<S: Shape> Codesign<Display, S> {
         self
     }
 
+    /// Reads this signature when the code carries two (`--signature-slot`).
+    ///
+    /// Code with one signature has only [`SignatureSlot::First`]. Asking for the second fails with
+    /// [`CodesignError::NoSignature`].
     pub fn signature_slot(mut self, slot: SignatureSlot) -> Self {
         self.action.signature_slot = Some(slot);
         self

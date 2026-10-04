@@ -101,8 +101,9 @@ pub struct Signature {
     pub runtime_version: Option<OsVersion>,
     /// The seal over the bundle's resources; `None` when nothing is sealed (`Sealed Resources`).
     pub sealed_resources: Option<SealedResources>,
-    /// The requirements embedded in the signature; `None` when there are none
-    /// (`Internal requirements`).
+    /// How many requirements the signature embeds, and their size; `None` when there are none
+    /// (`Internal requirements`). [`internal_requirements`](crate::Codesign::internal_requirements)
+    /// reads the requirements themselves.
     pub internal_requirements: Option<InternalRequirements>,
     /// The number of signatures in the code (`Total signatures`).
     ///
@@ -375,7 +376,7 @@ pub struct SealedResources {
     pub files: u32,
 }
 
-/// The requirements embedded in a signature (`Internal requirements`).
+/// How many requirements a signature embeds, and their size (`Internal requirements`).
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InternalRequirements {

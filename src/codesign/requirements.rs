@@ -1,3 +1,5 @@
+//! The requirements action and the [`Requirement`]s it returns (`--display -r-`).
+
 use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;
@@ -6,6 +8,41 @@ use super::actions::PushArgs;
 use super::actions::sealed::ToArgs;
 use crate::errors::{CodesignError, Result};
 
+/// The action that reads requirements: the `A` in `Codesign<Requirements>`.
+///
+/// [`internal_requirements`](crate::Codesign::internal_requirements) creates it. It has no options. `.await` yields the
+/// requirements of each target as a `Vec` of [`Requirement`], in the order `codesign` keeps them,
+/// which is not the order given to [`requirements`](crate::Codesign::requirements) when signing.
+///
+/// # Examples
+///
+/// Print the designated requirement of an app:
+///
+/// ```no_run
+/// # async fn run() -> signers::Result<()> {
+/// use signers::Codesign;
+/// use signers::codesign::requirements::RequirementKind;
+///
+/// let requirements = Codesign::internal_requirements("MyApp.app").await?;
+/// for requirement in &requirements {
+///     if requirement.kind == RequirementKind::Designated {
+///         println!("{}", requirement.expression);
+///     }
+/// }
+/// # Ok(()) }
+/// ```
+///
+/// Tell the requirements a signature carries from the system's defaults:
+///
+/// ```no_run
+/// # async fn run() -> signers::Result<()> {
+/// use signers::Codesign;
+///
+/// let [ls, cat] = Codesign::internal_requirements(["/bin/ls", "/bin/cat"]).await?;
+/// let embedded = ls.iter().chain(&cat).filter(|requirement| !requirement.implicit).count();
+/// println!("{embedded} requirements are part of the signatures");
+/// # Ok(()) }
+/// ```
 #[derive(Debug, Clone, Default)]
 pub struct Requirements;
 
@@ -38,24 +75,38 @@ impl ToArgs for Requirements {
     }
 }
 
-/// A requirement embedded in a signature, as `codesign -r-` prints it.
+/// A code requirement of a signature: what it is for, and the expression to satisfy.
+///
+/// [`internal_requirements`](crate::Codesign::internal_requirements) returns them.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Requirement {
+    /// What the requirement is for.
     pub kind: RequirementKind,
+    /// The requirement as source text, e.g. `identifier "com.apple.ls" and anchor apple`. It isn't
+    /// parsed: pass it to [`test_requirement`](crate::Codesign::test_requirement), for instance.
     pub expression: String,
+    /// `true` when the signature doesn't embed this requirement and `codesign` shows the system's
+    /// default instead, such as the designated requirement of an ad hoc signature, which names the
+    /// code's hashes.
     pub implicit: bool,
 }
 
-/// What a [`Requirement`] is for.
+/// What a [`Requirement`] is for (`codesign`'s requirement types).
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RequirementKind {
+    /// What the code must satisfy to be considered the same code, across versions (`designated`).
     Designated,
+    /// What the code that hosts this one must satisfy (`host`).
     Host,
+    /// What the code hosted by this one, its guests, must satisfy (`guest`).
     Guest,
+    /// What the libraries this code loads must satisfy (`library`).
     Library,
+    /// What the plug-ins this code loads must satisfy (`plugin`).
     Plugin,
+    /// A kind this crate doesn't know, with the word `codesign` printed for it.
     Other(String),
 }
 
