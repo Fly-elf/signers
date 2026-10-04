@@ -405,6 +405,111 @@ fn a_per_target_process_killed_by_a_signal_is_charged_to_its_target() {
     }
 }
 
+/// A `-` that would make `codesign` touch the caller's standard streams is
+/// refused before any process starts, whichever way the run is split.
+#[test]
+fn a_refused_stdio_path_starts_no_process() {
+    let _serialised = crate::serialised();
+
+    let workspace = Workspace::new();
+    let targets = plain_targets(&workspace, &["a.bin", "b.bin"]);
+    let (bin, calls) = recording_codesign(&workspace, "exit 0");
+
+    let errors = {
+        let _path = ScopedPath::to(&bin);
+        let runtime = crate::runtime();
+        let mut errors = Vec::new();
+        for per_target in [false, true] {
+            errors.push(
+                runtime
+                    .block_on(
+                        Codesign::sign(targets.clone(), "-")
+                            .requirements("-")
+                            .per_target(per_target)
+                            .into_future(),
+                    )
+                    .unwrap_err(),
+            );
+            errors.push(
+                runtime
+                    .block_on(
+                        Codesign::sign(targets.clone(), "-")
+                            .file_list("-")
+                            .per_target(per_target)
+                            .into_future(),
+                    )
+                    .unwrap_err(),
+            );
+            errors.push(
+                runtime
+                    .block_on(
+                        Codesign::verify(targets.clone())
+                            .test_requirement_file("-")
+                            .per_target(per_target)
+                            .into_future(),
+                    )
+                    .unwrap_err(),
+            );
+        }
+        errors.push(
+            runtime
+                .block_on(
+                    Codesign::verify(&targets[0])
+                        .test_requirement_file("-")
+                        .into_future(),
+                )
+                .unwrap_err(),
+        );
+        errors
+    };
+
+    for error in errors {
+        assert!(matches!(error, Error::StdioPath(_)), "got {error:?}");
+    }
+    assert_eq!(recorded_calls(&calls), Vec::<Vec<String>>::new());
+}
+
+/// The requirement file and the slot reach `codesign` as separate arguments,
+/// before the targets, and a dash in any other path stays a plain argument.
+#[test]
+fn verify_passes_a_requirement_file_and_a_slot_as_separate_arguments() {
+    use signers::codesign::SignatureSlot;
+
+    let _serialised = crate::serialised();
+
+    let workspace = Workspace::new();
+    let targets = plain_targets(&workspace, &["a.bin"]);
+    let (bin, calls) = recording_codesign(&workspace, "exit 0");
+
+    let result = {
+        let _path = ScopedPath::to(&bin);
+        crate::runtime().block_on(
+            Codesign::verify(&targets[0])
+                .test_requirement_file("my reqs.txt")
+                .signature_slot(SignatureSlot::Second)
+                .detached("-")
+                .into_future(),
+        )
+    };
+
+    result.unwrap();
+    let target = targets[0].display().to_string();
+    let expected: Vec<String> = [
+        "--verify",
+        "-R",
+        "my reqs.txt",
+        "--signature-slot",
+        "2",
+        "--detached",
+        "-",
+        "--",
+        &target,
+    ]
+    .map(str::to_owned)
+    .into();
+    assert_eq!(recorded_calls(&calls), [expected]);
+}
+
 /// No target is to blame for a `codesign` that is not there, so there is
 /// nothing to collect: the run fails as a whole, with the plain error.
 #[test]
