@@ -9,6 +9,22 @@ use std::path::PathBuf;
 
 use bitflags::Flags;
 
+/// Which signature of the code to read when it carries two (`--signature-slot`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignatureSlot {
+    First,
+    Second,
+}
+
+impl SignatureSlot {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::First => "1",
+            Self::Second => "2",
+        }
+    }
+}
+
 /// An action type that [`Codesign`](crate::Codesign) can run, such as
 /// [`Sign`](crate::codesign::sign::Sign).
 ///
