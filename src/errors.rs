@@ -10,8 +10,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Why an action failed.
 ///
-/// Every variant except [`Codesign`](Error::Codesign) and [`Batch`](Error::Batch) comes from a
-/// check made before `codesign` starts, so no target has been touched. The order of the checks
+/// Every variant except [`Codesign`](Error::Codesign), [`Batch`](Error::Batch) and
+/// [`Io`](Error::Io) comes from a check made before `codesign` starts, so no target has been
+/// touched. The order of the checks
 /// is on [`Codesign`](crate::Codesign#errors).
 ///
 /// # Examples
@@ -53,6 +54,12 @@ pub enum Error {
         source: std::io::Error,
     },
 
+    /// A file or directory couldn't be read, created or written.
+    ///
+    /// `path` is the one involved. [`extract_certificates`](crate::Codesign::extract_certificates)
+    /// raises it, for the system's temporary directory, for the files it reads back and for the
+    /// ones [`save_to`](crate::Codesign::save_to) writes. It never changes a target. Raised while
+    /// a target is read, it is collected in [`Batch`](Error::Batch).
     #[error("I/O error on {path}: {source}")]
     Io {
         path: PathBuf,
