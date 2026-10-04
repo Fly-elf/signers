@@ -595,14 +595,13 @@ mod tests {
         fn output(
             &self,
             _targets: &[PathBuf],
-            _stdout: Vec<u8>,
-            stderr: Vec<u8>,
+            _stdout: String,
+            stderr: String,
         ) -> Result<Vec<String>> {
             if self.unreadable {
                 return Err(Error::FileListToStdout);
             }
-            let report = String::from_utf8_lossy(&stderr);
-            let mut outputs: Vec<String> = report.lines().map(str::to_owned).collect();
+            let mut outputs: Vec<String> = stderr.lines().map(str::to_owned).collect();
             if self.drop_last_output {
                 outputs.pop();
             }

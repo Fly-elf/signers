@@ -162,3 +162,85 @@ pub(crate) fn joined<F: Flags + Copy>(flags: F) -> String {
     }
     tokens
 }
+
+#[cfg(test)]
+mod tests {
+    use super::sealed::ToArgs;
+    use super::*;
+    use crate::errors::{CodesignError, Error, Result};
+
+    /// Reports the streams it was given, so a test sees what the adapters hand over.
+    struct Echo;
+
+    impl ToArgs for Echo {
+        type Output = (String, String);
+        const PER_TARGET: bool = false;
+
+        fn to_args<'a>(&'a self, _targets: &'a [PathBuf]) -> Vec<Cow<'a, OsStr>> {
+            Vec::new()
+        }
+
+        fn output(
+            &self,
+            _targets: &[PathBuf],
+            stdout: String,
+            stderr: String,
+        ) -> Result<Vec<Self::Output>> {
+            Ok(vec![(stdout, stderr)])
+        }
+    }
+
+    #[test]
+    fn decode_trims_surrounding_whitespace() {
+        assert_eq!(
+            decode(b" \n\tkeep  inner\n space \r\n".to_vec()),
+            "keep  inner\n space"
+        );
+        assert_eq!(decode(b"plain".to_vec()), "plain");
+    }
+
+    #[test]
+    fn decode_of_nothing_or_only_whitespace_is_empty() {
+        assert_eq!(decode(Vec::new()), "");
+        assert_eq!(decode(b" \n\t\r\n".to_vec()), "");
+    }
+
+    #[test]
+    fn decode_replaces_invalid_utf8_with_the_replacement_character() {
+        assert_eq!(decode(b"a\xFFb".to_vec()), "a\u{FFFD}b");
+        assert_eq!(decode(vec![0xC3]), "\u{FFFD}");
+        assert_eq!(decode("caf\u{E9}\n".as_bytes().to_vec()), "caf\u{E9}");
+    }
+
+    #[test]
+    fn output_bytes_decodes_both_streams() {
+        let outputs = Echo
+            .output_bytes(&[], b"\nout\xFF\n".to_vec(), b"  err \n".to_vec())
+            .unwrap();
+
+        assert_eq!(outputs, [("out\u{FFFD}".to_owned(), "err".to_owned())]);
+    }
+
+    #[test]
+    fn failure_bytes_decodes_both_streams_for_the_default_failure() {
+        match Echo.failure_bytes(7, b"out\n".to_vec(), b"\xFFerr\n".to_vec()) {
+            Error::Codesign(CodesignError::Failed {
+                code,
+                stdout,
+                stderr,
+            }) => {
+                assert_eq!(code, 7);
+                assert_eq!(stdout, "out");
+                assert_eq!(stderr, "\u{FFFD}err");
+            }
+            other => panic!("expected Failed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn the_default_failure_keeps_stdout_apart_from_the_message() {
+        let error = Echo.failure(2, "printed".into(), "bad".into());
+
+        assert_eq!(error.to_string(), "`codesign` exited with code 2: bad");
+    }
+}
