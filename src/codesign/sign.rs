@@ -495,8 +495,8 @@ impl ToArgs for Sign {
     fn output(
         &self,
         targets: &[PathBuf],
-        _stdout: Vec<u8>,
-        _stderr: Vec<u8>,
+        _stdout: String,
+        _stderr: String,
     ) -> crate::errors::Result<Vec<()>> {
         Ok(vec![(); targets.len()])
     }

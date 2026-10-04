@@ -109,13 +109,21 @@ pub enum CodesignError {
     /// When one `codesign` runs over several targets, the targets before the rejected one have
     /// already changed. See [`Codesign`](crate::Codesign#errors).
     #[error("`codesign` exited with code {code}: {}", diagnostics(.stderr))]
-    Failed { code: i32, stderr: String },
+    Failed {
+        code: i32,
+        stdout: String,
+        stderr: String,
+    },
 
     /// `codesign` was killed by a signal before it could exit.
     ///
     /// `status` holds the signal (`ExitStatusExt::signal`). `stderr` is usually empty.
     #[error("the `codesign` process terminated abnormally ({status}): {}", diagnostics(.stderr))]
-    Terminated { status: ExitStatus, stderr: String },
+    Terminated {
+        status: ExitStatus,
+        stdout: String,
+        stderr: String,
+    },
 
     /// `codesign` exited 0, but its output couldn't be read as the action's result.
     ///
@@ -138,6 +146,7 @@ pub enum CodesignError {
     /// `(modified: /path; added: /path)`.
     #[error("verification failed: {}{}", diagnostics(.stderr), changes(.resources))]
     VerificationFailed {
+        stdout: String,
         stderr: String,
         resources: Vec<ResourceChange>,
     },
@@ -150,7 +159,7 @@ pub enum CodesignError {
     /// [`check_designated_requirement`](crate::Codesign::check_designated_requirement), the code's
     /// own. `stderr` holds the diagnostics `codesign` printed on standard error, trimmed.
     #[error("validly signed, but the requirement isn't satisfied: {}", diagnostics(.stderr))]
-    RequirementUnsatisfied { stderr: String },
+    RequirementUnsatisfied { stdout: String, stderr: String },
 }
 
 /// A sealed resource that [`verify`](crate::Codesign::verify) found altered.

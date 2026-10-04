@@ -511,7 +511,7 @@ async fn run<A: Action>(action: &A, targets: &[PathBuf]) -> Result<Vec<A::Output
 
     let output = child.wait_with_output().await.map_err(CodesignError::Run)?;
     if output.status.success() {
-        let outputs = action.output(targets, output.stdout, output.stderr)?;
+        let outputs = action.output_bytes(targets, output.stdout, output.stderr)?;
         if outputs.len() != targets.len() {
             return Err(CodesignError::UnexpectedOutput {
                 detail: format!("{} outputs for {} targets", outputs.len(), targets.len()),
@@ -521,15 +521,14 @@ async fn run<A: Action>(action: &A, targets: &[PathBuf]) -> Result<Vec<A::Output
         return Ok(outputs);
     }
 
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     Err(match output.status.code() {
-        Some(code) => action.failure(code, stdout, stderr),
+        Some(code) => action.failure_bytes(code, output.stdout, output.stderr),
         // No exit code at all: the process was killed before it could
         // exit, so this is not `codesign` rejecting anything.
         None => CodesignError::Terminated {
             status: output.status,
-            stderr,
+            stdout: actions::decode(output.stdout),
+            stderr: actions::decode(output.stderr),
         }
         .into(),
     })
