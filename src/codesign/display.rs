@@ -130,10 +130,9 @@ impl ToArgs for Display {
     fn output(
         &self,
         targets: &[PathBuf],
-        stdout: Vec<u8>,
-        stderr: Vec<u8>,
+        stdout: String,
+        stderr: String,
     ) -> Result<Vec<Signature>> {
-        let stderr = String::from_utf8_lossy(&stderr);
         let reports = reports(&stderr);
         if reports.len() != targets.len() {
             return Err(CodesignError::UnexpectedOutput {
@@ -150,7 +149,7 @@ impl ToArgs for Display {
         if let [signature] = signatures.as_mut_slice()
             && let Some(plist) = plist_start(&stdout)
         {
-            let entitlements = plist::from_bytes(&stdout[plist..]).map_err(|error| {
+            let entitlements = plist::from_bytes(&stdout.as_bytes()[plist..]).map_err(|error| {
                 CodesignError::UnexpectedOutput {
                     detail: format!("unreadable entitlements: {error}"),
                 }
@@ -164,10 +163,11 @@ impl ToArgs for Display {
 
 // `--verbose=4` prints a text dump of the constraint dictionaries before the
 // plist, which always starts on its own line.
-fn plist_start(stdout: &[u8]) -> Option<usize> {
-    const MARKER: &[u8] = b"<?xml";
+fn plist_start(stdout: &str) -> Option<usize> {
+    const MARKER: &str = "<?xml";
+    let bytes = stdout.as_bytes();
     (0..stdout.len())
-        .filter(|&i| i == 0 || stdout[i - 1] == b'\n')
+        .filter(|&i| i == 0 || bytes[i - 1] == b'\n')
         .find(|&i| stdout[i..].starts_with(MARKER))
 }
 
@@ -185,7 +185,7 @@ fn reports(stderr: &str) -> Vec<&str> {
     starts.push(stderr.len());
     starts
         .windows(2)
-        .map(|bounds| &stderr[bounds[0]..bounds[1]])
+        .map(|bounds| stderr[bounds[0]..bounds[1]].trim_end())
         .collect()
 }
 
@@ -355,15 +355,35 @@ Chosen signature=1
         let stderr = format!("{}{}", report("/x/a", "first"), report("/x/b", "second"));
 
         let signatures = Display::default()
-            .output(&paths(&["a", "b"]), Vec::new(), stderr.into_bytes())
+            .output(&paths(&["a", "b"]), String::new(), stderr)
             .unwrap();
 
         let identifiers: Vec<&str> = signatures.iter().map(|s| s.identifier.as_str()).collect();
         assert_eq!(identifiers, ["first", "second"]);
         assert_eq!(signatures[0].executable, PathBuf::from("/x/a"));
-        assert_eq!(signatures[0].raw(), report("/x/a", "first"));
-        assert_eq!(signatures[1].raw(), report("/x/b", "second"));
+        assert_eq!(signatures[0].raw(), report("/x/a", "first").trim_end());
+        assert_eq!(signatures[1].raw(), report("/x/b", "second").trim_end());
+        assert!(signatures.iter().all(|s| s.raw() == s.raw().trim_end()));
         assert!(signatures.iter().all(|s| s.entitlements.is_none()));
+    }
+
+    #[test]
+    fn no_report_keeps_trailing_whitespace_whatever_the_run_printed() {
+        let stderr = format!(
+            "{}\n\n{}  \n",
+            report("/x/a", "first"),
+            report("/x/b", "second")
+        );
+
+        for blocks in [reports(&stderr), reports(&format!("{stderr}\n"))] {
+            assert_eq!(blocks.len(), 2);
+            assert!(blocks.iter().all(|b| *b == b.trim_end()), "{blocks:?}");
+            assert!(blocks[0].ends_with("Chosen signature=1"));
+        }
+        let signatures = Display::default()
+            .output(&paths(&["a", "b"]), String::new(), stderr)
+            .unwrap();
+        assert!(signatures.iter().all(|s| s.raw() == s.raw().trim_end()));
     }
 
     #[test]
@@ -374,7 +394,7 @@ Chosen signature=1
         );
 
         let signatures = Display::default()
-            .output(&paths(&["a"]), Vec::new(), stderr.into_bytes())
+            .output(&paths(&["a"]), String::new(), stderr)
             .unwrap();
 
         assert_eq!(signatures.len(), 1);
@@ -394,7 +414,7 @@ Chosen signature=1
         ];
 
         for (targets, stderr) in cases {
-            unexpected_output(Display::default().output(&targets, Vec::new(), stderr.into_bytes()));
+            unexpected_output(Display::default().output(&targets, String::new(), stderr));
         }
     }
 
@@ -402,11 +422,8 @@ Chosen signature=1
     fn an_unreadable_report_is_rejected() {
         let stderr = report("/x/a", "first").replace("Total signatures=1", "Total signatures=x");
 
-        let detail = unexpected_output(Display::default().output(
-            &paths(&["a"]),
-            Vec::new(),
-            stderr.into_bytes(),
-        ));
+        let detail =
+            unexpected_output(Display::default().output(&paths(&["a"]), String::new(), stderr));
 
         assert!(detail.contains("Total signatures"), "{detail}");
     }
@@ -416,8 +433,8 @@ Chosen signature=1
         let signatures = Display::default()
             .output(
                 &paths(&["a"]),
-                ENTITLEMENTS.as_bytes().to_vec(),
-                report("/x/a", "first").into_bytes(),
+                ENTITLEMENTS.to_owned(),
+                report("/x/a", "first"),
             )
             .unwrap();
 
@@ -442,11 +459,7 @@ Chosen signature=1
     #[test]
     fn a_single_target_with_nothing_on_stdout_has_no_entitlements() {
         let signatures = Display::default()
-            .output(
-                &paths(&["a"]),
-                Vec::new(),
-                report("/x/a", "first").into_bytes(),
-            )
+            .output(&paths(&["a"]), String::new(), report("/x/a", "first"))
             .unwrap();
 
         assert_eq!(signatures[0].entitlements, None);
@@ -461,8 +474,8 @@ Chosen signature=1
         ] {
             unexpected_output(Display::default().output(
                 &paths(&["a"]),
-                stdout.as_bytes().to_vec(),
-                report("/x/a", "first").into_bytes(),
+                stdout.to_owned(),
+                report("/x/a", "first"),
             ));
         }
     }
@@ -471,11 +484,7 @@ Chosen signature=1
 
     fn entitlement_keys(stdout: String) -> Option<Vec<String>> {
         let signatures = Display::default()
-            .output(
-                &paths(&["a"]),
-                stdout.into_bytes(),
-                report("/x/a", "first").into_bytes(),
-            )
+            .output(&paths(&["a"]), stdout, report("/x/a", "first"))
             .unwrap();
         signatures[0]
             .entitlements
@@ -516,14 +525,24 @@ Chosen signature=1
         let stderr = format!("{}{}", report("/x/a", "first"), report("/x/b", "second"));
 
         let signatures = Display::default()
-            .output(
-                &paths(&["a", "b"]),
-                ENTITLEMENTS.as_bytes().to_vec(),
-                stderr.into_bytes(),
-            )
+            .output(&paths(&["a", "b"]), ENTITLEMENTS.to_owned(), stderr)
             .unwrap();
 
         assert!(signatures.iter().all(|s| s.entitlements.is_none()));
+    }
+
+    #[test]
+    fn whitespace_around_either_stream_does_not_matter() {
+        let stdout = format!("\n\n{ENTITLEMENTS}\n\n");
+        let stderr = format!("\n{}\n\n", report("/x/a", "first"));
+
+        let signatures = Display::default()
+            .output_bytes(&paths(&["a"]), stdout.into_bytes(), stderr.into_bytes())
+            .unwrap();
+
+        assert_eq!(signatures[0].identifier, "first");
+        assert_eq!(signatures[0].raw(), report("/x/a", "first").trim_end());
+        assert_eq!(signatures[0].entitlements.as_ref().unwrap().len(), 2);
     }
 
     #[test]
@@ -538,7 +557,7 @@ Chosen signature=1
         );
 
         let signatures = Display::default()
-            .output(
+            .output_bytes(
                 &[PathBuf::from(OsStr::from_bytes(b"caf\xE9"))],
                 Vec::new(),
                 stderr,

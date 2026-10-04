@@ -25,7 +25,7 @@ fn adhoc_sign(path: &Path, args: &[&str]) {
 }
 
 /// The `codesign --display --verbose=4` report for `path`, with `args` before
-/// the target, as the CLI prints it.
+/// the target, as the CLI prints it, without its trailing newline.
 fn report(path: &Path, args: &[&str]) -> String {
     let mut argv: Vec<&OsStr> = vec!["--display".as_ref(), "--verbose=4".as_ref()];
     argv.extend(args.iter().map(OsStr::new));
@@ -33,4 +33,6 @@ fn report(path: &Path, args: &[&str]) -> String {
     inspect::codesign(&argv)
         .expect_success(&format!("display {}", path.display()))
         .stderr
+        .trim_end()
+        .to_owned()
 }

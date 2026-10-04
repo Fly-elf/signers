@@ -4,11 +4,14 @@
 use signers::{Codesign, CodesignError, Error};
 
 use crate::support::fixture::Workspace;
+use crate::support::inspect;
 
 /// The diagnostics of a run `codesign` ended with exit code 1.
 fn exit_1(error: Error) -> String {
     match error {
-        Error::Codesign(CodesignError::Failed { code: 1, stderr }) => stderr,
+        Error::Codesign(CodesignError::Failed {
+            code: 1, stderr, ..
+        }) => stderr,
         other => panic!("expected `codesign` to exit 1, got {other:?}"),
     }
 }
@@ -91,4 +94,36 @@ async fn a_detached_signature_is_needed_to_read_it() {
         stderr.contains("code object is not signed at all"),
         "{stderr}"
     );
+}
+
+/// A run over several targets reads no entitlements, so `codesign` prints
+/// nothing on standard output before it refuses the unsigned one: the error
+/// carries exactly that, next to the diagnostics.
+#[tokio::test]
+async fn a_failed_one_process_run_carries_the_empty_stdout_codesign_left() {
+    let workspace = Workspace::new();
+    let signed = workspace.adhoc_signed("hello");
+    let unsigned = workspace.write("notes.txt", "never signed\n");
+    let oracle = inspect::codesign(&[
+        "--display".as_ref(),
+        "--verbose=4".as_ref(),
+        "--".as_ref(),
+        signed.as_ref(),
+        unsigned.as_ref(),
+    ]);
+    assert!(!oracle.success);
+
+    let error = Codesign::display(vec![signed, unsigned.clone()])
+        .per_target(false)
+        .await
+        .unwrap_err();
+
+    match error {
+        Error::Codesign(CodesignError::Failed { stdout, stderr, .. }) => {
+            assert_eq!(stdout, oracle.stdout.trim());
+            assert!(stdout.is_empty(), "{stdout}");
+            assert!(stderr.contains(&unsigned.display().to_string()), "{stderr}");
+        }
+        other => panic!("expected Failed, got {other:?}"),
+    }
 }

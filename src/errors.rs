@@ -104,18 +104,30 @@ pub enum CodesignError {
     #[error("failed while running the `codesign` process: {0}")]
     Run(#[source] std::io::Error),
 
-    /// `codesign` exited with `code`. `stderr` holds its diagnostics, trimmed.
+    /// `codesign` exited with `code`.
+    ///
+    /// `stderr` holds its diagnostics and `stdout` what it printed on standard output, both
+    /// trimmed. Only `stderr` is part of the message.
     ///
     /// When one `codesign` runs over several targets, the targets before the rejected one have
     /// already changed. See [`Codesign`](crate::Codesign#errors).
     #[error("`codesign` exited with code {code}: {}", diagnostics(.stderr))]
-    Failed { code: i32, stderr: String },
+    Failed {
+        code: i32,
+        stdout: String,
+        stderr: String,
+    },
 
     /// `codesign` was killed by a signal before it could exit.
     ///
-    /// `status` holds the signal (`ExitStatusExt::signal`). `stderr` is usually empty.
+    /// `status` holds the signal (`ExitStatusExt::signal`). `stderr` is usually empty. `stdout`
+    /// holds what `codesign` printed on standard output, trimmed; it isn't part of the message.
     #[error("the `codesign` process terminated abnormally ({status}): {}", diagnostics(.stderr))]
-    Terminated { status: ExitStatus, stderr: String },
+    Terminated {
+        status: ExitStatus,
+        stdout: String,
+        stderr: String,
+    },
 
     /// `codesign` exited 0, but its output couldn't be read as the action's result.
     ///
@@ -128,7 +140,8 @@ pub enum CodesignError {
     ///
     /// The signature is invalid or modified, the target is unsigned, or the requirement text of
     /// [`test_requirement`](crate::Codesign::test_requirement) doesn't compile. `stderr` holds
-    /// the diagnostics `codesign` printed on standard error, trimmed.
+    /// the diagnostics `codesign` printed on standard error and `stdout` what it printed on standard
+    /// output, both trimmed. Only `stderr` is part of the message.
     ///
     /// `resources` names the sealed resources that were altered, in the order `codesign` printed
     /// them, which can differ from run to run. It is filled only with
@@ -138,6 +151,7 @@ pub enum CodesignError {
     /// `(modified: /path; added: /path)`.
     #[error("verification failed: {}{}", diagnostics(.stderr), changes(.resources))]
     VerificationFailed {
+        stdout: String,
         stderr: String,
         resources: Vec<ResourceChange>,
     },
@@ -148,9 +162,10 @@ pub enum CodesignError {
     /// That requirement is the text of
     /// [`test_requirement`](crate::Codesign::test_requirement) or, with
     /// [`check_designated_requirement`](crate::Codesign::check_designated_requirement), the code's
-    /// own. `stderr` holds the diagnostics `codesign` printed on standard error, trimmed.
+    /// own. `stderr` holds the diagnostics `codesign` printed on standard error and `stdout` what it
+    /// printed on standard output, both trimmed. Only `stderr` is part of the message.
     #[error("validly signed, but the requirement isn't satisfied: {}", diagnostics(.stderr))]
-    RequirementUnsatisfied { stderr: String },
+    RequirementUnsatisfied { stdout: String, stderr: String },
 }
 
 /// A sealed resource that [`verify`](crate::Codesign::verify) found altered.
@@ -250,6 +265,7 @@ mod tests {
     #[test]
     fn a_failure_carries_its_diagnostics() {
         let error = CodesignError::Failed {
+            stdout: "printed on stdout".into(),
             code: 1,
             stderr: "hello: no identity found".into(),
         };
@@ -264,6 +280,7 @@ mod tests {
     #[test]
     fn a_failure_with_nothing_to_say_still_reads_as_a_sentence() {
         let silent = CodesignError::Failed {
+            stdout: "printed on stdout".into(),
             code: 3,
             stderr: String::new(),
         };
@@ -277,6 +294,7 @@ mod tests {
     #[test]
     fn a_terminated_process_reports_the_signal_that_killed_it() {
         let error = CodesignError::Terminated {
+            stdout: "printed on stdout".into(),
             status: killed_by(9),
             stderr: String::new(),
         };
@@ -310,6 +328,7 @@ mod tests {
     /// A failing run of `code`, as a batch entry holds it.
     fn failed(code: i32, stderr: &str) -> Error {
         CodesignError::Failed {
+            stdout: "printed on stdout".into(),
             code,
             stderr: stderr.into(),
         }
@@ -419,6 +438,7 @@ mod tests {
     #[test]
     fn a_verification_failure_carries_its_diagnostics() {
         let error = CodesignError::VerificationFailed {
+            stdout: "printed on stdout".into(),
             stderr: "app: invalid signature (code or signature have been modified)".into(),
             resources: Vec::new(),
         };
@@ -431,6 +451,7 @@ mod tests {
     #[test]
     fn a_verification_failure_with_nothing_to_say_still_reads_as_a_sentence() {
         let silent = CodesignError::VerificationFailed {
+            stdout: "printed on stdout".into(),
             stderr: String::new(),
             resources: Vec::new(),
         };
@@ -447,6 +468,7 @@ mod tests {
     #[test]
     fn a_verification_failure_lists_the_altered_resources_in_order() {
         let error = CodesignError::VerificationFailed {
+            stdout: "printed on stdout".into(),
             stderr: "A.app: a sealed resource is missing or invalid".into(),
             resources: vec![
                 resource(Change::Modified, "/x/A.app/Contents/Resources/r.txt"),
@@ -466,6 +488,7 @@ mod tests {
     #[test]
     fn a_single_altered_resource_is_listed_without_a_separator() {
         let error = CodesignError::VerificationFailed {
+            stdout: "printed on stdout".into(),
             stderr: "A.app: bad".into(),
             resources: vec![resource(Change::Missing, "/x/r.txt")],
         };
@@ -478,6 +501,7 @@ mod tests {
     #[test]
     fn resources_are_listed_even_without_diagnostics() {
         let error = CodesignError::VerificationFailed {
+            stdout: "printed on stdout".into(),
             stderr: String::new(),
             resources: vec![resource(Change::Added, "/x/r.txt")],
         };
@@ -495,6 +519,7 @@ mod tests {
 
         let path = PathBuf::from(OsString::from_vec(vec![b'/', 0xff, b'b']));
         let error = CodesignError::VerificationFailed {
+            stdout: "printed on stdout".into(),
             stderr: "bad".into(),
             resources: vec![ResourceChange {
                 change: Change::Modified,
@@ -520,6 +545,7 @@ mod tests {
     #[test]
     fn an_unsatisfied_requirement_says_the_signature_itself_is_fine() {
         let error = CodesignError::RequirementUnsatisfied {
+            stdout: "printed on stdout".into(),
             stderr: "test-requirement: code failed to satisfy specified code requirement(s)".into(),
         };
         assert_eq!(
@@ -532,6 +558,7 @@ mod tests {
     #[test]
     fn an_unsatisfied_requirement_with_nothing_to_say_still_reads_as_a_sentence() {
         let silent = CodesignError::RequirementUnsatisfied {
+            stdout: "printed on stdout".into(),
             stderr: String::new(),
         };
         assert_eq!(
@@ -543,10 +570,14 @@ mod tests {
     #[test]
     fn the_verification_variants_forward_display_through_the_wrapper() {
         let failed = CodesignError::VerificationFailed {
+            stdout: "printed on stdout".into(),
             stderr: "x".into(),
             resources: Vec::new(),
         };
-        let unsatisfied = CodesignError::RequirementUnsatisfied { stderr: "y".into() };
+        let unsatisfied = CodesignError::RequirementUnsatisfied {
+            stdout: "printed on stdout".into(),
+            stderr: "y".into(),
+        };
         for inner in [failed, unsatisfied] {
             let text = inner.to_string();
             assert_eq!(Error::from(inner).to_string(), text);

@@ -87,12 +87,17 @@ fn a_codesign_killed_by_a_signal_is_reported_as_terminated() {
     };
 
     match result.unwrap_err() {
-        Error::Codesign(CodesignError::Terminated { status, stderr }) => {
+        Error::Codesign(CodesignError::Terminated {
+            status,
+            stdout,
+            stderr,
+        }) => {
             assert_eq!(
                 status.signal(),
                 Some(9),
                 "killed by something else: {status}"
             );
+            assert!(stdout.is_empty(), "the stand-in said something: {stdout}");
             assert!(stderr.is_empty(), "the stand-in said something: {stderr}");
         }
         other => panic!("expected Terminated, got {other:?}"),
@@ -114,8 +119,13 @@ fn a_silent_failure_still_reports_its_exit_code() {
 
     let error = result.unwrap_err();
     match &error {
-        Error::Codesign(CodesignError::Failed { code, stderr }) => {
+        Error::Codesign(CodesignError::Failed {
+            code,
+            stdout,
+            stderr,
+        }) => {
             assert_eq!(*code, 3);
+            assert!(stdout.is_empty(), "the stand-in said something: {stdout}");
             assert!(stderr.is_empty(), "the stand-in said something: {stderr}");
         }
         other => panic!("expected Codesign, got {other:?}"),
@@ -128,6 +138,65 @@ fn a_silent_failure_still_reports_its_exit_code() {
         message.contains("no diagnostics"),
         "unhelpful message: {message}"
     );
+}
+
+/// Both streams reach the error decoded and trimmed, the invalid byte on
+/// standard output replaced, and only stderr shows in the message.
+#[test]
+fn a_failure_keeps_what_codesign_printed_on_both_streams() {
+    let _serialised = crate::serialised();
+
+    let workspace = Workspace::new();
+    let target = workspace.write("target.bin", "irrelevant\n");
+    let bin = fake_codesign(
+        &workspace,
+        "printf '\\n  to stdout \\377\\n\\n'; printf ' to stderr\\n\\n' >&2; exit 5",
+    );
+
+    let result = {
+        let _path = ScopedPath::to(&bin);
+        crate::runtime().block_on(Codesign::sign(&target, "-").into_future())
+    };
+
+    let error = result.unwrap_err();
+    match &error {
+        Error::Codesign(CodesignError::Failed {
+            code,
+            stdout,
+            stderr,
+        }) => {
+            assert_eq!(*code, 5);
+            assert_eq!(stdout, "to stdout \u{FFFD}");
+            assert_eq!(stderr, "to stderr");
+        }
+        other => panic!("expected Failed, got {other:?}"),
+    }
+    assert_eq!(
+        error.to_string(),
+        "`codesign` exited with code 5: to stderr"
+    );
+}
+
+#[test]
+fn a_killed_codesign_keeps_what_it_printed_on_both_streams() {
+    let _serialised = crate::serialised();
+
+    let workspace = Workspace::new();
+    let target = workspace.write("target.bin", "irrelevant\n");
+    let bin = fake_codesign(&workspace, "echo partial; echo warning >&2; kill -9 $$");
+
+    let result = {
+        let _path = ScopedPath::to(&bin);
+        crate::runtime().block_on(Codesign::sign(&target, "-").into_future())
+    };
+
+    match result.unwrap_err() {
+        Error::Codesign(CodesignError::Terminated { stdout, stderr, .. }) => {
+            assert_eq!(stdout, "partial");
+            assert_eq!(stderr, "warning");
+        }
+        other => panic!("expected Terminated, got {other:?}"),
+    }
 }
 
 #[test]
@@ -281,7 +350,7 @@ fn per_target_failures_keep_the_order_of_the_targets_not_of_the_exits() {
     assert_eq!(failed, targets.iter().collect::<Vec<_>>());
     for (path, error) in &failures {
         match error {
-            Error::Codesign(CodesignError::Failed { code, stderr }) => {
+            Error::Codesign(CodesignError::Failed { code, stderr, .. }) => {
                 assert_eq!(*code, 4);
                 assert_eq!(*stderr, format!("refused {}", path.display()));
             }
