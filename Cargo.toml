@@ -10,5 +10,20 @@ keywords = ["macos", "codesign", "code-signing", "apple-codesign"]
 categories = ["os::macos-apis", "development-tools"]
 
 [dependencies]
+base64 = "0.23"
+bitflags = "2.13"
+futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
+plist = "1.10"
+tempfile = "3.27"
 thiserror = "2.0"
-tokio = { version = "1.53", features = ["process"] }
+tokio = { version = "1.53", features = ["process", "fs"] }
+tracing = { version = "0.1", features = ["release_max_level_info"] }
+
+[dev-dependencies]
+tokio = { version = "1.53", features = ["macros", "rt-multi-thread"] }
+
+# Opt-in test groups: tests needing an environment `cargo test` cannot assume
+# are ignored unless their group is set, e.g.
+# RUSTFLAGS='--cfg signers_test="keychain"' cargo test
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(signers_test, values("keychain", "network"))'] }
