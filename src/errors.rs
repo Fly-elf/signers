@@ -55,8 +55,10 @@ pub enum Error {
 
     /// [`file_list`](crate::Codesign::file_list) was `-`, but the crate captures standard output,
     /// so the list would be lost.
-    #[error("file_list(\"-\") is not supported: pass a path instead of standard output")]
-    FileListToStdout,
+    #[error(
+        "{0}(\"-\") is not supported: `codesign` gets no standard streams here, pass a file path"
+    )]
+    StdioPath(&'static str),
 
     /// An option that writes one shared file was combined with
     /// [`per_target(true)`](crate::Codesign::per_target).

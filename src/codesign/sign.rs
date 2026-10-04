@@ -376,7 +376,10 @@ impl ToArgs for Sign {
 
     fn validate(&self) -> crate::errors::Result<()> {
         if self.file_list.as_deref() == Some(Path::new("-")) {
-            return Err(crate::errors::Error::FileListToStdout);
+            return Err(crate::errors::Error::StdioPath("file_list"));
+        }
+        if self.requirements.as_deref() == Some("-") {
+            return Err(crate::errors::Error::StdioPath("requirements"));
         }
         Ok(())
     }

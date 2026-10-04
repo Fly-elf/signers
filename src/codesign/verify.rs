@@ -4,8 +4,8 @@ use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 
-use super::actions::PushArgs;
 use super::actions::sealed::ToArgs;
+use super::actions::{PushArgs, SignatureSlot};
 use crate::codesign::Codesign;
 use crate::errors::{Change, CodesignError, Error, ResourceChange};
 use crate::target::Shape;
@@ -56,9 +56,16 @@ pub struct Verify {
     architecture: Option<String>,
     bundle_version: Option<String>,
     check_designated_requirement: bool,
-    test_requirement: Option<String>,
+    test_requirement: Option<TestRequirement>,
+    signature_slot: Option<SignatureSlot>,
     detached: Option<PathBuf>,
     check_notarization: bool,
+}
+
+#[derive(Debug, Clone)]
+enum TestRequirement {
+    Text(String),
+    File(PathBuf),
 }
 
 /// The extra restrictions that [`strict`](Codesign#method.strict) applies.
@@ -166,7 +173,19 @@ impl<S: Shape> Codesign<Verify, S> {
     /// # Ok(()) }
     /// ```
     pub fn test_requirement(mut self, requirement: impl Into<String>) -> Self {
-        self.action.test_requirement = Some(requirement.into());
+        self.action.test_requirement = Some(TestRequirement::Text(requirement.into()));
+        self
+    }
+
+    /// Requires the code to satisfy the requirement in this file (`-R <path>`).
+    pub fn test_requirement_file(mut self, path: impl Into<PathBuf>) -> Self {
+        self.action.test_requirement = Some(TestRequirement::File(path.into()));
+        self
+    }
+
+    /// Verifies this signature when the code carries two (`--signature-slot`).
+    pub fn signature_slot(mut self, slot: SignatureSlot) -> Self {
+        self.action.signature_slot = Some(slot);
         self
     }
 
@@ -189,6 +208,15 @@ impl<S: Shape> Codesign<Verify, S> {
 impl ToArgs for Verify {
     type Output = ();
     const PER_TARGET: bool = true;
+
+    fn validate(&self) -> crate::errors::Result<()> {
+        match &self.test_requirement {
+            Some(TestRequirement::File(path)) if path.as_os_str() == "-" => {
+                Err(Error::StdioPath("test_requirement_file"))
+            }
+            _ => Ok(()),
+        }
+    }
 
     fn to_args<'a>(&'a self, targets: &'a [PathBuf]) -> Vec<Cow<'a, OsStr>> {
         let mut args: Vec<Cow<'a, OsStr>> = Vec::new();
@@ -217,9 +245,14 @@ impl ToArgs for Verify {
         if self.check_designated_requirement {
             args.flag("--verbose=1");
         }
-        if let Some(requirement) = &self.test_requirement {
+        match &self.test_requirement {
             // `-R` takes `=text` only in this single-argument form; a space would make it a file path.
-            args.built(format!("-R={requirement}"));
+            Some(TestRequirement::Text(text)) => args.built(format!("-R={text}")),
+            Some(TestRequirement::File(path)) => args.option("-R", path),
+            None => {}
+        }
+        if let Some(slot) = self.signature_slot {
+            args.option("--signature-slot", slot.as_str());
         }
         if let Some(path) = &self.detached {
             args.option("--detached", path);
