@@ -1,18 +1,14 @@
-//! The display action and the [`Signature`] it returns (`--display`).
-
 use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 
-use super::actions::sealed::ToArgs;
-use super::actions::{PushArgs, SignatureSlot};
 use crate::codesign::Codesign;
+use crate::codesign::action::PushArgs;
+use crate::codesign::action::sealed::{SharedRun, ToArgs};
+use crate::codesign::types::parse_report;
+use crate::codesign::{Signature, SignatureSlot};
 use crate::errors::{CodesignError, Result};
 use crate::target::Shape;
-
-mod signature;
-
-pub use signature::*;
 
 /// Options of the display action: the `A` in `Codesign<Display>`.
 ///
@@ -40,7 +36,7 @@ pub use signature::*;
 /// ```no_run
 /// # async fn run() -> signers::Result<()> {
 /// use signers::Codesign;
-/// use signers::codesign::display::Format;
+/// use signers::codesign::Format;
 ///
 /// let signature = Codesign::display("/bin/ls").architecture("arm64e").await?;
 /// assert_eq!(signature.format, Format::MachOThin("arm64e".into()));
@@ -62,7 +58,7 @@ pub struct Display {
 impl<S: Shape> Codesign<Display, S> {
     /// Reads this slice of a universal binary, e.g. `arm64` or `x86_64` (`--architecture`).
     ///
-    /// Without it a universal binary is reported whole, as [`Format::MachOUniversal`]. A slice the
+    /// Without it a universal binary is reported whole, as [`Format::MachOUniversal`](crate::codesign::Format::MachOUniversal). A slice the
     /// binary doesn't have fails with [`CodesignError::Failed`].
     pub fn architecture(mut self, arch: impl Into<String>) -> Self {
         self.action.architecture = Some(arch.into());
@@ -101,7 +97,7 @@ impl<S: Shape> Codesign<Display, S> {
     }
 }
 
-impl super::actions::sealed::SharedRun for Display {}
+impl SharedRun for Display {}
 
 impl ToArgs for Display {
     type Output = Signature;
@@ -219,6 +215,7 @@ mod tests {
     use std::os::unix::ffi::OsStrExt;
 
     use super::*;
+    use crate::codesign::SignatureKind;
 
     fn os(strings: &[&str]) -> Vec<OsString> {
         strings.iter().map(OsString::from).collect()

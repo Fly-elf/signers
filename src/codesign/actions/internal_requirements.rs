@@ -1,14 +1,13 @@
-//! The requirements action and the [`Requirement`]s it returns (`--display -r-`).
-
 use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 
-use super::actions::PushArgs;
-use super::actions::sealed::ToArgs;
-use crate::errors::{CodesignError, Result};
+use crate::codesign::Requirement;
+use crate::codesign::action::PushArgs;
+use crate::codesign::action::sealed::ToArgs;
+use crate::errors::Result;
 
-/// The action that reads requirements: the `A` in `Codesign<Requirements>`.
+/// The action that reads requirements: the `A` in `Codesign<InternalRequirements>`.
 ///
 /// [`internal_requirements`](crate::Codesign::internal_requirements) creates it. It has no options. `.await` yields the
 /// requirements of each target as a `Vec` of [`Requirement`], in the order `codesign` keeps them,
@@ -21,7 +20,7 @@ use crate::errors::{CodesignError, Result};
 /// ```no_run
 /// # async fn run() -> signers::Result<()> {
 /// use signers::Codesign;
-/// use signers::codesign::requirements::RequirementKind;
+/// use signers::codesign::RequirementKind;
 ///
 /// let requirements = Codesign::internal_requirements("MyApp.app").await?;
 /// for requirement in &requirements {
@@ -44,9 +43,9 @@ use crate::errors::{CodesignError, Result};
 /// # Ok(()) }
 /// ```
 #[derive(Debug, Clone, Default)]
-pub struct Requirements;
+pub struct InternalRequirements;
 
-impl ToArgs for Requirements {
+impl ToArgs for InternalRequirements {
     type Output = Vec<Requirement>;
     const PER_TARGET: bool = true;
 
@@ -75,74 +74,14 @@ impl ToArgs for Requirements {
     }
 }
 
-/// A code requirement of a signature: what it is for, and the expression to satisfy.
-///
-/// [`internal_requirements`](crate::Codesign::internal_requirements) returns them.
-#[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Requirement {
-    /// What the requirement is for.
-    pub kind: RequirementKind,
-    /// The requirement as source text, e.g. `identifier "com.apple.ls" and anchor apple`. It isn't
-    /// parsed: pass it to [`test_requirement`](crate::Codesign::test_requirement), for instance.
-    pub expression: String,
-    /// `true` when the signature doesn't embed this requirement and `codesign` shows the system's
-    /// default instead, such as the designated requirement of an ad hoc signature, which names the
-    /// code's hashes.
-    pub implicit: bool,
-}
-
-/// What a [`Requirement`] is for (`codesign`'s requirement types).
-#[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RequirementKind {
-    /// What the code must satisfy to be considered the same code, across versions (`designated`).
-    Designated,
-    /// What the code that hosts this one must satisfy (`host`).
-    Host,
-    /// What the code hosted by this one, its guests, must satisfy (`guest`).
-    Guest,
-    /// What the libraries this code loads must satisfy (`library`).
-    Library,
-    /// What the plug-ins this code loads must satisfy (`plugin`).
-    Plugin,
-    /// A kind this crate doesn't know, with the word `codesign` printed for it.
-    Other(String),
-}
-
-impl Requirement {
-    fn parse(line: &str) -> Result<Self> {
-        let (line, implicit) = match line.strip_prefix("# ") {
-            Some(rest) => (rest, true),
-            None => (line, false),
-        };
-        let (kind, expression) =
-            line.split_once(" => ")
-                .ok_or_else(|| CodesignError::UnexpectedOutput {
-                    detail: format!("unreadable requirement: {line}"),
-                })?;
-        let kind = match kind {
-            "designated" => RequirementKind::Designated,
-            "host" => RequirementKind::Host,
-            "guest" => RequirementKind::Guest,
-            "library" => RequirementKind::Library,
-            "plugin" => RequirementKind::Plugin,
-            other => RequirementKind::Other(other.to_owned()),
-        };
-        Ok(Self {
-            kind,
-            expression: expression.to_owned(),
-            implicit,
-        })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::ffi::OsString;
 
     use super::*;
     use crate::codesign::Codesign;
+    use crate::codesign::RequirementKind;
+    use crate::errors::CodesignError;
 
     const DESIGNATED: &str = r#"designated => identifier "com.apple.ls" and anchor apple"#;
     const DUMP: &str = "\t[Dict]\n\t\t[Key] ccat\n\t\t[Value]\n\t\t\t[Int] 0\n";
@@ -151,7 +90,7 @@ mod tests {
         strings.iter().map(OsString::from).collect()
     }
 
-    fn args_of<S>(builder: &Codesign<Requirements, S>) -> Vec<OsString> {
+    fn args_of<S>(builder: &Codesign<InternalRequirements, S>) -> Vec<OsString> {
         builder
             .action
             .to_args(&builder.targets)
@@ -165,7 +104,8 @@ mod tests {
     }
 
     fn read(stdout: &str) -> Result<Vec<Requirement>> {
-        let mut outputs = Requirements.output(&paths(&["a"]), stdout.to_owned(), String::new())?;
+        let mut outputs =
+            InternalRequirements.output(&paths(&["a"]), stdout.to_owned(), String::new())?;
         assert_eq!(outputs.len(), 1);
         Ok(outputs.remove(0))
     }
@@ -236,7 +176,7 @@ mod tests {
 
     #[test]
     fn the_run_yields_one_list() {
-        let outputs = Requirements
+        let outputs = InternalRequirements
             .output(&paths(&["a"]), format!("{DESIGNATED}\n"), String::new())
             .unwrap();
 
@@ -246,7 +186,7 @@ mod tests {
 
     #[test]
     fn stderr_is_not_read() {
-        let outputs = Requirements
+        let outputs = InternalRequirements
             .output(
                 &paths(&["a"]),
                 format!("{DESIGNATED}\n"),
@@ -334,21 +274,21 @@ mod tests {
 
     /// `per_target` exists for actions that can share a run; this one can't,
     /// because the requirements of several targets in one stdout can't be told
-    /// apart. Resolves only while `Requirements` is not `SharedRun`.
+    /// apart. Resolves only while `InternalRequirements` is not `SharedRun`.
     #[test]
     fn the_action_cannot_share_a_run() {
         trait AmbiguousIfShared<A> {
             fn check() {}
         }
         impl<T: ?Sized> AmbiguousIfShared<()> for T {}
-        impl<T: ?Sized + crate::codesign::actions::sealed::SharedRun> AmbiguousIfShared<u8> for T {}
+        impl<T: ?Sized + crate::codesign::action::sealed::SharedRun> AmbiguousIfShared<u8> for T {}
 
-        <Requirements as AmbiguousIfShared<_>>::check();
+        <InternalRequirements as AmbiguousIfShared<_>>::check();
     }
 
     #[test]
     fn a_failed_run_keeps_its_exit_code_and_streams() {
-        let error = Requirements.failure(1, "out".into(), "err".into());
+        let error = InternalRequirements.failure(1, "out".into(), "err".into());
 
         assert!(
             matches!(
@@ -358,95 +298,5 @@ mod tests {
             ),
             "{error:?}"
         );
-    }
-
-    fn requirement(line: &str) -> Requirement {
-        Requirement::parse(line).unwrap_or_else(|e| panic!("{line:?}: {e}"))
-    }
-
-    #[test]
-    fn a_requirement_line_splits_into_kind_and_expression() {
-        let found = requirement(r#"designated => identifier "com.apple.ls" and anchor apple"#);
-
-        assert_eq!(
-            found,
-            Requirement {
-                kind: RequirementKind::Designated,
-                expression: r#"identifier "com.apple.ls" and anchor apple"#.into(),
-                implicit: false,
-            }
-        );
-    }
-
-    #[test]
-    fn every_known_kind_is_recognised() {
-        let cases = [
-            ("designated", RequirementKind::Designated),
-            ("host", RequirementKind::Host),
-            ("guest", RequirementKind::Guest),
-            ("library", RequirementKind::Library),
-            ("plugin", RequirementKind::Plugin),
-        ];
-
-        for (word, kind) in cases {
-            let found = requirement(&format!("{word} => anchor apple"));
-            assert_eq!(found.kind, kind, "{word}");
-            assert_eq!(found.expression, "anchor apple");
-            assert!(!found.implicit, "{word}");
-        }
-    }
-
-    #[test]
-    fn an_unknown_kind_keeps_its_word() {
-        assert_eq!(
-            requirement("something => anchor apple").kind,
-            RequirementKind::Other("something".into())
-        );
-        assert_eq!(
-            requirement("Designated => anchor apple").kind,
-            RequirementKind::Other("Designated".into()),
-            "kinds are lower case"
-        );
-    }
-
-    #[test]
-    fn a_hash_prefix_marks_the_requirement_as_implicit() {
-        let found = requirement(r#"# designated => cdhash H"da0b" or cdhash H"c0ffee""#);
-
-        assert!(found.implicit);
-        assert_eq!(found.kind, RequirementKind::Designated);
-        assert_eq!(found.expression, r#"cdhash H"da0b" or cdhash H"c0ffee""#);
-        assert!(!requirement("designated => anchor apple").implicit);
-    }
-
-    #[test]
-    fn an_expression_may_contain_the_separator() {
-        let found = requirement(r#"designated => identifier "a => b" and anchor apple"#);
-
-        assert_eq!(found.kind, RequirementKind::Designated);
-        assert_eq!(found.expression, r#"identifier "a => b" and anchor apple"#);
-    }
-
-    #[test]
-    fn a_line_without_the_separator_is_rejected() {
-        for line in [
-            "",
-            "designated",
-            "designated=>anchor apple",
-            "designated =>anchor apple",
-            "designated  anchor apple",
-            "# designated",
-        ] {
-            let result = Requirement::parse(line);
-            assert!(
-                matches!(
-                    result,
-                    Err(crate::Error::Codesign(
-                        CodesignError::UnexpectedOutput { .. }
-                    ))
-                ),
-                "{line:?}: {result:?}"
-            );
-        }
     }
 }

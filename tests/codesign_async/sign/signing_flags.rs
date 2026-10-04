@@ -2,7 +2,7 @@
 //! along with them.
 
 use signers::Codesign;
-use signers::codesign::sign::SigningFlags;
+use signers::codesign::SigningFlags;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect::Signature;
