@@ -25,6 +25,8 @@ use crate::errors::CodesignError;
 #[derive(Debug, Clone, Default)]
 pub struct ValidateConstraint;
 
+impl super::actions::sealed::SharedRun for ValidateConstraint {}
+
 impl ToArgs for ValidateConstraint {
     type Output = ();
     const PER_TARGET: bool = true;
