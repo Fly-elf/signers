@@ -27,6 +27,7 @@ use crate::errors::{CodesignError, Error, Result};
 use crate::target::{IntoTargets, Multi, One, Shape, sealed};
 
 pub use actions::Action;
+pub use actions::SignatureSlot;
 
 /// A `codesign` run: an action and its targets, started by `.await`.
 ///
