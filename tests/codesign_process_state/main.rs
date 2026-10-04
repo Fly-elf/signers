@@ -1,9 +1,9 @@
 //! The `codesign` tests that cannot share a process with the rest of the suite.
 //!
 //! Each submodule mutates one kind of process-global state — the working
-//! directory, `PATH` — that every other test deliberately leaves alone. Cargo
-//! runs each integration target as its own process, so keeping them here
-//! isolates them from the main suite; [`serialised`] then keeps the submodules
+//! directory, `PATH`, `TMPDIR` — that every other test deliberately leaves
+//! alone. Cargo runs each integration target as its own process, so keeping
+//! them here isolates them from the main suite; [`serialised`] then keeps the submodules
 //! from running alongside *each other*, since tests within one binary still
 //! share threads.
 
@@ -13,6 +13,7 @@
 mod support;
 
 mod executable_path;
+mod temp_dir;
 mod working_directory;
 
 use std::sync::{Mutex, MutexGuard, PoisonError};
