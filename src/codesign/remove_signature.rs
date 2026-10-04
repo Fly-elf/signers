@@ -46,6 +46,8 @@ impl<S: Shape> Codesign<RemoveSignature, S> {
     }
 }
 
+impl super::actions::sealed::SharedRun for RemoveSignature {}
+
 impl ToArgs for RemoveSignature {
     type Output = ();
     const PER_TARGET: bool = false;
