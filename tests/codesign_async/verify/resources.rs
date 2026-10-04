@@ -8,7 +8,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use signers::errors::{Change, ResourceChange};
-use signers::{Codesign, Error};
+use signers::{Codesign, CodesignError, Error};
 
 use super::{break_signature, verification_failed_with_resources};
 use crate::support::fixture::Workspace;
@@ -330,4 +330,36 @@ async fn one_process_lists_what_codesign_printed() {
     let (_, resources) = verification_failed_with_resources(error);
     assert_eq!(resources.len(), expected);
     assert!(!resources.is_empty());
+}
+
+/// What `codesign` prints on standard output is kept next to the diagnostics,
+/// trimmed: with the option on, it holds the lines the resources come from.
+#[tokio::test]
+async fn the_error_keeps_what_codesign_printed_on_stdout() {
+    let workspace = Workspace::new();
+    let app = sealed_app(&workspace, "Hello");
+    fs::write(resources_dir(&app).join("a.txt"), "tampered\n").unwrap();
+    let verbose = inspect::codesign(&["--verify".as_ref(), "--verbose=1".as_ref(), app.as_ref()]);
+    let plain = inspect::codesign(&["--verify".as_ref(), app.as_ref()]);
+
+    let checked = Codesign::verify(&app)
+        .check_designated_requirement(true)
+        .await
+        .unwrap_err();
+    let unchecked = Codesign::verify(&app).await.unwrap_err();
+
+    let (
+        Error::Codesign(CodesignError::VerificationFailed { stdout, stderr, .. }),
+        Error::Codesign(CodesignError::VerificationFailed {
+            stdout: plain_stdout,
+            ..
+        }),
+    ) = (checked, unchecked)
+    else {
+        panic!("expected two VerificationFailed");
+    };
+    assert!(stdout.starts_with("file modified: "), "{stdout}");
+    assert_eq!(stdout, verbose.stdout.trim());
+    assert_eq!(plain_stdout, plain.stdout.trim());
+    assert!(!stderr.contains("file modified"), "{stderr}");
 }

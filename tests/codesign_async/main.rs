@@ -2,8 +2,8 @@
 //! driven against a real Mach-O fixture, with the macOS `codesign` CLI checking
 //! the result.
 //!
-//! One module per action; `verify` joins `sign` and `remove_signature` here as
-//! it lands. Anything that mutates process-global state (the working directory,
+//! One module per action (`sign`, `remove_signature`, `verify`, `display`),
+//! plus the pre-flight checks they share. Anything that mutates process-global state (the working directory,
 //! `PATH`) lives in `tests/codesign_process_state/` instead, so this binary
 //! stays parallel-safe.
 

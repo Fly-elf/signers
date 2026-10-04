@@ -49,7 +49,11 @@ async fn each_target_gets_its_own_signature_in_input_order() {
             "per_target({per_target})"
         );
         for (signature, target) in signatures.iter().zip(&targets) {
-            assert_eq!(signature.raw(), inspect::Signature::of(target).raw());
+            assert_eq!(
+                signature.raw(),
+                inspect::Signature::of(target).raw(),
+                "per_target({per_target})"
+            );
         }
     }
 }
