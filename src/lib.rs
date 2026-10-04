@@ -21,11 +21,11 @@
 //!
 //! - [`Codesign`]: the actions, what `.await` checks before running anything, and running one
 //!   `codesign` per target of a collection.
-//! - [`Sign`](codesign::sign::Sign), [`RemoveSignature`](codesign::remove_signature::RemoveSignature),
-//!   [`Verify`](codesign::verify::Verify), [`Display`](codesign::display::Display),
-//!   [`ValidateConstraint`](codesign::validate_constraint::ValidateConstraint),
-//!   [`ExtractCertificates`](codesign::extract_certificates::ExtractCertificates),
-//!   [`Requirements`](codesign::requirements::Requirements): more examples for each action.
+//! - [`codesign`]: everything `Codesign` takes and returns. The action types ([`Sign`](codesign::Sign),
+//!   [`RemoveSignature`](codesign::RemoveSignature), [`Verify`](codesign::Verify),
+//!   [`Display`](codesign::Display), [`ValidateConstraint`](codesign::ValidateConstraint),
+//!   [`ExtractCertificates`](codesign::ExtractCertificates),
+//!   [`InternalRequirements`](codesign::InternalRequirements)) carry more examples for each action.
 //! - [`IntoTargets`]: what you can pass as targets. One path yields one result; a `Vec`, slice
 //!   or array yields one per target, in a `Vec` or an array.
 //! - [`Error`]: what can fail.

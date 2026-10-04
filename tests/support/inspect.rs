@@ -301,7 +301,7 @@ impl Signature {
     }
 
     /// The CodeDirectory option flags sealed into the signature — the same
-    /// bitmask `signers::codesign::sign::SigningFlags` mirrors, plus the bits
+    /// bitmask `signers::codesign::SigningFlags` mirrors, plus the bits
     /// `codesign` sets itself (`0x2` for an ad-hoc signature).
     pub fn flags(&self) -> u32 {
         let flags = token(self.code_directory(), "flags").expect("no flags in the CodeDirectory");

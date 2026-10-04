@@ -6,7 +6,7 @@
 //! ```
 
 use signers::Codesign;
-use signers::codesign::display::{Authority, SignatureKind};
+use signers::codesign::{Authority, SignatureKind};
 
 use crate::support::fixture::Workspace;
 use crate::support::identity::Identity;

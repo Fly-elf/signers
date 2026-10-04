@@ -12,7 +12,7 @@
 //! ```
 
 use signers::Codesign;
-use signers::codesign::sign::{SigningFlags, Timestamp};
+use signers::codesign::{SigningFlags, Timestamp};
 
 use crate::support::fixture::Workspace;
 use crate::support::identity::Identity;

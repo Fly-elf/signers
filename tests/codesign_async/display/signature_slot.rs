@@ -33,7 +33,7 @@ fn printed(run: &inspect::Run, key: &str) -> String {
 
 /// The identity of the signature read from `path` in `slot` must be the one
 /// `codesign` reports for it.
-fn assert_reads_slot(signature: &signers::codesign::display::Signature, path: &Path, slot: &str) {
+fn assert_reads_slot(signature: &signers::codesign::Signature, path: &Path, slot: &str) {
     let expected = oracle(path, slot);
     assert!(expected.success, "{}", expected.stderr);
     assert_eq!(signature.identifier, printed(&expected, "Identifier"));

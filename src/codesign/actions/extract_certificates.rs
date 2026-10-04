@@ -1,5 +1,3 @@
-//! The certificate-extraction action and the [`Certificate`] it returns (`--extract-certificates`).
-
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
@@ -12,32 +10,11 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use tempfile::TempDir;
 
-use super::actions::PushArgs;
-use super::actions::sealed::ToArgs;
-use crate::codesign::Codesign;
+use crate::codesign::action::PushArgs;
+use crate::codesign::action::sealed::ToArgs;
+use crate::codesign::{Certificate, Codesign};
 use crate::errors::{Error, Result};
 use crate::target::Shape;
-
-/// One certificate of a signature's chain, as DER bytes.
-///
-/// The bytes are the certificate as `codesign` extracted it. They are not parsed: hand them to
-/// an X.509 parser, or write them to a file to inspect with `openssl x509 -inform der`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Certificate {
-    der: Vec<u8>,
-}
-
-impl Certificate {
-    /// The certificate in DER encoding.
-    pub fn der(&self) -> &[u8] {
-        &self.der
-    }
-
-    /// Takes the DER bytes, without copying them.
-    pub fn into_der(self) -> Vec<u8> {
-        self.der
-    }
-}
 
 /// Options of the certificate-extraction action: the `A` in `Codesign<ExtractCertificates>`.
 ///
@@ -189,7 +166,7 @@ impl ToArgs for ExtractCertificates {
             path.push(index.to_string());
             let path = PathBuf::from(path);
             match std::fs::read(&path) {
-                Ok(der) => chain.push(Certificate { der }),
+                Ok(der) => chain.push(Certificate::from_der(der)),
                 Err(error) if error.kind() == ErrorKind::NotFound => break,
                 Err(source) => return Err(Error::Io { path, source }),
             }
@@ -244,7 +221,7 @@ fn pem(chain: &[Certificate]) -> String {
     let mut pem = String::new();
     for certificate in chain {
         pem.push_str("-----BEGIN CERTIFICATE-----\n");
-        let encoded = STANDARD.encode(&certificate.der);
+        let encoded = STANDARD.encode(certificate.der());
         let mut rest = encoded.as_str();
         while !rest.is_empty() {
             let (line, tail) = rest.split_at(rest.len().min(64));
