@@ -85,3 +85,317 @@ impl Requirement {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::OsString;
+
+    use super::*;
+    use crate::codesign::Codesign;
+
+    const DESIGNATED: &str = r#"designated => identifier "com.apple.ls" and anchor apple"#;
+    const DUMP: &str = "\t[Dict]\n\t\t[Key] ccat\n\t\t[Value]\n\t\t\t[Int] 0\n";
+
+    fn os(strings: &[&str]) -> Vec<OsString> {
+        strings.iter().map(OsString::from).collect()
+    }
+
+    fn args_of<S>(builder: &Codesign<Requirements, S>) -> Vec<OsString> {
+        builder
+            .action
+            .to_args(&builder.targets)
+            .into_iter()
+            .map(Cow::into_owned)
+            .collect()
+    }
+
+    fn paths(names: &[&str]) -> Vec<PathBuf> {
+        names.iter().map(PathBuf::from).collect()
+    }
+
+    fn read(stdout: &str) -> Result<Vec<Requirement>> {
+        let mut outputs = Requirements.output(&paths(&["a"]), stdout.to_owned(), String::new())?;
+        assert_eq!(outputs.len(), 1);
+        Ok(outputs.remove(0))
+    }
+
+    fn kinds_and_flags(requirements: &[Requirement]) -> Vec<(RequirementKind, bool)> {
+        requirements
+            .iter()
+            .map(|r| (r.kind.clone(), r.implicit))
+            .collect()
+    }
+
+    #[test]
+    fn the_arguments_read_the_requirements_and_nothing_else() {
+        let expected = os(&["--display", "-r-", "--", "app"]);
+
+        assert_eq!(args_of(&Codesign::internal_requirements("app")), expected);
+        assert_eq!(
+            args_of(&Codesign::internal_requirements(vec!["app"])),
+            expected
+        );
+        assert_eq!(args_of(&Codesign::internal_requirements(["app"])), expected);
+    }
+
+    #[test]
+    fn every_target_is_listed_after_the_separator() {
+        assert_eq!(
+            args_of(&Codesign::internal_requirements(vec!["a", "-b"])),
+            os(&["--display", "-r-", "--", "a", "-b"])
+        );
+    }
+
+    #[test]
+    fn collections_default_to_one_run_per_target() {
+        assert!(Codesign::internal_requirements(vec!["a", "b"]).per_target);
+        assert!(Codesign::internal_requirements(["a", "b"]).per_target);
+        assert!(!Codesign::internal_requirements("a").per_target);
+    }
+
+    #[test]
+    fn requirements_are_read_in_printed_order() {
+        let stdout = format!(
+            "host => anchor apple\n{DESIGNATED}\n# library => cdhash H\"00\"\nweird => x\n"
+        );
+
+        let found = read(&stdout).unwrap();
+
+        assert_eq!(
+            kinds_and_flags(&found),
+            [
+                (RequirementKind::Host, false),
+                (RequirementKind::Designated, false),
+                (RequirementKind::Library, true),
+                (RequirementKind::Other("weird".into()), false),
+            ]
+        );
+        assert_eq!(
+            found[1].expression,
+            r#"identifier "com.apple.ls" and anchor apple"#
+        );
+        assert_eq!(found[2].expression, r#"cdhash H"00""#);
+    }
+
+    #[test]
+    fn nothing_on_stdout_is_an_empty_list() {
+        assert_eq!(read("").unwrap(), vec![]);
+        assert_eq!(read("\n\n  \n").unwrap(), vec![]);
+    }
+
+    #[test]
+    fn the_run_yields_one_list() {
+        let outputs = Requirements
+            .output(&paths(&["a"]), format!("{DESIGNATED}\n"), String::new())
+            .unwrap();
+
+        assert_eq!(outputs.len(), 1);
+        assert_eq!(outputs[0].len(), 1);
+    }
+
+    #[test]
+    fn stderr_is_not_read() {
+        let outputs = Requirements
+            .output(
+                &paths(&["a"]),
+                format!("{DESIGNATED}\n"),
+                "Executable=/x/a\nnot a requirement\n".to_owned(),
+            )
+            .unwrap();
+
+        assert_eq!(
+            kinds_and_flags(&outputs[0]),
+            [(RequirementKind::Designated, false)]
+        );
+    }
+
+    #[test]
+    fn blank_lines_between_requirements_are_skipped() {
+        let stdout = format!("\n{DESIGNATED}\n\n   \n# host => anchor apple\n\n");
+
+        assert_eq!(
+            kinds_and_flags(&read(&stdout).unwrap()),
+            [
+                (RequirementKind::Designated, false),
+                (RequirementKind::Host, true)
+            ]
+        );
+    }
+
+    #[test]
+    fn the_constraint_dump_ahead_of_the_requirements_is_not_one() {
+        let stdout = format!("{DUMP}{DUMP}{DESIGNATED}\n# host => anchor apple\n");
+
+        assert_eq!(
+            kinds_and_flags(&read(&stdout).unwrap()),
+            [
+                (RequirementKind::Designated, false),
+                (RequirementKind::Host, true)
+            ]
+        );
+    }
+
+    #[test]
+    fn a_dump_between_requirements_is_skipped_too() {
+        let stdout = format!("{DESIGNATED}\n{DUMP}# host => anchor apple\n");
+
+        assert_eq!(
+            kinds_and_flags(&read(&stdout).unwrap()),
+            [
+                (RequirementKind::Designated, false),
+                (RequirementKind::Host, true)
+            ]
+        );
+    }
+
+    /// The stream is trimmed, so the first dump line has lost its tab.
+    #[test]
+    fn a_dump_whose_first_tab_is_gone_is_still_skipped() {
+        let dump = DUMP.trim();
+        assert!(dump.starts_with('['));
+
+        assert_eq!(
+            kinds_and_flags(&read(&format!("{dump}\n{DESIGNATED}\n")).unwrap()),
+            [(RequirementKind::Designated, false)]
+        );
+        assert_eq!(read(dump).unwrap(), vec![]);
+    }
+
+    #[test]
+    fn a_malformed_requirement_line_is_rejected() {
+        for stdout in [
+            "designated\n",
+            "garbage line\n",
+            &format!("{DESIGNATED}\nnot a requirement\n"),
+            "<?xml version=\"1.0\"?><plist version=\"1.0\"><dict/></plist>",
+        ] {
+            let result = read(stdout);
+            assert!(
+                matches!(
+                    &result,
+                    Err(crate::Error::Codesign(CodesignError::UnexpectedOutput { detail }))
+                        if detail.contains("requirement")
+                ),
+                "{stdout:?}: {result:?}"
+            );
+        }
+    }
+
+    /// `per_target` exists for actions that can share a run; this one can't,
+    /// because the requirements of several targets in one stdout can't be told
+    /// apart. Resolves only while `Requirements` is not `SharedRun`.
+    #[test]
+    fn the_action_cannot_share_a_run() {
+        trait AmbiguousIfShared<A> {
+            fn check() {}
+        }
+        impl<T: ?Sized> AmbiguousIfShared<()> for T {}
+        impl<T: ?Sized + crate::codesign::actions::sealed::SharedRun> AmbiguousIfShared<u8> for T {}
+
+        <Requirements as AmbiguousIfShared<_>>::check();
+    }
+
+    #[test]
+    fn a_failed_run_keeps_its_exit_code_and_streams() {
+        let error = Requirements.failure(1, "out".into(), "err".into());
+
+        assert!(
+            matches!(
+                &error,
+                crate::Error::Codesign(CodesignError::Failed { code: 1, stdout, stderr })
+                    if stdout == "out" && stderr == "err"
+            ),
+            "{error:?}"
+        );
+    }
+
+    fn requirement(line: &str) -> Requirement {
+        Requirement::parse(line).unwrap_or_else(|e| panic!("{line:?}: {e}"))
+    }
+
+    #[test]
+    fn a_requirement_line_splits_into_kind_and_expression() {
+        let found = requirement(r#"designated => identifier "com.apple.ls" and anchor apple"#);
+
+        assert_eq!(
+            found,
+            Requirement {
+                kind: RequirementKind::Designated,
+                expression: r#"identifier "com.apple.ls" and anchor apple"#.into(),
+                implicit: false,
+            }
+        );
+    }
+
+    #[test]
+    fn every_known_kind_is_recognised() {
+        let cases = [
+            ("designated", RequirementKind::Designated),
+            ("host", RequirementKind::Host),
+            ("guest", RequirementKind::Guest),
+            ("library", RequirementKind::Library),
+            ("plugin", RequirementKind::Plugin),
+        ];
+
+        for (word, kind) in cases {
+            let found = requirement(&format!("{word} => anchor apple"));
+            assert_eq!(found.kind, kind, "{word}");
+            assert_eq!(found.expression, "anchor apple");
+            assert!(!found.implicit, "{word}");
+        }
+    }
+
+    #[test]
+    fn an_unknown_kind_keeps_its_word() {
+        assert_eq!(
+            requirement("something => anchor apple").kind,
+            RequirementKind::Other("something".into())
+        );
+        assert_eq!(
+            requirement("Designated => anchor apple").kind,
+            RequirementKind::Other("Designated".into()),
+            "kinds are lower case"
+        );
+    }
+
+    #[test]
+    fn a_hash_prefix_marks_the_requirement_as_implicit() {
+        let found = requirement(r#"# designated => cdhash H"da0b" or cdhash H"c0ffee""#);
+
+        assert!(found.implicit);
+        assert_eq!(found.kind, RequirementKind::Designated);
+        assert_eq!(found.expression, r#"cdhash H"da0b" or cdhash H"c0ffee""#);
+        assert!(!requirement("designated => anchor apple").implicit);
+    }
+
+    #[test]
+    fn an_expression_may_contain_the_separator() {
+        let found = requirement(r#"designated => identifier "a => b" and anchor apple"#);
+
+        assert_eq!(found.kind, RequirementKind::Designated);
+        assert_eq!(found.expression, r#"identifier "a => b" and anchor apple"#);
+    }
+
+    #[test]
+    fn a_line_without_the_separator_is_rejected() {
+        for line in [
+            "",
+            "designated",
+            "designated=>anchor apple",
+            "designated =>anchor apple",
+            "designated  anchor apple",
+            "# designated",
+        ] {
+            let result = Requirement::parse(line);
+            assert!(
+                matches!(
+                    result,
+                    Err(crate::Error::Codesign(
+                        CodesignError::UnexpectedOutput { .. }
+                    ))
+                ),
+                "{line:?}: {result:?}"
+            );
+        }
+    }
+}
