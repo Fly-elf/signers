@@ -4,9 +4,9 @@ use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 
-use super::actions::PushArgs;
-use super::actions::sealed::ToArgs;
 use crate::codesign::Codesign;
+use crate::codesign::action::PushArgs;
+use crate::codesign::action::sealed::{SharedRun, ToArgs};
 use crate::target::Shape;
 
 /// Options of the signature-removal action: the `A` in `Codesign<RemoveSignature>`.
@@ -46,7 +46,7 @@ impl<S: Shape> Codesign<RemoveSignature, S> {
     }
 }
 
-impl super::actions::sealed::SharedRun for RemoveSignature {}
+impl SharedRun for RemoveSignature {}
 
 impl ToArgs for RemoveSignature {
     type Output = ();

@@ -3,14 +3,9 @@
 //! `codesign` ships with macOS in `/usr/bin` and is looked up on `PATH` each time an action runs.
 //! Start at [`Codesign`].
 
+mod action;
 mod actions;
-pub mod display;
-pub mod extract_certificates;
-pub mod remove_signature;
-pub mod requirements;
-pub mod sign;
-pub mod validate_constraint;
-pub mod verify;
+mod types;
 
 use std::future::{Future, IntoFuture};
 use std::io::ErrorKind;
@@ -20,20 +15,24 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::process::Stdio;
 
-use display::Display;
-use extract_certificates::ExtractCertificates;
 use futures_util::StreamExt;
-use remove_signature::RemoveSignature;
-use requirements::Requirements;
-use sign::Sign;
-use validate_constraint::ValidateConstraint;
-use verify::Verify;
 
 use crate::errors::{CodesignError, Error, Result};
 use crate::target::{IntoTargets, Multi, One, Shape, sealed};
 
-pub use actions::Action;
-pub use actions::SignatureSlot;
+use action::sealed::SharedRun;
+
+pub use action::Action;
+pub use actions::{
+    Display, ExtractCertificates, InternalRequirements, RemoveSignature, Sign, ValidateConstraint,
+    Verify,
+};
+pub use types::{
+    Authority, CdHash, Certificate, CmsDigest, CodeDirectory, CodeHashes, Constraints,
+    ExecutableSegment, Format, HashType, InfoPlist, Location, OsVersion, Platform,
+    PreserveMetadata, Requirement, RequirementKind, RequirementsSummary, SealedResources,
+    Signature, SignatureKind, SignatureSlot, SigningFlags, Strict, Timestamp,
+};
 
 /// A `codesign` run: an action and its targets, started by `.await`.
 ///
@@ -477,13 +476,15 @@ impl Codesign<()> {
     /// }
     /// # Ok(()) }
     /// ```
-    pub fn internal_requirements<T: IntoTargets>(target: T) -> Codesign<Requirements, T::Shape> {
-        new(target, Requirements)
+    pub fn internal_requirements<T: IntoTargets>(
+        target: T,
+    ) -> Codesign<InternalRequirements, T::Shape> {
+        new(target, InternalRequirements)
     }
 }
 
 /// Options for a `Vec`, slice or array of targets.
-impl<A: Action + actions::sealed::SharedRun, S: Multi> Codesign<A, S> {
+impl<A: Action + SharedRun, S: Multi> Codesign<A, S> {
     /// Runs one `codesign` per target, concurrently, instead of one for all of them.
     ///
     /// One process stops at the first target it rejects and reports that one only. Per target,
@@ -675,8 +676,8 @@ async fn run<A: Action>(action: &A, targets: &[PathBuf]) -> Result<Vec<A::Output
         // exit, so this is not `codesign` rejecting anything.
         None => CodesignError::Terminated {
             status: output.status,
-            stdout: actions::decode(output.stdout),
-            stderr: actions::decode(output.stderr),
+            stdout: action::decode(output.stdout),
+            stderr: action::decode(output.stderr),
         }
         .into(),
     })

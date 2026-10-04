@@ -4,15 +4,13 @@ use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 
-use super::actions::sealed::ToArgs;
-use super::actions::{PushArgs, SignatureSlot};
 use crate::codesign::Codesign;
+use crate::codesign::action::PushArgs;
+use crate::codesign::action::sealed::{SharedRun, ToArgs};
+use crate::codesign::types::parse_report;
+use crate::codesign::{Signature, SignatureSlot};
 use crate::errors::{CodesignError, Result};
 use crate::target::Shape;
-
-mod signature;
-
-pub use signature::*;
 
 /// Options of the display action: the `A` in `Codesign<Display>`.
 ///
@@ -101,7 +99,7 @@ impl<S: Shape> Codesign<Display, S> {
     }
 }
 
-impl super::actions::sealed::SharedRun for Display {}
+impl SharedRun for Display {}
 
 impl ToArgs for Display {
     type Output = Signature;
