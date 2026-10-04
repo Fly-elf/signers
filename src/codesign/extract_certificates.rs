@@ -1,3 +1,5 @@
+//! The certificate-extraction action and the [`Certificate`] it returns (`--extract-certificates`).
+
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
@@ -16,21 +18,61 @@ use crate::codesign::Codesign;
 use crate::errors::{Error, Result};
 use crate::target::Shape;
 
+/// One certificate of a signature's chain, as DER bytes.
+///
+/// The bytes are the certificate as `codesign` extracted it. They are not parsed: hand them to
+/// an X.509 parser, or write them to a file to inspect with `openssl x509 -inform der`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Certificate {
     der: Vec<u8>,
 }
 
 impl Certificate {
+    /// The certificate in DER encoding.
     pub fn der(&self) -> &[u8] {
         &self.der
     }
 
+    /// Takes the DER bytes, without copying them.
     pub fn into_der(self) -> Vec<u8> {
         self.der
     }
 }
 
+/// Options of the certificate-extraction action: the `A` in `Codesign<ExtractCertificates>`.
+///
+/// [`Codesign::extract_certificates`] creates it. Its one option, [`save_to`](Codesign::save_to),
+/// also writes each chain to a PEM file. `.await` yields the chain of each target as a `Vec` of [`Certificate`],
+/// leaf first.
+///
+/// # Examples
+///
+/// Read the chain of a signed binary, and tell an ad hoc signature, which has none:
+///
+/// ```no_run
+/// # async fn run() -> signers::Result<()> {
+/// use signers::Codesign;
+///
+/// let chain = Codesign::extract_certificates("MyApp.app").await?;
+/// match chain.first() {
+///     Some(leaf) => println!("signed with a certificate of {} bytes", leaf.der().len()),
+///     None => println!("signed ad hoc"),
+/// }
+/// # Ok(()) }
+/// ```
+///
+/// Save the chains of two apps as PEM files in `certs/`:
+///
+/// ```no_run
+/// # async fn run() -> signers::Result<()> {
+/// use signers::Codesign;
+///
+/// let [a, b] = Codesign::extract_certificates(["A.app", "B.app"])
+///     .save_to("certs")
+///     .await?;
+/// // `certs/A.app.pem` and `certs/B.app.pem` now hold what `a` and `b` hold.
+/// # Ok(()) }
+/// ```
 #[derive(Debug, Default)]
 pub struct ExtractCertificates {
     save_to: Option<PathBuf>,
@@ -61,7 +103,26 @@ impl ExtractCertificates {
     }
 }
 
+/// Options for [`extract_certificates`](Codesign::extract_certificates).
 impl<S: Shape> Codesign<ExtractCertificates, S> {
+    /// Also writes each target's chain as a PEM file in `dir`.
+    ///
+    /// The file is named after the target, `MyApp.app` into `MyApp.app.pem`, and holds the chain
+    /// leaf first, so `openssl` reads it as it is. A name already taken, by an earlier target of
+    /// the same run or by a file that was there before, gets a number instead:
+    /// `MyApp.app2.pem`, `MyApp.app3.pem`. A file is never overwritten. Targets that share a name
+    /// are numbered in no fixed order, because they run concurrently.
+    ///
+    /// A target with an ad hoc signature has no certificates and gets no file. `dir` is created,
+    /// with its parents, only when at least one file is to be written: if every target is ad hoc,
+    /// it is left alone. The files of the targets that were read stay when another target of the
+    /// same run fails.
+    ///
+    /// A `dir` or a file that can't be written fails with [`Error::Io`].
+    ///
+    /// A later call replaces an earlier one.
+    ///
+    /// [`Error::Io`]: crate::Error::Io
     pub fn save_to(mut self, dir: impl Into<PathBuf>) -> Self {
         self.action.save_to = Some(dir.into());
         self
