@@ -139,6 +139,13 @@ impl ToArgs for Display {
         args
     }
 
+    /// Splits stderr into one report per target, each starting at its `Executable=` line, and
+    /// parses them in order.
+    ///
+    /// A report with a `: no signature` line and no `Signature=` line (exit 0, from a
+    /// `signature_slot` the code has no signature in) fails the whole run with
+    /// [`CodesignError::NoSignature`]. Entitlements come from the plist on stdout, which only a
+    /// single-target run asks for.
     fn output(
         &self,
         targets: &[PathBuf],
