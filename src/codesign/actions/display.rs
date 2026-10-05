@@ -2,9 +2,9 @@ use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 
-use crate::codesign::Codesign;
 use crate::codesign::action::PushArgs;
 use crate::codesign::action::sealed::{SharedRun, ToArgs};
+use crate::codesign::runner::{Runner, Runtime};
 use crate::codesign::types::parse_report;
 use crate::codesign::{Signature, SignatureSlot};
 use crate::errors::{CodesignError, Result};
@@ -55,7 +55,7 @@ pub struct Display {
 ///
 /// Each setter maps to one `codesign` flag. A later call replaces an earlier one, and `false`
 /// leaves a flag out.
-impl<S: Shape> Codesign<Display, S> {
+impl<S: Shape, R: Runtime> Runner<Display, S, R> {
     /// Reads this slice of a universal binary, e.g. `arm64` or `x86_64` (`--architecture`).
     ///
     /// Without it a universal binary is reported whole, as [`Format::MachOUniversal`](crate::codesign::Format::MachOUniversal). A slice the
