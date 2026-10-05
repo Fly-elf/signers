@@ -19,6 +19,18 @@ pub struct Runner<A, S, R> {
     pub(super) shape: PhantomData<fn() -> (S, R)>,
 }
 
+#[cfg(feature = "blocking")]
+impl<A, S, R> Runner<A, S, R> {
+    pub(super) fn with_runtime<R2: Runtime>(self) -> Runner<A, S, R2> {
+        Runner {
+            targets: self.targets,
+            action: self.action,
+            per_target: self.per_target,
+            shape: PhantomData,
+        }
+    }
+}
+
 pub(super) fn new<A: Action, T: IntoTargets, R: Runtime>(
     target: T,
     action: A,
