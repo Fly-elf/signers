@@ -2,9 +2,9 @@ use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 
-use crate::codesign::Codesign;
 use crate::codesign::action::PushArgs;
 use crate::codesign::action::sealed::{SharedRun, ToArgs};
+use crate::codesign::runner::{Runner, Runtime};
 use crate::codesign::{SignatureSlot, Strict};
 use crate::errors::{Change, CodesignError, Error, ResourceChange};
 use crate::target::Shape;
@@ -71,7 +71,7 @@ enum TestRequirement {
 ///
 /// Each setter maps to one `codesign` flag. A later call replaces an earlier one, and `false`
 /// leaves a flag out.
-impl<S: Shape> Codesign<Verify, S> {
+impl<S: Shape, R: Runtime> Runner<Verify, S, R> {
     /// Also verifies nested code on its own, not only through the bundle's seal (`--deep`).
     ///
     /// Without it, nested code is checked only against the hash the bundle sealed, so a byte

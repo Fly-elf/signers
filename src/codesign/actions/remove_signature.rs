@@ -2,9 +2,9 @@ use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 
-use crate::codesign::Codesign;
 use crate::codesign::action::PushArgs;
 use crate::codesign::action::sealed::{SharedRun, ToArgs};
+use crate::codesign::runner::{Runner, Runtime};
 use crate::target::Shape;
 
 /// Options of the signature-removal action: the `A` in `Codesign<RemoveSignature>`.
@@ -33,7 +33,7 @@ pub struct RemoveSignature {
 }
 
 /// Options for [`remove_signature`](Codesign::remove_signature).
-impl<S: Shape> Codesign<RemoveSignature, S> {
+impl<S: Shape, R: Runtime> Runner<RemoveSignature, S, R> {
     /// Removes the signature from this version of a versioned bundle only (`--bundle-version`).
     ///
     /// `version` names a directory under the bundle's `Versions`. Without this option,

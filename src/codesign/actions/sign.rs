@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 
 use crate::codesign::action::sealed::{SharedRun, ToArgs};
 use crate::codesign::action::{PushArgs, joined};
-use crate::codesign::{Codesign, PreserveMetadata, SigningFlags, Timestamp};
+use crate::codesign::runner::{Runner, Runtime};
+use crate::codesign::{PreserveMetadata, SigningFlags, Timestamp};
 use crate::target::Shape;
 
 /// Options of the signing action: the `A` in `Codesign<Sign>`.
@@ -108,7 +109,7 @@ impl Sign {
 ///
 /// Each setter maps to one `codesign` flag. A later call replaces an earlier one, and `false`
 /// leaves a flag out.
-impl<S: Shape> Codesign<Sign, S> {
+impl<S: Shape, R: Runtime> Runner<Sign, S, R> {
     /// Seals this identifier instead of deriving one from `Info.plist` or the file name
     /// (`--identifier`).
     ///
