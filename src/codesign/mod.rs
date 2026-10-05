@@ -5,6 +5,7 @@
 
 mod action;
 mod actions;
+#[cfg(feature = "async")]
 mod asynchronous;
 mod runner;
 mod types;
@@ -14,6 +15,7 @@ pub use actions::{
     Display, ExtractCertificates, InternalRequirements, RemoveSignature, Sign, ValidateConstraint,
     Verify,
 };
+#[cfg(feature = "async")]
 pub use asynchronous::Codesign;
 pub use types::{
     Authority, CdHash, Certificate, CmsDigest, CodeDirectory, CodeHashes, Constraints,
