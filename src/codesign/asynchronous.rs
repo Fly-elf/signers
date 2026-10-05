@@ -1,14 +1,22 @@
 use std::future::{Future, IntoFuture};
+use std::io::ErrorKind;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::pin::Pin;
+use std::process::Stdio;
 
 use futures_util::StreamExt;
 
-use super::runner::{Async, Runner, collect, command, existence, finish, preflight, spawn_error};
+use super::runner::{Runner, Runtime};
 use crate::codesign::Action;
-use crate::errors::{CodesignError, Result};
+use crate::codesign::action;
+use crate::errors::{CodesignError, Error, Result};
 use crate::target::{One, Shape};
+
+#[derive(Debug, Clone, Copy)]
+pub struct Async;
+
+impl Runtime for Async {}
 
 /// A `codesign` run: an action and its targets, started by `.await`.
 ///
@@ -119,9 +127,28 @@ async fn execute<A: Action>(
     targets: &[PathBuf],
     per_target: bool,
 ) -> Result<Vec<A::Output>> {
-    preflight(action, targets, per_target)?;
+    action.validate()?;
+    if per_target && let Some(option) = action.shared_output() {
+        return Err(Error::SharedOutputPerTarget(option));
+    }
+
+    if targets.is_empty() {
+        return Err(Error::NoTargets);
+    }
+    if let Some(index) = targets.iter().position(|t| t.as_os_str().is_empty()) {
+        return Err(Error::EmptyTarget(index));
+    }
     for target in targets {
-        existence(target, tokio::fs::try_exists(target).await)?;
+        match tokio::fs::try_exists(target).await {
+            Ok(true) => {}
+            Ok(false) => return Err(Error::TargetNotFound(target.clone())),
+            Err(source) => {
+                return Err(Error::TargetAccess {
+                    path: target.clone(),
+                    source,
+                });
+            }
+        }
     }
 
     // One run over all targets, and its error stays plain.
@@ -142,14 +169,74 @@ async fn execute<A: Action>(
         .collect()
         .await;
 
-    collect(targets, results)
+    let mut outputs = Vec::with_capacity(targets.len());
+    let mut failures = Vec::new();
+    for (target, result) in targets.iter().zip(results) {
+        match result {
+            Ok(output) => outputs.extend(output),
+            // `codesign` itself couldn't start: that isn't about this target.
+            Err(error @ Error::Codesign(CodesignError::NotFound | CodesignError::Spawn(_))) => {
+                return Err(error);
+            }
+            Err(error) => failures.push((target.clone(), error)),
+        }
+    }
+    if failures.is_empty() {
+        Ok(outputs)
+    } else {
+        Err(Error::Batch(failures))
+    }
 }
 
 /// Runs one `codesign` over `targets` and turns its exit into outputs or an error.
 async fn run<A: Action>(action: &A, targets: &[PathBuf]) -> Result<Vec<A::Output>> {
-    let child = tokio::process::Command::from(command(action, targets))
+    let args = action.to_args(targets);
+    tracing::trace!(
+        "running codesign {}",
+        args.iter()
+            .map(|a| a.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+
+    // Spawning and waiting are kept apart so that a failure to *start*
+    // `codesign` is never reported as one of its results. That means
+    // configuring the streams by hand, which `Command::output` would
+    // otherwise do: no inherited stdin for `codesign` to block on, and
+    // both of its streams captured rather than leaking into the
+    // caller's terminal.
+    let child = tokio::process::Command::new("codesign")
+        .args(&args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
-        .map_err(spawn_error)?;
+        .map_err(|source| match source.kind() {
+            ErrorKind::NotFound => CodesignError::NotFound,
+            _ => CodesignError::Spawn(source),
+        })?;
+
     let output = child.wait_with_output().await.map_err(CodesignError::Run)?;
-    finish(action, targets, output)
+    if output.status.success() {
+        let outputs = action.output_bytes(targets, output.stdout, output.stderr)?;
+        if outputs.len() != targets.len() {
+            return Err(CodesignError::UnexpectedOutput {
+                detail: format!("{} outputs for {} targets", outputs.len(), targets.len()),
+            }
+            .into());
+        }
+        return Ok(outputs);
+    }
+
+    Err(match output.status.code() {
+        Some(code) => action.failure_bytes(code, output.stdout, output.stderr),
+        // No exit code at all: the process was killed before it could
+        // exit, so this is not `codesign` rejecting anything.
+        None => CodesignError::Terminated {
+            status: output.status,
+            stdout: action::decode(output.stdout),
+            stderr: action::decode(output.stderr),
+        }
+        .into(),
+    })
 }

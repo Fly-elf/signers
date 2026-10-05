@@ -1,28 +1,15 @@
-use std::io::{self, ErrorKind};
 use std::marker::PhantomData;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Output, Stdio};
+use std::path::PathBuf;
 
+use crate::codesign::action::Action;
 use crate::codesign::action::sealed::SharedRun;
-use crate::codesign::action::{self, Action};
 use crate::codesign::{
     Display, ExtractCertificates, InternalRequirements, RemoveSignature, Sign, ValidateConstraint,
     Verify,
 };
-use crate::errors::{CodesignError, Error, Result};
 use crate::target::{self, IntoTargets, Multi, One};
 
-pub trait Runtime: sealed::Runtime {}
-
-mod sealed {
-    pub trait Runtime {}
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum Async {}
-
-impl sealed::Runtime for Async {}
-impl Runtime for Async {}
+pub trait Runtime {}
 
 #[derive(Debug, Clone)]
 pub struct Runner<A, S, R> {
@@ -454,119 +441,5 @@ impl<A: Action + SharedRun, S: Multi, R: Runtime> Runner<A, S, R> {
     pub fn per_target(mut self, per_target: bool) -> Self {
         self.per_target = per_target;
         self
-    }
-}
-
-pub(super) fn preflight<A: Action>(
-    action: &A,
-    targets: &[PathBuf],
-    per_target: bool,
-) -> Result<()> {
-    action.validate()?;
-    if per_target && let Some(option) = action.shared_output() {
-        return Err(Error::SharedOutputPerTarget(option));
-    }
-
-    if targets.is_empty() {
-        return Err(Error::NoTargets);
-    }
-    if let Some(index) = targets.iter().position(|t| t.as_os_str().is_empty()) {
-        return Err(Error::EmptyTarget(index));
-    }
-    Ok(())
-}
-
-pub(super) fn existence(target: &Path, probe: io::Result<bool>) -> Result<()> {
-    match probe {
-        Ok(true) => Ok(()),
-        Ok(false) => Err(Error::TargetNotFound(target.to_path_buf())),
-        Err(source) => Err(Error::TargetAccess {
-            path: target.to_path_buf(),
-            source,
-        }),
-    }
-}
-
-pub(super) fn command<A: Action>(action: &A, targets: &[PathBuf]) -> Command {
-    let args = action.to_args(targets);
-    tracing::trace!(
-        "running codesign {}",
-        args.iter()
-            .map(|a| a.to_string_lossy())
-            .collect::<Vec<_>>()
-            .join(" ")
-    );
-
-    // Spawning and waiting are kept apart so that a failure to *start*
-    // `codesign` is never reported as one of its results. That means
-    // configuring the streams by hand, which `Command::output` would
-    // otherwise do: no inherited stdin for `codesign` to block on, and
-    // both of its streams captured rather than leaking into the
-    // caller's terminal.
-    let mut command = Command::new("codesign");
-    command
-        .args(&args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    command
-}
-
-pub(super) fn spawn_error(source: io::Error) -> CodesignError {
-    match source.kind() {
-        ErrorKind::NotFound => CodesignError::NotFound,
-        _ => CodesignError::Spawn(source),
-    }
-}
-
-pub(super) fn finish<A: Action>(
-    action: &A,
-    targets: &[PathBuf],
-    output: Output,
-) -> Result<Vec<A::Output>> {
-    if output.status.success() {
-        let outputs = action.output_bytes(targets, output.stdout, output.stderr)?;
-        if outputs.len() != targets.len() {
-            return Err(CodesignError::UnexpectedOutput {
-                detail: format!("{} outputs for {} targets", outputs.len(), targets.len()),
-            }
-            .into());
-        }
-        return Ok(outputs);
-    }
-
-    Err(match output.status.code() {
-        Some(code) => action.failure_bytes(code, output.stdout, output.stderr),
-        // No exit code at all: the process was killed before it could
-        // exit, so this is not `codesign` rejecting anything.
-        None => CodesignError::Terminated {
-            status: output.status,
-            stdout: action::decode(output.stdout),
-            stderr: action::decode(output.stderr),
-        }
-        .into(),
-    })
-}
-
-pub(super) fn collect<O>(
-    targets: &[PathBuf],
-    results: impl IntoIterator<Item = Result<Vec<O>>>,
-) -> Result<Vec<O>> {
-    let mut outputs = Vec::with_capacity(targets.len());
-    let mut failures = Vec::new();
-    for (target, result) in targets.iter().zip(results) {
-        match result {
-            Ok(output) => outputs.extend(output),
-            // `codesign` itself couldn't start: that isn't about this target.
-            Err(error @ Error::Codesign(CodesignError::NotFound | CodesignError::Spawn(_))) => {
-                return Err(error);
-            }
-            Err(error) => failures.push((target.clone(), error)),
-        }
-    }
-    if failures.is_empty() {
-        Ok(outputs)
-    } else {
-        Err(Error::Batch(failures))
     }
 }
