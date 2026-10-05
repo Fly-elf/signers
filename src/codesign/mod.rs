@@ -7,6 +7,8 @@ mod action;
 mod actions;
 #[cfg(feature = "async")]
 mod asynchronous;
+#[cfg(feature = "blocking")]
+pub mod blocking;
 mod runner;
 mod types;
 
