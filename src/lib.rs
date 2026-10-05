@@ -41,5 +41,10 @@ mod target;
 
 #[cfg(feature = "async")]
 pub use codesign::Codesign;
+#[cfg(feature = "blocking")]
+pub mod blocking {
+    pub use crate::codesign::blocking::Codesign;
+}
+
 pub use errors::{CodesignError, Error, Result};
 pub use target::IntoTargets;
