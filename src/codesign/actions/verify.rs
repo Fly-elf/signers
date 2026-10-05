@@ -310,6 +310,7 @@ mod tests {
     use std::ffi::OsString;
 
     use super::*;
+    use crate::codesign::Codesign;
 
     fn os(strings: &[&str]) -> Vec<OsString> {
         strings.iter().map(OsString::from).collect()

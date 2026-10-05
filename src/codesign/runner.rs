@@ -455,3 +455,76 @@ impl<A: Action + SharedRun, S: Multi, R: Runtime> Runner<A, S, R> {
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::*;
+    use crate::codesign::action::sealed::ToArgs;
+
+    /// Constructors and setters are written once for every runtime, so a
+    /// marker of their own is enough to check them.
+    #[derive(Debug)]
+    struct AnyRuntime;
+
+    impl Runtime for AnyRuntime {}
+
+    fn display<T: IntoTargets>(target: T) -> Runner<Display, T::Shape, AnyRuntime> {
+        new(target, Display::default())
+    }
+
+    /// `A::PER_TARGET` is true for display, yet a single target never
+    /// starts per target; the other shapes do.
+    #[test]
+    fn the_constructor_default_is_false_for_a_single_target_whatever_the_action() {
+        const { assert!(Display::PER_TARGET) };
+
+        assert!(!display("a").per_target);
+        assert!(!display(String::from("a")).per_target);
+        assert!(!display(Path::new("a")).per_target);
+        assert!(!display(PathBuf::from("a")).per_target);
+
+        assert!(display(vec!["a"]).per_target);
+        assert!(display(vec!["a", "b"]).per_target);
+        assert!(display(&["a", "b"][..]).per_target);
+        assert!(display(["a"]).per_target);
+        assert!(display(["a", "b"]).per_target);
+    }
+
+    /// The setter is typed on the shape, not on the length.
+    #[test]
+    fn a_one_element_collection_keeps_the_per_target_setter() {
+        let from_vec = display(vec!["a"]).per_target(false);
+        assert!(!from_vec.per_target);
+        let from_array = display(["a"]).per_target(false);
+        assert!(!from_array.per_target);
+
+        assert!(
+            display(vec!["a"])
+                .per_target(false)
+                .per_target(true)
+                .per_target
+        );
+    }
+
+    #[cfg(feature = "blocking")]
+    #[test]
+    fn changing_the_runtime_keeps_targets_action_and_per_target() {
+        #[derive(Debug)]
+        struct Other;
+        impl Runtime for Other {}
+
+        for per_target in [true, false] {
+            let runner: Runner<Verify, _, AnyRuntime> =
+                new(vec!["a", "", "a"], Verify::default()).per_target(per_target);
+            let action = format!("{:?}", runner.action);
+
+            let moved: Runner<Verify, _, Other> = runner.with_runtime();
+
+            assert_eq!(moved.targets, ["a", "", "a"].map(PathBuf::from));
+            assert_eq!(moved.per_target, per_target);
+            assert_eq!(format!("{:?}", moved.action), action);
+        }
+    }
+}

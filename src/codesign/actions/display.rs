@@ -215,6 +215,7 @@ mod tests {
     use std::os::unix::ffi::OsStrExt;
 
     use super::*;
+    use crate::codesign::Codesign;
     use crate::codesign::SignatureKind;
 
     fn os(strings: &[&str]) -> Vec<OsString> {
