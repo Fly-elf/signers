@@ -29,6 +29,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dev-dependencies]
+signers = { path = ".", features = ["blocking"] }
 tokio = { version = "1.53", features = ["macros", "rt-multi-thread"] }
 
 # Opt-in test groups: tests needing an environment `cargo test` cannot assume

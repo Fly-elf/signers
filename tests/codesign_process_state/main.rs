@@ -12,7 +12,6 @@
 #[path = "../support/mod.rs"]
 mod support;
 
-#[cfg(feature = "blocking")]
 mod blocking;
 mod executable_path;
 mod temp_dir;
