@@ -17,8 +17,10 @@
 //! # Ok(()) }
 //! ```
 //!
-//! Outside async code, [`blocking::Codesign`] has the same actions and options, and `.run()`
-//! takes the place of `.await`:
+//! For code that isn't async, the `blocking` feature adds
+#![cfg_attr(feature = "blocking", doc = "[`blocking::Codesign`]")]
+#![cfg_attr(not(feature = "blocking"), doc = "`blocking::Codesign`")]
+//! with the same actions and options, where `.run()` takes the place of `.await`:
 //!
 //! ```no_run
 //! # fn main() -> signers::Result<()> {
@@ -29,13 +31,13 @@
 //! ```
 //!
 //! The Cargo features pick the API: `async`, on by default, provides [`Codesign`]; `blocking`
-//! adds [`blocking::Codesign`] and turns `async` on too, since `.run()` drives the same async
+//! adds `blocking::Codesign` and turns `async` on too, since `.run()` drives the same async
 //! code on a runtime of its own. At least one of them must be enabled.
 //!
 //! Where to go next:
 //!
 //! - [`Codesign`]: the actions, what `.await` checks before running anything, and running one
-//!   `codesign` per target of a collection. [`blocking::Codesign`] behaves the same.
+//!   `codesign` per target of a collection. `blocking::Codesign` behaves the same.
 //! - [`codesign`]: everything `Codesign` takes and returns. The action types
 //!   ([`Sign`](codesign::Sign), [`RemoveSignature`](codesign::RemoveSignature),
 //!   [`Verify`](codesign::Verify), [`Display`](codesign::Display),
@@ -45,15 +47,6 @@
 //! - [`IntoTargets`]: what you can pass as targets. One path yields one result; a `Vec`, slice
 //!   or array yields one per target, in a `Vec` or an array.
 //! - [`Error`]: what can fail.
-//!
-#![cfg_attr(
-    feature = "blocking",
-    doc = "[`blocking::Codesign`]: blocking::Codesign"
-)]
-#![cfg_attr(
-    not(feature = "blocking"),
-    doc = "[`blocking::Codesign`]: https://docs.rs/signers/latest/signers/blocking/type.Codesign.html"
-)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[cfg(not(feature = "async"))]
