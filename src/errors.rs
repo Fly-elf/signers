@@ -115,7 +115,7 @@ pub enum CodesignError {
     /// `codesign` was found but couldn't start, e.g. because it isn't executable.
     ///
     /// The blocking `.run()` also returns it when it can't create its runtime.
-    #[error("failed to spawn the `codesign` process: {0}")]
+    #[error("failed to spawn the `codesign` process or the Tokio runtime: {0}")]
     Spawn(#[source] std::io::Error),
 
     /// Waiting for `codesign` or reading its output failed.
