@@ -25,15 +25,16 @@ impl Runtime for Async {}
 /// only the options `codesign` honours for its action: a `Codesign<RemoveSignature>` has no
 /// signing options to misuse.
 ///
-/// `S` is the shape of the targets, fixed by their type (see [`IntoTargets`]): `.await` yields
-/// one [`Output`](Action) for a single path, a `Vec` of them for a `Vec` or slice, an array of
-/// them for an array. For [`sign`](Codesign::sign), [`remove_signature`](Codesign::remove_signature)
-/// and [`verify`](Codesign::verify) the output is `()`; for [`display`](Codesign::display) it is
-/// a [`Signature`]; for
-/// [`extract_certificates`](Codesign::extract_certificates) it is a `Vec` of
-/// [`Certificate`]; for
-/// [`internal_requirements`](Codesign::internal_requirements) it is a `Vec` of
-/// [`Requirement`].
+/// `S` is the shape of the targets, fixed by their type (see [`IntoTargets`](crate::IntoTargets)):
+/// `.await` yields one [`Output`](Action) for a single path, a `Vec` of them for a `Vec` or slice,
+/// an array of them for an array. For [`sign`](crate::Codesign#method.sign),
+/// [`remove_signature`](crate::Codesign#method.remove_signature) and
+/// [`verify`](crate::Codesign#method.verify) the output is `()`; for
+/// [`display`](crate::Codesign#method.display) it is a [`Signature`](crate::codesign::Signature);
+/// for [`extract_certificates`](crate::Codesign#method.extract_certificates) it is a `Vec` of
+/// [`Certificate`](crate::codesign::Certificate); for
+/// [`internal_requirements`](crate::Codesign#method.internal_requirements) it is a `Vec` of
+/// [`Requirement`](crate::codesign::Requirement).
 ///
 /// In the signatures, `S`, its default `One` and `S::Out` stand for that shape. They are
 /// internal, so let type inference fill them in; `Codesign<Sign>` is the builder for a single
@@ -44,14 +45,15 @@ impl Runtime for Async {}
 /// ```
 ///
 /// Nothing runs until `.await`. Until then this is a plain value that you can build over several
-/// statements, clone or drop. The future from [`into_future`](Codesign::into_future) is
-/// `Send + 'static`, so you can spawn it.
+/// statements, clone or drop. The future from [`into_future`](crate::Codesign#method.into_future)
+/// is `Send + 'static`, so you can spawn it.
 ///
-/// `codesign` runs once over all the targets, unless [`per_target`](Codesign::per_target) runs it
-/// once per target. That is the default for [`verify`](Codesign::verify) and
-/// [`display`](Codesign::display) on a collection.
-/// [`extract_certificates`](Codesign::extract_certificates) and
-/// [`internal_requirements`](Codesign::internal_requirements) always run one per target.
+/// `codesign` runs once over all the targets, unless
+/// [`per_target`](crate::Codesign#method.per_target) runs it once per target. That is the default
+/// for [`verify`](crate::Codesign#method.verify) and [`display`](crate::Codesign#method.display) on
+/// a collection. [`extract_certificates`](crate::Codesign#method.extract_certificates) and
+/// [`internal_requirements`](crate::Codesign#method.internal_requirements) always run one per
+/// target.
 ///
 /// # Examples
 ///
@@ -74,26 +76,28 @@ impl Runtime for Async {}
 ///
 /// `.await` stops at the first failure. Before starting `codesign` it checks, in this order:
 ///
-/// 1. that the options can be honoured, else e.g. [`Error::StdioPath`], or
-///    [`Error::Io`] if [`extract_certificates`](Codesign::extract_certificates) can't use the
-///    system's temporary directory;
+/// 1. that the options can be honoured, else e.g. [`Error::StdioPath`](crate::Error::StdioPath),
+///    or [`Error::Io`](crate::Error::Io) if
+///    [`extract_certificates`](crate::Codesign#method.extract_certificates) can't use the system's
+///    temporary directory;
 /// 2. with `per_target(true)`, that no option writes one shared file, else
-///    [`Error::SharedOutputPerTarget`];
-/// 3. that there is a target at all, else [`Error::NoTargets`];
-/// 4. that no target is an empty path, else [`Error::EmptyTarget`];
-/// 5. that every target exists, else [`Error::TargetNotFound`] or [`Error::TargetAccess`].
+///    [`Error::SharedOutputPerTarget`](crate::Error::SharedOutputPerTarget);
+/// 3. that there is a target at all, else [`Error::NoTargets`](crate::Error::NoTargets);
+/// 4. that no target is an empty path, else [`Error::EmptyTarget`](crate::Error::EmptyTarget);
+/// 5. that every target exists, else [`Error::TargetNotFound`](crate::Error::TargetNotFound) or
+///    [`Error::TargetAccess`](crate::Error::TargetAccess).
 ///
 /// So far no target has been touched. Then `codesign` runs:
 ///
-/// - once over all the targets, by default (except for [`verify`](Codesign::verify) and
-///   [`display`](Codesign::display)) and always
-///   for a single target. Its failure comes as [`Error::Codesign`]. It stops at the first target
-///   it rejects: the targets before that one have already been changed, the ones after it
-///   haven't.
+/// - once over all the targets, by default (except for [`verify`](crate::Codesign#method.verify)
+///   and [`display`](crate::Codesign#method.display)) and always for a single target. Its failure
+///   comes as [`Error::Codesign`](crate::Error::Codesign). It stops at the first target it rejects:
+///   the targets before that one have already been changed, the ones after it haven't.
 /// - once per target, with `per_target(true)`, which is the default for
-///   [`verify`](Codesign::verify) and [`display`](Codesign::display). Every target runs, and the
-///   failures come together as [`Error::Batch`]. If `codesign` can't start at all
-///   ([`CodesignError::NotFound`], [`CodesignError::Spawn`]), that error comes alone instead.
+///   [`verify`](crate::Codesign#method.verify) and [`display`](crate::Codesign#method.display).
+///   Every target runs, and the failures come together as [`Error::Batch`](crate::Error::Batch). If
+///   `codesign` can't start at all ([`CodesignError::NotFound`](crate::CodesignError::NotFound),
+///   [`CodesignError::Spawn`](crate::CodesignError::Spawn)), that error comes alone instead.
 ///
 /// # Panics
 ///
@@ -102,7 +106,7 @@ impl Runtime for Async {}
 /// `#[tokio::main]` enables I/O.
 pub type Codesign<A, S = One> = Runner<A, S, Async>;
 
-/// Runs the action when awaited. See [`Codesign`] for its errors and panics.
+/// Runs the action when awaited. See [`Codesign`](crate::Codesign) for its errors and panics.
 impl<A: Action + Send + 'static, S: Shape> IntoFuture for Runner<A, S, Async> {
     type Output = Result<S::Out<A::Output>>;
     type IntoFuture = Pin<Box<dyn Future<Output = Self::Output> + Send>>;

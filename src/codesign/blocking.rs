@@ -1,3 +1,5 @@
+//! The blocking [`Codesign`], also at [`signers::blocking`](crate::blocking).
+
 use std::future::IntoFuture;
 
 use super::asynchronous::Async;
@@ -16,9 +18,60 @@ use marker::Blocking;
 
 impl Runtime for Blocking {}
 
+/// A `codesign` run that blocks the calling thread, started by [`run`](Codesign#method.run).
+///
+/// The blocking twin of [`signers::Codesign`](crate::Codesign), with the same constructors and
+/// setters, listed below, the same output shapes and the same errors. Only the start differs:
+/// `.run()` instead of `.await`. The examples on the shared methods use `.await`; here, read it
+/// as `.run()`.
+///
+/// Nothing runs until `.run()`. Until then this is a plain value that you can build over
+/// several statements, clone or drop.
+///
+/// # Examples
+///
+/// ```no_run
+/// # fn main() -> signers::Result<()> {
+/// use signers::blocking::Codesign;
+/// use signers::codesign::SigningFlags;
+///
+/// Codesign::sign_for_distribution("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
+///     .entitlements("MyApp.entitlements")
+///     .options(SigningFlags::RUNTIME | SigningFlags::LIBRARY)
+///     .run()?;
+/// Codesign::verify("MyApp.app").deep(true).run()?;
+/// # Ok(()) }
+/// ```
 pub type Codesign<A, S = One> = Runner<A, S, Blocking>;
 
 impl<A: Action + Send + 'static, S: Shape> Runner<A, S, Blocking> {
+    /// Runs the action, blocking the calling thread until every `codesign` has finished.
+    ///
+    /// It checks, runs and returns exactly like `.await` on
+    /// [`signers::Codesign`](crate::Codesign): the same output shape, the same errors, and the
+    /// same concurrent processes with [`per_target`](Codesign#method.per_target). It builds a
+    /// single-threaded Tokio runtime for the call and drops it before returning.
+    ///
+    /// # Errors
+    ///
+    /// Those listed on [`signers::Codesign`](crate::Codesign#errors). A runtime that can't be
+    /// created fails with [`CodesignError::Spawn`].
+    ///
+    /// # Panics
+    ///
+    /// Panics when called inside a Tokio runtime, such as from an `async fn` it runs. There,
+    /// `.await` [`signers::Codesign`](crate::Codesign) instead.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # fn main() -> signers::Result<()> {
+    /// use signers::blocking::Codesign;
+    ///
+    /// let [ls, cat] = Codesign::display(["/bin/ls", "/bin/cat"]).run()?;
+    /// println!("{} {}", ls.identifier, cat.identifier);
+    /// # Ok(()) }
+    /// ```
     pub fn run(self) -> Result<S::Out<A::Output>> {
         // A runtime per call costs microseconds against the milliseconds of each `codesign`
         // process, and leaves no global state or threads behind.
