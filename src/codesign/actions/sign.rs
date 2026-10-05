@@ -4,19 +4,22 @@ use std::path::{Path, PathBuf};
 
 use crate::codesign::action::sealed::{SharedRun, ToArgs};
 use crate::codesign::action::{PushArgs, joined};
-use crate::codesign::{Codesign, PreserveMetadata, SigningFlags, Timestamp};
+use crate::codesign::runner::{Runner, Runtime};
+use crate::codesign::{PreserveMetadata, SigningFlags, Timestamp};
 use crate::target::Shape;
 
 /// Options of the signing action: the `A` in `Codesign<Sign>`.
 ///
-/// [`Codesign::sign`], [`Codesign::sign_adhoc`] and [`Codesign::sign_for_distribution`] create
-/// it. You set its options with [the signing setters](Codesign#impl-Codesign%3CSign,+S%3E). An
+/// [`Codesign::sign`](crate::Codesign#method.sign),
+/// [`Codesign::sign_adhoc`](crate::Codesign#method.sign_adhoc) and
+/// [`Codesign::sign_for_distribution`](crate::Codesign#method.sign_for_distribution) create it. You
+/// set its options with [the signing setters](crate::Codesign#impl-Runner%3CSign,+S,+R%3E). An
 /// option you never set keeps `codesign`'s default.
 ///
 /// # Examples
 ///
 /// Sign the nested code first, then the bundle that seals it. This replaces the deprecated
-/// [`deep`](Codesign::deep):
+/// [`deep`](crate::Codesign#method.deep):
 ///
 /// ```no_run
 /// # async fn run() -> signers::Result<()> {
@@ -104,11 +107,11 @@ impl Sign {
     }
 }
 
-/// Signing options, for [`sign`](Codesign::sign) and its presets.
+/// Signing options, for [`sign`](crate::Codesign#method.sign) and its presets.
 ///
 /// Each setter maps to one `codesign` flag. A later call replaces an earlier one, and `false`
 /// leaves a flag out.
-impl<S: Shape> Codesign<Sign, S> {
+impl<S: Shape, R: Runtime> Runner<Sign, S, R> {
     /// Seals this identifier instead of deriving one from `Info.plist` or the file name
     /// (`--identifier`).
     ///
@@ -122,8 +125,8 @@ impl<S: Shape> Codesign<Sign, S> {
     /// (`--requirements`).
     ///
     /// The kinds of requirement you don't specify get `codesign`'s defaults. On the command line,
-    /// `-` reads from standard input. Here `codesign` gets no input, so `-` makes `.await` fail with
-    /// [`Error::StdioPath`](crate::Error::StdioPath) before anything runs.
+    /// `-` reads from standard input. Here `codesign` gets no input, so `-` makes `.await` fail
+    /// with [`Error::StdioPath`](crate::Error::StdioPath) before anything runs.
     ///
     /// # Examples
     ///
@@ -144,7 +147,7 @@ impl<S: Shape> Codesign<Sign, S> {
     /// Prefixes a derived identifier that contains no dot, e.g. with `com.example.` (`--prefix`).
     ///
     /// Include the trailing dot. It has no effect when you set
-    /// [`identifier`](Codesign::identifier).
+    /// [`identifier`](crate::Codesign#method.identifier).
     pub fn prefix(mut self, prefix: impl Into<String>) -> Self {
         self.action.prefix = Some(prefix.into());
         self
@@ -162,7 +165,7 @@ impl<S: Shape> Codesign<Sign, S> {
     /// Embeds the entitlements in this plist (`--entitlements`).
     ///
     /// `codesign` leaves them out of libraries unless you also set
-    /// [`force_library_entitlements`](Codesign::force_library_entitlements).
+    /// [`force_library_entitlements`](crate::Codesign#method.force_library_entitlements).
     pub fn entitlements(mut self, path: impl Into<PathBuf>) -> Self {
         self.action.entitlements = Some(path.into());
         self
@@ -188,7 +191,7 @@ impl<S: Shape> Codesign<Sign, S> {
     /// Sets the code signing flags to seal (`--options`).
     ///
     /// This replaces the whole set, including the one from
-    /// [`sign_for_distribution`](Codesign::sign_for_distribution).
+    /// [`sign_for_distribution`](crate::Codesign#method.sign_for_distribution).
     pub fn options(mut self, options: SigningFlags) -> Self {
         self.action.options = options;
         self
@@ -274,9 +277,9 @@ impl<S: Shape> Codesign<Sign, S> {
 
     /// Reuses parts of the signature being replaced (`--preserve-metadata`).
     ///
-    /// Needs [`force`](Codesign::force), since without it there is no replacing. Values you set
-    /// explicitly win over preserved ones. `codesign` ignores this option when the old signature
-    /// came from the linker.
+    /// Needs [`force`](crate::Codesign#method.force), since without it there is no replacing.
+    /// Values you set explicitly win over preserved ones. `codesign` ignores this option when the
+    /// old signature came from the linker.
     pub fn preserve_metadata(mut self, metadata: PreserveMetadata) -> Self {
         self.action.preserve_metadata = metadata;
         self
@@ -335,7 +338,7 @@ impl<S: Shape> Codesign<Sign, S> {
     /// Writes the signature to this file and leaves the target unchanged (`--detached`).
     ///
     /// Every target's signature goes to this one file, so with
-    /// [`per_target(true)`](Codesign::per_target) `.await` fails with
+    /// [`per_target(true)`](crate::Codesign#method.per_target) `.await` fails with
     /// [`Error::SharedOutputPerTarget`](crate::Error::SharedOutputPerTarget).
     pub fn detached(mut self, path: impl Into<PathBuf>) -> Self {
         self.action.detached = Some(path.into());
@@ -356,9 +359,9 @@ impl<S: Shape> Codesign<Sign, S> {
     ///
     /// Any file not listed is unchanged. A listed file may be unchanged too.
     ///
-    /// On the command line, `-` means standard output. Here the crate captures that output, so
-    /// `-` makes `.await` fail with [`Error::StdioPath`](crate::Error::StdioPath)
-    /// before anything runs. With [`per_target(true)`](Codesign::per_target) it fails with
+    /// On the command line, `-` means standard output. Here the crate captures that output, so `-`
+    /// makes `.await` fail with [`Error::StdioPath`](crate::Error::StdioPath) before anything runs.
+    /// With [`per_target(true)`](crate::Codesign#method.per_target) it fails with
     /// [`Error::SharedOutputPerTarget`](crate::Error::SharedOutputPerTarget), since every process
     /// would append to the same file.
     pub fn file_list(mut self, path: impl Into<PathBuf>) -> Self {
@@ -509,6 +512,7 @@ mod tests {
     use std::ffi::OsString;
 
     use super::*;
+    use crate::codesign::Codesign;
 
     fn os(strings: &[&str]) -> Vec<OsString> {
         strings.iter().map(OsString::from).collect()

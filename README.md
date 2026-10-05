@@ -1,10 +1,11 @@
 # signers
 
-Sign, re-sign, strip, verify and inspect code signatures on macOS, from async Rust.
+Sign, re-sign, strip, verify and inspect code signatures on macOS, from async or blocking Rust.
 
 `signers` runs Apple's `codesign` tool through a typed builder. Each action offers only the options
-`codesign` honours for it, and nothing runs until you `.await` it. The target decides the result: one
-path gives one value, a `Vec` or slice gives a `Vec`, an array gives an array.
+`codesign` honours for it, and nothing runs until you `.await` it, or call `.run()` in the blocking
+API. The target decides the result: one path gives one value, a `Vec` or slice gives a `Vec`, an array
+gives an array.
 
 ```rust
 use signers::Codesign;
@@ -68,14 +69,43 @@ match Codesign::verify(vec!["a.app", "b.app"]).per_target(true).await {
 
 Reading actions default to per target. `sign` and `remove_signature` default to one run for all targets.
 
+## Blocking API
+
+With the `blocking` feature, `signers::blocking::Codesign` has the same actions and options, makes the
+same checks, returns the same errors and result shapes, and `.run()` takes the place of `.await`:
+
+```rust
+use signers::blocking::Codesign;
+
+Codesign::sign_adhoc("patched.dylib").force(true).run()?;
+let [ls, cat] = Codesign::display(["/bin/ls", "/bin/cat"]).run()?;
+```
+
+Each `.run()` builds a single-threaded Tokio runtime for the call and drops it before returning, so the
+caller needs none, and `per_target` still runs concurrently. Calling `.run()` inside a Tokio runtime
+panics: async code uses `signers::Codesign`.
+
 ## Requirements
 
 - macOS, which ships `codesign`.
-- A Tokio runtime with I/O enabled, such as `#[tokio::main]`.
+- For the async API, a Tokio runtime with I/O enabled, such as `#[tokio::main]`.
 
 ## Installation
 
-Not published on crates.io yet.
+Not published on crates.io yet. Until then, depend on the Git repository. The async API is the
+default `async` feature:
+
+```toml
+[dependencies]
+signers = { git = "https://github.com/Fly-elf/signers" }
+```
+
+The `blocking` feature adds the blocking API, alongside the async one, and Tokio's `rt`:
+
+```toml
+[dependencies]
+signers = { git = "https://github.com/Fly-elf/signers", features = ["blocking"] }
+```
 
 ## Status
 
@@ -83,7 +113,7 @@ Early development: the API may still change.
 
 - [x] `codesign` backend, async: `sign`, `remove_signature`, `verify`, `display`,
       `internal_requirements`, `extract_certificates`, `validate_constraint`
-- [ ] Blocking API
+- [x] `codesign` backend, blocking: the same actions, behind the `blocking` feature
 - [ ] `rcodesign` backend: native, through the [`apple-codesign`](https://crates.io/crates/apple-codesign)
       crate, on any OS
 - [ ] Python bindings

@@ -12,14 +12,24 @@ categories = ["os::macos-apis", "development-tools"]
 [dependencies]
 base64 = "0.23"
 bitflags = "2.13"
-futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
+futures-util = { version = "0.3", default-features = false, features = ["alloc"], optional = true }
 plist = "1.10"
 tempfile = "3.27"
 thiserror = "2.0"
-tokio = { version = "1.53", features = ["process", "fs"] }
+tokio = { version = "1.53", features = ["process", "fs"], optional = true }
 tracing = { version = "0.1", features = ["release_max_level_info"] }
 
+[features]
+default = ["async"]
+async = ["dep:tokio", "dep:futures-util"]
+blocking = ["async", "tokio/rt"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [dev-dependencies]
+signers = { path = ".", features = ["blocking"] }
 tokio = { version = "1.53", features = ["macros", "rt-multi-thread"] }
 
 # Opt-in test groups: tests needing an environment `cargo test` cannot assume

@@ -103,7 +103,7 @@ impl<const N: usize> sealed::Shape for Array<N> {
 
 /// The shapes of a collection of targets, [`Many`] and [`Array`], whatever its length.
 ///
-/// Bounds [`per_target`](crate::Codesign::per_target), which has nothing to split on a single
+/// Bounds [`per_target`](crate::Codesign#method.per_target), which has nothing to split on a single
 /// target.
 pub trait Multi: Shape {}
 
@@ -115,10 +115,10 @@ impl<const N: usize> Multi for Array<N> {}
 /// Every action constructor takes one. The implementors below are the path types it accepts,
 /// on their own or in a `Vec`, slice or array.
 ///
-/// The target type also fixes what `.await` returns, one output per target in input order: the
-/// output itself for a single path, a `Vec` for a `Vec` or slice, an array of `N` for an array
-/// of `N`. Only a `Vec`, slice or array has [`per_target`](crate::Codesign::per_target), even
-/// with one element.
+/// The target type also fixes what `.await`, or the blocking `.run()`, returns, one output per
+/// target in input order: the output itself for a single path, a `Vec` for a `Vec` or slice, an
+/// array of `N` for an array of `N`. Only a `Vec`, slice or array has
+/// [`per_target`](crate::Codesign#method.per_target), even with one element.
 ///
 /// Every path is kept: order and duplicates too, and each path reaches `codesign` byte for byte,
 /// non-UTF-8 included. A path starting with `-` is never read as an option. `.await` refuses an

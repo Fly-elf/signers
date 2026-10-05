@@ -2,14 +2,15 @@ use crate::errors::{CodesignError, Result};
 
 /// A code requirement of a signature: what it is for, and the expression to satisfy.
 ///
-/// [`internal_requirements`](crate::Codesign::internal_requirements) returns them.
+/// [`internal_requirements`](crate::Codesign#method.internal_requirements) returns them.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Requirement {
     /// What the requirement is for.
     pub kind: RequirementKind,
     /// The requirement as source text, e.g. `identifier "com.apple.ls" and anchor apple`. It isn't
-    /// parsed: pass it to [`test_requirement`](crate::Codesign::test_requirement), for instance.
+    /// parsed: pass it to [`test_requirement`](crate::Codesign#method.test_requirement), for
+    /// instance.
     pub expression: String,
     /// `true` when the signature doesn't embed this requirement and `codesign` shows the system's
     /// default instead, such as the designated requirement of an ad hoc signature, which names the
@@ -36,6 +37,10 @@ pub enum RequirementKind {
 }
 
 impl Requirement {
+    /// Parses one line of `--display -r-`: `kind => expression`, prefixed with `# ` when implicit.
+    ///
+    /// A line without ` => ` fails with [`CodesignError::UnexpectedOutput`]. An unknown kind
+    /// becomes [`RequirementKind::Other`].
     pub(crate) fn parse(line: &str) -> Result<Self> {
         let (line, implicit) = match line.strip_prefix("# ") {
             Some(rest) => (rest, true),

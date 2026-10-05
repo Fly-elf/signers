@@ -3,7 +3,7 @@ use bitflags::bitflags;
 /// Which of the two signatures of a code object to use (`--signature-slot`).
 ///
 /// Without it, `codesign` uses the slot the system prefers. The second slot exists only if the
-/// code carries two signatures. Pass it to [`verify`](crate::Codesign::verify).
+/// code carries two signatures. Pass it to [`verify`](crate::Codesign#method.verify).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SignatureSlot {
     /// The first signature (`1`).
@@ -21,7 +21,7 @@ impl SignatureSlot {
     }
 }
 
-/// Where [`timestamp`](crate::Codesign::timestamp) gets a secure timestamp from, if anywhere.
+/// Where [`timestamp`](crate::Codesign#method.timestamp) gets a secure timestamp from, if anywhere.
 ///
 /// Leaving the option unset isn't the same as [`Disabled`](Timestamp::Disabled): unset lets
 /// `codesign` decide.
@@ -57,7 +57,8 @@ pub enum Timestamp {
 }
 
 bitflags! {
-    /// Code signing flags that [`options`](Codesign::options) seals into the signature.
+    /// Code signing flags that [`options`](crate::Codesign#method.options) seals into the
+    /// signature.
     ///
     /// Combine them with `|`. The bits are the ones `codesign -dv` prints as `flags=0x…`.
     ///
@@ -102,8 +103,8 @@ bitflags! {
 }
 
 bitflags! {
-    /// Parts of the old signature that [`preserve_metadata`](Codesign::preserve_metadata)
-    /// carries over.
+    /// Parts of the old signature that
+    /// [`preserve_metadata`](crate::Codesign#method.preserve_metadata) carries over.
     ///
     /// Combine them with `|`.
     ///
@@ -144,7 +145,8 @@ bitflags! {
         #[bitflags(flag_name = "launch-constraints")]
         const LAUNCH_CONSTRAINTS = 1 << 5;
         /// The library constraint, unless
-        /// [`library_constraint`](Codesign::library_constraint) is set (`library-constraints`).
+        /// [`library_constraint`](crate::Codesign#method.library_constraint) is set
+        /// (`library-constraints`).
         #[bitflags(flag_name = "library-constraints")]
         const LIBRARY_CONSTRAINTS = 1 << 6;
     }
