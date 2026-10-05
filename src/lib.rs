@@ -30,10 +30,16 @@
 //!   or array yields one per target, in a `Vec` or an array.
 //! - [`Error`]: what can fail.
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
+#[cfg(not(feature = "async"))]
+compile_error!("signers needs the `async` or the `blocking` feature");
+
 pub mod codesign;
 pub mod errors;
 mod target;
 
+#[cfg(feature = "async")]
 pub use codesign::Codesign;
 pub use errors::{CodesignError, Error, Result};
 pub use target::IntoTargets;
