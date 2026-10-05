@@ -19,6 +19,7 @@ pub use actions::{
 };
 #[cfg(feature = "async")]
 pub use asynchronous::Codesign;
+pub use runner::Runner;
 pub use types::{
     Authority, CdHash, Certificate, CmsDigest, CodeDirectory, CodeHashes, Constraints,
     ExecutableSegment, Format, HashType, InfoPlist, Location, OsVersion, Platform,
