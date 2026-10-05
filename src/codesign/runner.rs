@@ -11,6 +11,11 @@ use crate::target::{self, IntoTargets, Multi, One};
 
 pub trait Runtime {}
 
+/// The builder behind [`Codesign`](crate::Codesign) and `blocking::Codesign`; name those instead.
+///
+/// Both are this type with a different `R`, which only decides how a run starts: `.await` or
+/// `.run()`. Their pages list the constructors and setters shown below, with the same
+/// documentation, and the method that runs them.
 #[derive(Debug, Clone)]
 pub struct Runner<A, S, R> {
     pub(super) targets: Vec<PathBuf>,
@@ -47,8 +52,9 @@ pub(super) fn new<A: Action, T: IntoTargets, R: Runtime>(
 impl<R: Runtime> Runner<(), One, R> {
     /// Signs `target` with the identity that `identity` names (`--sign`).
     ///
-    /// `identity` is `-` for an ad hoc signature (see [`sign_adhoc`](Codesign::sign_adhoc)).
-    /// Otherwise it selects a certificate, with its private key, from the keychain search list:
+    /// `identity` is `-` for an ad hoc signature (see
+    /// [`sign_adhoc`](crate::Codesign#method.sign_adhoc)). Otherwise it selects a certificate, with
+    /// its private key, from the keychain search list:
     ///
     /// - the name of an identity preference;
     /// - part of the certificate's common name, matching only one certificate (an exact match
@@ -56,7 +62,8 @@ impl<R: Runtime> Runner<(), One, R> {
     /// - the certificate's SHA-1 hash, as 40 hex digits.
     ///
     /// Signing an already signed target fails with "is already signed" unless you set
-    /// [`force`](Codesign::force). A signature added by the linker doesn't need `force`.
+    /// [`force`](crate::Codesign#method.force). A signature added by the linker doesn't need
+    /// `force`.
     ///
     /// # Examples
     ///
@@ -98,9 +105,9 @@ impl<R: Runtime> Runner<(), One, R> {
     /// Signs `target` for notarization: hardened runtime and timestamp
     /// (`--options runtime --timestamp`).
     ///
-    /// This is [`sign`](Codesign::sign) with `.options(SigningFlags::RUNTIME)` and
+    /// This is [`sign`](crate::Codesign#method.sign) with `.options(SigningFlags::RUNTIME)` and
     /// `.timestamp(Timestamp::Enabled)` already set. Later setters override both.
-    /// [`options`](Codesign::options) replaces the whole set, so keep `RUNTIME` in it.
+    /// [`options`](crate::Codesign#method.options) replaces the whole set, so keep `RUNTIME` in it.
     ///
     /// `.await` fetches the timestamp from Apple's server, so without network access the signing
     /// fails.
@@ -131,8 +138,9 @@ impl<R: Runtime> Runner<(), One, R> {
     /// leaves nested code signed and an empty `_CodeSignature` directory behind. It accepts
     /// unsigned targets, and files that aren't code, without changing them.
     ///
-    /// You don't need to remove a signature before re-signing: [`sign`](Codesign::sign) with
-    /// [`force`](Codesign::force) replaces it in one step.
+    /// You don't need to remove a signature before re-signing:
+    /// [`sign`](crate::Codesign#method.sign) with [`force`](crate::Codesign#method.force) replaces
+    /// it in one step.
     ///
     /// # Examples
     ///
@@ -153,17 +161,19 @@ impl<R: Runtime> Runner<(), One, R> {
     /// the signature is intact and covers the code. Whether the system would run the code is a
     /// different question: verified code can still be refused by Gatekeeper.
     ///
-    /// Given several targets, each is verified on its own by default, so one `.await` reports
-    /// every target that failed, as [`Error::Batch`]. [`per_target(false)`](Codesign::per_target)
-    /// runs one `codesign` instead, which stops at the first target it rejects.
+    /// Given several targets, each is verified on its own by default, so one `.await` reports every
+    /// target that failed, as [`Error::Batch`](crate::Error::Batch).
+    /// [`per_target(false)`](crate::Codesign#method.per_target) runs one `codesign` instead, which
+    /// stops at the first target it rejects.
     ///
     /// # Errors
     ///
-    /// A target that doesn't verify fails with [`CodesignError::VerificationFailed`]: the
+    /// A target that doesn't verify fails with
+    /// [`CodesignError::VerificationFailed`](crate::CodesignError::VerificationFailed): the
     /// signature is invalid or modified, the target is unsigned, or the requirement text doesn't
     /// compile. A valid signature that doesn't meet a requirement fails with
-    /// [`CodesignError::RequirementUnsatisfied`]. The checks made before `codesign` starts are
-    /// on [`Codesign`].
+    /// [`CodesignError::RequirementUnsatisfied`](crate::CodesignError::RequirementUnsatisfied). The
+    /// checks made before `codesign` starts are on [`Codesign`](crate::Codesign#errors).
     ///
     /// # Examples
     ///
@@ -194,28 +204,31 @@ impl<R: Runtime> Runner<(), One, R> {
         new(target, Verify::default())
     }
 
-    /// Reads the signature of `target` as a [`Signature`] (`--display`),
-    /// changing nothing.
+    /// Reads the signature of `target` as a [`Signature`](crate::codesign::Signature)
+    /// (`--display`), changing nothing.
     ///
-    /// `.await` yields one [`Signature`] per target: identifier, signing
-    /// flags, hashes, the certificate chain, entitlements and more.
-    /// [`Signature::raw`](Signature::raw) and
-    /// [`Signature::field`](Signature::field) reach whatever the typed fields don't.
+    /// `.await` yields one [`Signature`](crate::codesign::Signature) per target: identifier,
+    /// signing flags, hashes, the certificate chain, entitlements and more.
+    /// [`Signature::raw`](crate::codesign::Signature::raw) and
+    /// [`Signature::field`](crate::codesign::Signature::field) reach whatever the typed fields
+    /// don't.
     ///
     /// Given several targets, each is read on its own by default, so one `.await` reports every
-    /// target that failed, as [`Error::Batch`]. The signatures of the targets that did read are
-    /// dropped with it. [`per_target(false)`](Codesign::per_target) runs one `codesign` instead:
-    /// it stops at the first target it rejects, and the entitlements of every target stay
-    /// [`None`](Signature#structfield.entitlements).
+    /// target that failed, as [`Error::Batch`](crate::Error::Batch). The signatures of the targets
+    /// that did read are dropped with it. [`per_target(false)`](crate::Codesign#method.per_target)
+    /// runs one `codesign` instead: it stops at the first target it rejects, and the entitlements
+    /// of every target stay [`None`](crate::codesign::Signature#structfield.entitlements).
     ///
     /// # Errors
     ///
-    /// An unsigned target fails with [`CodesignError::Failed`], exit code 1. With one `codesign`
-    /// over several targets, its `stderr` also holds the reports of the targets before the unsigned
-    /// one. A [`signature_slot`](Codesign::signature_slot) the code has no signature in fails with
-    /// [`CodesignError::NoSignature`]. A report or entitlements that can't be read fails with
-    /// [`CodesignError::UnexpectedOutput`]. The checks made before `codesign` starts are on
-    /// [`Codesign`].
+    /// An unsigned target fails with [`CodesignError::Failed`](crate::CodesignError::Failed), exit
+    /// code 1. With one `codesign` over several targets, its `stderr` also holds the reports of the
+    /// targets before the unsigned one. A [`signature_slot`](crate::Codesign#method.signature_slot)
+    /// the code has no signature in fails with
+    /// [`CodesignError::NoSignature`](crate::CodesignError::NoSignature). A report or entitlements
+    /// that can't be read fails with
+    /// [`CodesignError::UnexpectedOutput`](crate::CodesignError::UnexpectedOutput). The checks made
+    /// before `codesign` starts are on [`Codesign`](crate::Codesign#errors).
     ///
     /// # Examples
     ///
@@ -266,20 +279,23 @@ impl<R: Runtime> Runner<(), One, R> {
     ///
     /// A constraint plist holds the bare constraint dictionary, such as
     /// `{ "team-identifier": "A1B2C3D4E5" }`. It is not the `ccat`/`comp`/`reqs` wrapper that
-    /// [`display`](Codesign::display) reports, which is rejected. `.await` yields `()` per plist.
+    /// [`display`](crate::Codesign#method.display) reports, which is rejected. `.await` yields `()`
+    /// per plist.
     ///
     /// Given several plists, each is checked on its own by default, so one `.await` reports every
-    /// plist that failed, as [`Error::Batch`]. [`per_target(false)`](Codesign::per_target) runs one
-    /// `codesign` instead. Then the first plist `codesign` can't read stops the run, and the
-    /// plists after it go unchecked. The rejections of the plists before it can't be told apart:
-    /// the whole run fails with one [`CodesignError::ConstraintInvalid`].
+    /// plist that failed, as [`Error::Batch`](crate::Error::Batch).
+    /// [`per_target(false)`](crate::Codesign#method.per_target) runs one `codesign` instead. Then
+    /// the first plist `codesign` can't read stops the run, and the plists after it go unchecked.
+    /// The rejections of the plists before it can't be told apart: the whole run fails with one
+    /// [`CodesignError::ConstraintInvalid`](crate::CodesignError::ConstraintInvalid).
     ///
     /// # Errors
     ///
     /// A constraint with an unknown key or an empty one fails with
-    /// [`CodesignError::ConstraintInvalid`]. A plist that is missing, or isn't a dictionary,
-    /// fails with [`CodesignError::Failed`], exit code 1. The checks made before `codesign`
-    /// starts are on [`Codesign`].
+    /// [`CodesignError::ConstraintInvalid`](crate::CodesignError::ConstraintInvalid). A plist that
+    /// is missing, or isn't a dictionary, fails with
+    /// [`CodesignError::Failed`](crate::CodesignError::Failed), exit code 1. The checks made before
+    /// `codesign` starts are on [`Codesign`](crate::Codesign#errors).
     ///
     /// # Examples
     ///
@@ -316,14 +332,14 @@ impl<R: Runtime> Runner<(), One, R> {
 
     /// Reads the certificate chain that signed `target`, leaf first (`--extract-certificates`).
     ///
-    /// `.await` yields one `Vec` of [`Certificate`] per target,
-    /// the signing certificate first and the root last. A target signed ad hoc has none, so its
-    /// `Vec` is empty. [`save_to`](Codesign::save_to) also writes the chains to PEM files.
+    /// `.await` yields one `Vec` of [`Certificate`](crate::codesign::Certificate) per target, the
+    /// signing certificate first and the root last. A target signed ad hoc has none, so its `Vec`
+    /// is empty. [`save_to`](crate::Codesign#method.save_to) also writes the chains to PEM files.
     ///
     /// Given several targets, each is read on its own, concurrently, and every one that failed is
-    /// reported together as [`Error::Batch`]. One `codesign` over several targets would write
-    /// every chain to the same files, so this action always runs one per target and has no
-    /// [`per_target`](Codesign::per_target) setter:
+    /// reported together as [`Error::Batch`](crate::Error::Batch). One `codesign` over several
+    /// targets would write every chain to the same files, so this action always runs one per target
+    /// and has no [`per_target`](crate::Codesign#method.per_target) setter:
     ///
     /// ```compile_fail,E0599
     /// signers::Codesign::extract_certificates(vec!["a"]).per_target(false);
@@ -331,9 +347,10 @@ impl<R: Runtime> Runner<(), One, R> {
     ///
     /// # Errors
     ///
-    /// An unsigned target fails with [`CodesignError::Failed`], exit code 1. A file that can't be
-    /// read or written fails with [`Error::Io`], also when the system's temporary directory can't
-    /// be used. The checks made before `codesign` starts are on [`Codesign`].
+    /// An unsigned target fails with [`CodesignError::Failed`](crate::CodesignError::Failed), exit
+    /// code 1. A file that can't be read or written fails with [`Error::Io`](crate::Error::Io),
+    /// also when the system's temporary directory can't be used. The checks made before `codesign`
+    /// starts are on [`Codesign`](crate::Codesign#errors).
     ///
     /// # Examples
     ///
@@ -355,17 +372,20 @@ impl<R: Runtime> Runner<(), One, R> {
 
     /// Reads the requirements of the signature of `target` (`--display -r-`).
     ///
-    /// `.await` yields one `Vec` of [`Requirement`] per target, in the order `codesign` keeps the requirements, which
-    /// is not the order given to [`requirements`](Codesign::requirements) when signing. A
-    /// requirement the signature doesn't embed, but the system supplies, is marked
-    /// [`implicit`](Requirement#structfield.implicit). The `Vec` is empty when
-    /// `codesign` prints none. [`display`](Codesign::display) reports only how many
-    /// requirements there are, in [`Signature::internal_requirements`](Signature#structfield.internal_requirements).
+    /// `.await` yields one `Vec` of [`Requirement`](crate::codesign::Requirement) per target, in
+    /// the order `codesign` keeps the requirements, which is not the order given to
+    /// [`requirements`](crate::Codesign#method.requirements) when signing. A requirement the
+    /// signature doesn't embed, but the system supplies, is marked
+    /// [`implicit`](crate::codesign::Requirement#structfield.implicit). The `Vec` is empty when
+    /// `codesign` prints none. [`display`](crate::Codesign#method.display) reports only how many
+    /// requirements there are, in
+    /// [`Signature::internal_requirements`](crate::codesign::Signature#structfield.internal_requirements).
     ///
     /// Given several targets, each is read on its own, concurrently, and every one that failed is
-    /// reported together as [`Error::Batch`]. `codesign` prints the requirements of all targets
-    /// together, with nothing to tell which target a line belongs to, so this action always runs one
-    /// per target and has no [`per_target`](Codesign::per_target) setter:
+    /// reported together as [`Error::Batch`](crate::Error::Batch). `codesign` prints the
+    /// requirements of all targets together, with nothing to tell which target a line belongs to,
+    /// so this action always runs one per target and has no
+    /// [`per_target`](crate::Codesign#method.per_target) setter:
     ///
     /// ```compile_fail,E0599
     /// signers::Codesign::internal_requirements(vec!["a"]).per_target(false);
@@ -373,9 +393,10 @@ impl<R: Runtime> Runner<(), One, R> {
     ///
     /// # Errors
     ///
-    /// An unsigned target fails with [`CodesignError::Failed`], exit code 1. A line that can't be
-    /// read as a requirement fails with [`CodesignError::UnexpectedOutput`]. The checks made before
-    /// `codesign` starts are on [`Codesign`].
+    /// An unsigned target fails with [`CodesignError::Failed`](crate::CodesignError::Failed), exit
+    /// code 1. A line that can't be read as a requirement fails with
+    /// [`CodesignError::UnexpectedOutput`](crate::CodesignError::UnexpectedOutput). The checks made
+    /// before `codesign` starts are on [`Codesign`](crate::Codesign#errors).
     ///
     /// # Examples
     ///
@@ -400,12 +421,13 @@ impl<A: Action + SharedRun, S: Multi, R: Runtime> Runner<A, S, R> {
     /// Runs one `codesign` per target, concurrently, instead of one for all of them.
     ///
     /// One process stops at the first target it rejects and reports that one only. Per target,
-    /// every target runs, and the failures come together as [`Error::Batch`], in input order. At
-    /// most [`available_parallelism`](std::thread::available_parallelism) processes run at a
-    /// time. The default is `false` for [`sign`](Codesign::sign) and
-    /// [`remove_signature`](Codesign::remove_signature), which change the targets in order, and
-    /// `true` for [`verify`](Codesign::verify), [`display`](Codesign::display) and
-    /// [`validate_constraint`](Codesign::validate_constraint), which only read them.
+    /// every target runs, and the failures come together as [`Error::Batch`](crate::Error::Batch),
+    /// in input order. At most [`available_parallelism`](std::thread::available_parallelism)
+    /// processes run at a time. The default is `false` for [`sign`](crate::Codesign#method.sign)
+    /// and [`remove_signature`](crate::Codesign#method.remove_signature), which change the targets
+    /// in order, and `true` for [`verify`](crate::Codesign#method.verify),
+    /// [`display`](crate::Codesign#method.display) and
+    /// [`validate_constraint`](crate::Codesign#method.validate_constraint), which only read them.
     ///
     /// Only a `Vec`, slice or array of targets has this setter, even with one element: that is
     /// the `S: Multi` bound. A single target always runs one `codesign`:
@@ -414,13 +436,13 @@ impl<A: Action + SharedRun, S: Multi, R: Runtime> Runner<A, S, R> {
     /// signers::Codesign::sign("a", "-").per_target(true);
     /// ```
     ///
-    /// [`extract_certificates`](Codesign::extract_certificates) and
-    /// [`internal_requirements`](Codesign::internal_requirements) have no such setter either: they
-    /// always run one `codesign` per target.
+    /// [`extract_certificates`](crate::Codesign#method.extract_certificates) and
+    /// [`internal_requirements`](crate::Codesign#method.internal_requirements) have no such setter
+    /// either: they always run one `codesign` per target.
     ///
-    /// An option that writes one shared file, [`file_list`](Codesign::file_list) or
-    /// [`detached`](Codesign::detached), makes `.await` fail with
-    /// [`Error::SharedOutputPerTarget`].
+    /// An option that writes one shared file, [`file_list`](crate::Codesign#method.file_list) or
+    /// [`detached`](crate::Codesign#method.detached), makes `.await` fail with
+    /// [`Error::SharedOutputPerTarget`](crate::Error::SharedOutputPerTarget).
     ///
     /// <div class="warning">
     ///

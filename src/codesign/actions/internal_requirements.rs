@@ -9,9 +9,10 @@ use crate::errors::Result;
 
 /// The action that reads requirements: the `A` in `Codesign<InternalRequirements>`.
 ///
-/// [`internal_requirements`](crate::Codesign::internal_requirements) creates it. It has no options. `.await` yields the
-/// requirements of each target as a `Vec` of [`Requirement`], in the order `codesign` keeps them,
-/// which is not the order given to [`requirements`](crate::Codesign::requirements) when signing.
+/// [`internal_requirements`](crate::Codesign#method.internal_requirements) creates it. It has no
+/// options. `.await` yields the requirements of each target as a `Vec` of [`Requirement`], in the
+/// order `codesign` keeps them, which is not the order given to
+/// [`requirements`](crate::Codesign#method.requirements) when signing.
 ///
 /// # Examples
 ///

@@ -19,9 +19,9 @@ use crate::target::Shape;
 
 /// Options of the certificate-extraction action: the `A` in `Codesign<ExtractCertificates>`.
 ///
-/// [`Codesign::extract_certificates`] creates it. Its one option, [`save_to`](Codesign::save_to),
-/// also writes each chain to a PEM file. `.await` yields the chain of each target as a `Vec` of [`Certificate`],
-/// leaf first.
+/// [`Codesign::extract_certificates`](crate::Codesign#method.extract_certificates) creates it. Its
+/// one option, [`save_to`](crate::Codesign#method.save_to), also writes each chain to a PEM file.
+/// `.await` yields the chain of each target as a `Vec` of [`Certificate`], leaf first.
 ///
 /// # Examples
 ///
@@ -81,7 +81,7 @@ impl ExtractCertificates {
     }
 }
 
-/// Options for [`extract_certificates`](Codesign::extract_certificates).
+/// Options for [`extract_certificates`](crate::Codesign#method.extract_certificates).
 impl<S: Shape, R: Runtime> Runner<ExtractCertificates, S, R> {
     /// Also writes each target's chain as a PEM file in `dir`.
     ///

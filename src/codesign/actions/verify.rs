@@ -11,9 +11,9 @@ use crate::target::Shape;
 
 /// Options of the verification action: the `A` in `Codesign<Verify>`.
 ///
-/// [`Codesign::verify`] creates it. You set its options with
-/// [the verification setters](Codesign#impl-Codesign%3CVerify,+S%3E). An option you never set keeps
-/// `codesign`'s default.
+/// [`Codesign::verify`](crate::Codesign#method.verify) creates it. You set its options with [the
+/// verification setters](crate::Codesign#impl-Runner%3CVerify,+S,+R%3E). An option you never set
+/// keeps `codesign`'s default.
 ///
 /// # Examples
 ///
@@ -67,7 +67,7 @@ enum TestRequirement {
     File(PathBuf),
 }
 
-/// Options for [`verify`](Codesign::verify).
+/// Options for [`verify`](crate::Codesign#method.verify).
 ///
 /// Each setter maps to one `codesign` flag. A later call replaces an earlier one, and `false`
 /// leaves a flag out.
@@ -160,9 +160,9 @@ impl<S: Shape, R: Runtime> Runner<Verify, S, R> {
 
     /// Requires the code to satisfy the requirement written in this file (`-R <path>`).
     ///
-    /// Failures are the same as for [`test_requirement`](Codesign::test_requirement). It replaces
-    /// any earlier requirement, text or file. A path of `-` would read standard input, so it makes
-    /// `.await` fail with [`Error::StdioPath`] before anything runs.
+    /// Failures are the same as for [`test_requirement`](crate::Codesign#method.test_requirement).
+    /// It replaces any earlier requirement, text or file. A path of `-` would read standard input,
+    /// so it makes `.await` fail with [`Error::StdioPath`] before anything runs.
     pub fn test_requirement_file(mut self, path: impl Into<PathBuf>) -> Self {
         self.action.test_requirement = Some(TestRequirement::File(path.into()));
         self

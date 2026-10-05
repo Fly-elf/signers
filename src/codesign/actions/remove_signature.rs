@@ -9,9 +9,9 @@ use crate::target::Shape;
 
 /// Options of the signature-removal action: the `A` in `Codesign<RemoveSignature>`.
 ///
-/// [`Codesign::remove_signature`] creates it. Its only option is
-/// [`bundle_version`](Codesign#impl-Codesign%3CRemoveSignature,+S%3E). With this operation,
-/// `codesign` ignores `--deep` and `--architecture`, still removes the signature under
+/// [`Codesign::remove_signature`](crate::Codesign#method.remove_signature) creates it. Its only
+/// option is [`bundle_version`](crate::Codesign#impl-Runner%3CRemoveSignature,+S,+R%3E). With this
+/// operation, `codesign` ignores `--deep` and `--architecture`, still removes the signature under
 /// `--dryrun`, and crashes on `--file-list`. So those options aren't offered.
 ///
 /// # Examples
@@ -32,7 +32,7 @@ pub struct RemoveSignature {
     bundle_version: Option<String>,
 }
 
-/// Options for [`remove_signature`](Codesign::remove_signature).
+/// Options for [`remove_signature`](crate::Codesign#method.remove_signature).
 impl<S: Shape, R: Runtime> Runner<RemoveSignature, S, R> {
     /// Removes the signature from this version of a versioned bundle only (`--bundle-version`).
     ///
