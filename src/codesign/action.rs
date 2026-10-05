@@ -14,7 +14,7 @@ use bitflags::Flags;
 ///
 /// Use it as a bound to accept a single-target `Codesign<A>` of any action. `A::Output` is what
 /// one target yields on success, `()` for the actions with nothing to return, and a
-/// [`Signature`](crate::codesign::Signature) for [`display`](crate::Codesign::display);
+/// [`Signature`](crate::codesign::Signature) for [`display`](crate::Codesign#method.display);
 /// `.await` returns it shaped like the targets (see [`IntoTargets`](crate::IntoTargets)). It's
 /// sealed, so only this crate defines actions.
 pub trait Action: sealed::ToArgs {}
@@ -35,7 +35,7 @@ pub(crate) mod sealed {
     ///
     /// `Sync` because per-target runs share one action concurrently.
     pub trait ToArgs: Sync {
-        /// What `.await` yields for each target when `codesign` succeeds.
+        /// What a run yields for each target when `codesign` succeeds.
         ///
         /// It depends on the action type only, never on the option values.
         type Output: Send + 'static;
@@ -93,7 +93,8 @@ pub(crate) mod sealed {
             .into()
         }
 
-        /// Decodes both streams with [`decode`](super::decode), then calls [`output`](Self::output).
+        /// Decodes both streams with [`decode`](super::decode), then calls
+        /// [`output`](Self::output).
         ///
         /// The runner calls this, never `output`; actions don't override it.
         fn output_bytes(
