@@ -1,7 +1,16 @@
 //! Backend that runs Apple's `codesign` tool, so it works on macOS only.
 //!
 //! `codesign` ships with macOS in `/usr/bin` and is looked up on `PATH` each time an action runs.
-//! Start at [`Codesign`].
+//! Start at [`Codesign`], or at [`blocking::Codesign`] for the blocking API.
+//!
+#![cfg_attr(
+    feature = "blocking",
+    doc = "[`blocking::Codesign`]: blocking::Codesign"
+)]
+#![cfg_attr(
+    not(feature = "blocking"),
+    doc = "[`blocking::Codesign`]: https://docs.rs/signers/latest/signers/codesign/blocking/type.Codesign.html"
+)]
 
 mod action;
 mod actions;

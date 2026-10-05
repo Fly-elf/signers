@@ -6,10 +6,11 @@ use crate::codesign::action::PushArgs;
 use crate::codesign::action::sealed::{SharedRun, ToArgs};
 use crate::errors::CodesignError;
 
-/// The action of [`Codesign::validate_constraint`](crate::Codesign::validate_constraint): the `A` in `Codesign<ValidateConstraint>`.
+/// The action of [`Codesign::validate_constraint`](crate::Codesign#method.validate_constraint): the
+/// `A` in `Codesign<ValidateConstraint>`.
 ///
-/// It has no options, so there are no setters to chain; [`per_target`](crate::Codesign::per_target) is the only one,
-/// for several plists.
+/// It has no options, so there are no setters to chain;
+/// [`per_target`](crate::Codesign#method.per_target) is the only one, for several plists.
 ///
 /// # Examples
 ///

@@ -56,9 +56,10 @@ pub enum Error {
 
     /// A file or directory couldn't be read, created or written.
     ///
-    /// `path` is the one involved. [`extract_certificates`](crate::Codesign::extract_certificates)
-    /// raises it, for the system's temporary directory, for the files it reads back and for the
-    /// ones [`save_to`](crate::Codesign::save_to) writes. It never changes a target. Raised while
+    /// `path` is the one involved.
+    /// [`extract_certificates`](crate::Codesign#method.extract_certificates) raises it, for the
+    /// system's temporary directory, for the files it reads back and for the ones
+    /// [`save_to`](crate::Codesign#method.save_to) writes. It never changes a target. Raised while
     /// a target is read, it is collected in [`Batch`](Error::Batch).
     #[error("I/O error on {path}: {source}")]
     Io {
@@ -76,19 +77,19 @@ pub enum Error {
     StdioPath(&'static str),
 
     /// An option that writes one shared file was combined with
-    /// [`per_target(true)`](crate::Codesign::per_target).
+    /// [`per_target(true)`](crate::Codesign#method.per_target).
     ///
     /// It holds the setter's name, `"file_list"` or `"detached"`. One process per target would
     /// make every process write that same file.
     #[error("{0} writes one shared file and can't be combined with per_target(true)")]
     SharedOutputPerTarget(&'static str),
 
-    /// These targets failed in a [`per_target(true)`](crate::Codesign::per_target) run, each with
-    /// its own error, in input order.
+    /// These targets failed in a [`per_target(true)`](crate::Codesign#method.per_target) run, each
+    /// with its own error, in input order.
     ///
     /// Every target ran, so the ones not listed succeeded; their outputs are dropped. One failing
     /// target is enough to get this variant rather than its plain error. See
-    /// [`per_target`](crate::Codesign::per_target) for an example.
+    /// [`per_target`](crate::Codesign#method.per_target) for an example.
     #[error("{} target(s) failed: {}", .0.len(), failures(.0))]
     Batch(Vec<(PathBuf, Error)>),
 
@@ -112,6 +113,8 @@ pub enum CodesignError {
     NotFound,
 
     /// `codesign` was found but couldn't start, e.g. because it isn't executable.
+    ///
+    /// The blocking `.run()` also returns it when it can't create its runtime.
     #[error("failed to spawn the `codesign` process: {0}")]
     Spawn(#[source] std::io::Error),
 
@@ -153,18 +156,18 @@ pub enum CodesignError {
     #[error("`codesign` produced output this crate can't read: {detail}")]
     UnexpectedOutput { detail: String },
 
-    /// [`verify`](crate::Codesign::verify) found the target's signature wanting.
+    /// [`verify`](crate::Codesign#method.verify) found the target's signature wanting.
     ///
     /// The signature is invalid or modified, the target is unsigned, or the requirement text of
-    /// [`test_requirement`](crate::Codesign::test_requirement) doesn't compile. `stderr` holds
-    /// the diagnostics `codesign` printed on standard error and `stdout` what it printed on standard
-    /// output, both trimmed. Only `stderr` is part of the message.
+    /// [`test_requirement`](crate::Codesign#method.test_requirement) doesn't compile. `stderr`
+    /// holds the diagnostics `codesign` printed on standard error and `stdout` what it printed on
+    /// standard output, both trimmed. Only `stderr` is part of the message.
     ///
     /// `resources` names the sealed resources that were altered, in the order `codesign` printed
     /// them, which can differ from run to run. It is filled only with
-    /// [`check_designated_requirement`](crate::Codesign::check_designated_requirement), and stays
-    /// empty when the damage is to nested code (see [`deep`](crate::Codesign::deep)) or when
-    /// nothing was altered. The message lists them after the diagnostics, as
+    /// [`check_designated_requirement`](crate::Codesign#method.check_designated_requirement), and
+    /// stays empty when the damage is to nested code (see [`deep`](crate::Codesign#method.deep)) or
+    /// when nothing was altered. The message lists them after the diagnostics, as
     /// `(modified: /path; added: /path)`.
     #[error("verification failed: {}{}", diagnostics(.stderr), changes(.resources))]
     VerificationFailed {
@@ -173,18 +176,18 @@ pub enum CodesignError {
         resources: Vec<ResourceChange>,
     },
 
-    /// [`verify`](crate::Codesign::verify) found a valid signature on code that doesn't meet the
-    /// requirement it was given.
+    /// [`verify`](crate::Codesign#method.verify) found a valid signature on code that doesn't meet
+    /// the requirement it was given.
     ///
     /// That requirement is the text of
-    /// [`test_requirement`](crate::Codesign::test_requirement) or, with
-    /// [`check_designated_requirement`](crate::Codesign::check_designated_requirement), the code's
-    /// own. `stderr` holds the diagnostics `codesign` printed on standard error and `stdout` what it
-    /// printed on standard output, both trimmed. Only `stderr` is part of the message.
+    /// [`test_requirement`](crate::Codesign#method.test_requirement) or, with
+    /// [`check_designated_requirement`](crate::Codesign#method.check_designated_requirement), the
+    /// code's own. `stderr` holds the diagnostics `codesign` printed on standard error and `stdout`
+    /// what it printed on standard output, both trimmed. Only `stderr` is part of the message.
     #[error("validly signed, but the requirement isn't satisfied: {}", diagnostics(.stderr))]
     RequirementUnsatisfied { stdout: String, stderr: String },
 
-    /// [`validate_constraint`](crate::Codesign::validate_constraint) found a constraint that
+    /// [`validate_constraint`](crate::Codesign#method.validate_constraint) found a constraint that
     /// isn't valid.
     ///
     /// The plist has an unknown key or is empty. `stderr` holds the diagnostics `codesign`
@@ -197,8 +200,8 @@ pub enum CodesignError {
     #[error("invalid constraint: {}", diagnostics(.stderr))]
     ConstraintInvalid { stdout: String, stderr: String },
 
-    /// [`display`](crate::Codesign::display) found no signature in the
-    /// [`signature_slot`](crate::Codesign::signature_slot) it was asked for.
+    /// [`display`](crate::Codesign#method.display) found no signature in the
+    /// [`signature_slot`](crate::Codesign#method.signature_slot) it was asked for.
     ///
     /// Code with one signature has nothing in the second slot. `codesign` exits 0 for it, and
     /// reports `no signature` in place of the signature, so this crate fails instead of returning
@@ -210,7 +213,7 @@ pub enum CodesignError {
     NoSignature { stdout: String, stderr: String },
 }
 
-/// A sealed resource that [`verify`](crate::Codesign::verify) found altered.
+/// A sealed resource that [`verify`](crate::Codesign#method.verify) found altered.
 ///
 /// It is found in [`CodesignError::VerificationFailed`].
 ///

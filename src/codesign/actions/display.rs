@@ -12,8 +12,8 @@ use crate::target::Shape;
 
 /// Options of the display action: the `A` in `Codesign<Display>`.
 ///
-/// [`Codesign::display`] creates it. You set its options with
-/// [the display setters](Codesign#impl-Codesign%3CDisplay,+S%3E). An option you never set keeps
+/// [`Codesign::display`](crate::Codesign#method.display) creates it. You set its options with [the
+/// display setters](crate::Codesign#impl-Runner%3CDisplay,+S,+R%3E). An option you never set keeps
 /// `codesign`'s default.
 ///
 /// # Examples
@@ -51,15 +51,16 @@ pub struct Display {
     signature_slot: Option<SignatureSlot>,
 }
 
-/// Options for [`display`](Codesign::display).
+/// Options for [`display`](crate::Codesign#method.display).
 ///
 /// Each setter maps to one `codesign` flag. A later call replaces an earlier one, and `false`
 /// leaves a flag out.
 impl<S: Shape, R: Runtime> Runner<Display, S, R> {
     /// Reads this slice of a universal binary, e.g. `arm64` or `x86_64` (`--architecture`).
     ///
-    /// Without it a universal binary is reported whole, as [`Format::MachOUniversal`](crate::codesign::Format::MachOUniversal). A slice the
-    /// binary doesn't have fails with [`CodesignError::Failed`].
+    /// Without it a universal binary is reported whole, as
+    /// [`Format::MachOUniversal`](crate::codesign::Format::MachOUniversal). A slice the binary
+    /// doesn't have fails with [`CodesignError::Failed`].
     pub fn architecture(mut self, arch: impl Into<String>) -> Self {
         self.action.architecture = Some(arch.into());
         self
