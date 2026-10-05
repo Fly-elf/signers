@@ -1,0 +1,2 @@
+[alias]
+docs = "doc --no-deps --all-features"
