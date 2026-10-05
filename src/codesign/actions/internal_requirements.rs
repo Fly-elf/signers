@@ -58,6 +58,10 @@ impl ToArgs for InternalRequirements {
         args
     }
 
+    /// Parses every stdout line but the blank ones and the constraint dump as a [`Requirement`].
+    ///
+    /// The action always runs per target, so the run yields one `Vec`, empty when `codesign`
+    /// prints no requirement.
     // Constraint dump lines are tab-indented `[Tag]` lines, but the stream is
     // trimmed, which takes the tab off the first one.
     fn output(
