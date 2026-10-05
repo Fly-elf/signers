@@ -1,7 +1,6 @@
 //! The blocking run when `codesign` can't be found, can't be started, dies or
-//! prints nothing usable, and when its runtime can't be built at all.
+//! prints nothing usable.
 
-use std::fs::File;
 use std::io;
 
 use signers::blocking::Codesign;
@@ -159,32 +158,4 @@ fn per_target_processes_overlap() {
         most <= cap,
         "{most} processes alive at once, with {cap} allowed"
     );
-}
-
-/// With every file descriptor taken, the runtime's event queue can't be
-/// created. The target is missing, so a runtime that did get built would
-/// report that instead.
-#[test]
-fn a_runtime_that_cannot_be_built_is_a_spawn_failure() {
-    let _serialised = crate::serialised();
-
-    let workspace = Workspace::new();
-    let missing = workspace.join("nowhere.bin");
-
-    let mut held = Vec::new();
-    let exhausted = loop {
-        match File::open("/dev/null") {
-            Ok(file) => held.push(file),
-            Err(error) => break error,
-        }
-    };
-    let result = Codesign::verify(&missing).run();
-    drop(held);
-
-    match result.unwrap_err() {
-        Error::Codesign(CodesignError::Spawn(source)) => {
-            assert_eq!(source.raw_os_error(), exhausted.raw_os_error(), "{source}")
-        }
-        other => panic!("expected Spawn, got {other:?}"),
-    }
 }

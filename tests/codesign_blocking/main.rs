@@ -7,7 +7,7 @@
 //! are tested once, in the async suite. Failures that need `PATH` pointed at a
 //! stand-in `codesign` live in `tests/codesign_process_state/`.
 
-#![cfg(all(target_os = "macos", feature = "blocking"))]
+#![cfg(target_os = "macos")]
 
 #[path = "../support/mod.rs"]
 mod support;
