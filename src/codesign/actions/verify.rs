@@ -2,18 +2,18 @@ use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 
-use crate::codesign::Codesign;
 use crate::codesign::action::PushArgs;
 use crate::codesign::action::sealed::{SharedRun, ToArgs};
+use crate::codesign::runner::{Runner, Runtime};
 use crate::codesign::{SignatureSlot, Strict};
 use crate::errors::{Change, CodesignError, Error, ResourceChange};
 use crate::target::Shape;
 
 /// Options of the verification action: the `A` in `Codesign<Verify>`.
 ///
-/// [`Codesign::verify`] creates it. You set its options with
-/// [the verification setters](Codesign#impl-Codesign%3CVerify,+S%3E). An option you never set keeps
-/// `codesign`'s default.
+/// [`Codesign::verify`](crate::Codesign#method.verify) creates it. You set its options with [the
+/// verification setters](crate::Codesign#impl-Runner%3CVerify,+S,+R%3E). An option you never set
+/// keeps `codesign`'s default.
 ///
 /// # Examples
 ///
@@ -67,11 +67,11 @@ enum TestRequirement {
     File(PathBuf),
 }
 
-/// Options for [`verify`](Codesign::verify).
+/// Options for [`verify`](crate::Codesign#method.verify).
 ///
 /// Each setter maps to one `codesign` flag. A later call replaces an earlier one, and `false`
 /// leaves a flag out.
-impl<S: Shape> Codesign<Verify, S> {
+impl<S: Shape, R: Runtime> Runner<Verify, S, R> {
     /// Also verifies nested code on its own, not only through the bundle's seal (`--deep`).
     ///
     /// Without it, nested code is checked only against the hash the bundle sealed, so a byte
@@ -160,9 +160,9 @@ impl<S: Shape> Codesign<Verify, S> {
 
     /// Requires the code to satisfy the requirement written in this file (`-R <path>`).
     ///
-    /// Failures are the same as for [`test_requirement`](Codesign::test_requirement). It replaces
-    /// any earlier requirement, text or file. A path of `-` would read standard input, so it makes
-    /// `.await` fail with [`Error::StdioPath`] before anything runs.
+    /// Failures are the same as for [`test_requirement`](crate::Codesign#method.test_requirement).
+    /// It replaces any earlier requirement, text or file. A path of `-` would read standard input,
+    /// so it makes `.await` fail with [`Error::StdioPath`] before anything runs.
     pub fn test_requirement_file(mut self, path: impl Into<PathBuf>) -> Self {
         self.action.test_requirement = Some(TestRequirement::File(path.into()));
         self
@@ -310,6 +310,7 @@ mod tests {
     use std::ffi::OsString;
 
     use super::*;
+    use crate::codesign::Codesign;
 
     fn os(strings: &[&str]) -> Vec<OsString> {
         strings.iter().map(OsString::from).collect()

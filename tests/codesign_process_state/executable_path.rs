@@ -568,7 +568,7 @@ fn a_codesign_that_cannot_be_executed_fails_a_per_target_batch_as_a_whole() {
 
 /// Plain files standing in for targets: all a stand-in `codesign` needs is for
 /// them to exist.
-fn plain_targets(workspace: &Workspace, names: &[&str]) -> Vec<PathBuf> {
+pub(crate) fn plain_targets(workspace: &Workspace, names: &[&str]) -> Vec<PathBuf> {
     names
         .iter()
         .map(|name| workspace.write(name, "irrelevant\n"))
@@ -608,7 +608,7 @@ fn recorded_calls(calls: &Path) -> Vec<Vec<String>> {
 /// ```ignore
 /// let bin = fake_codesign(&workspace, "exit 3");
 /// ```
-fn fake_codesign(workspace: &Workspace, script: &str) -> PathBuf {
+pub(crate) fn fake_codesign(workspace: &Workspace, script: &str) -> PathBuf {
     let bin = workspace.dir("bin");
     let codesign = workspace.write("bin/codesign", &format!("#!/bin/sh\n{script}\n"));
     fs::set_permissions(&codesign, fs::Permissions::from_mode(0o755))
@@ -621,7 +621,7 @@ fn fake_codesign(workspace: &Workspace, script: &str) -> PathBuf {
 /// The previous value comes back on drop, including while a panicking test
 /// unwinds, so a failure here cannot leak into whatever runs next.
 #[must_use = "PATH is restored as soon as this is dropped"]
-struct ScopedPath(Option<OsString>);
+pub(crate) struct ScopedPath(Option<OsString>);
 
 impl ScopedPath {
     /// Replaces `PATH` with `dir` alone.
@@ -629,7 +629,7 @@ impl ScopedPath {
     /// The caller must hold [`crate::serialised`]: mutating the environment is
     /// only sound while no other thread reads it, and every tokio runtime in
     /// this binary is built inside a test body, after this call.
-    fn to(dir: &Path) -> Self {
+    pub(crate) fn to(dir: &Path) -> Self {
         let previous = env::var_os("PATH");
         // SAFETY: single-threaded with respect to the environment, as above.
         unsafe { env::set_var("PATH", dir) };
