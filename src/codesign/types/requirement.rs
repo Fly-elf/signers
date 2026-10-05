@@ -37,6 +37,10 @@ pub enum RequirementKind {
 }
 
 impl Requirement {
+    /// Parses one line of `--display -r-`: `kind => expression`, prefixed with `# ` when implicit.
+    ///
+    /// A line without ` => ` fails with [`CodesignError::UnexpectedOutput`]. An unknown kind
+    /// becomes [`RequirementKind::Other`].
     pub(crate) fn parse(line: &str) -> Result<Self> {
         let (line, implicit) = match line.strip_prefix("# ") {
             Some(rest) => (rest, true),

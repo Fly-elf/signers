@@ -35,7 +35,7 @@ pub(crate) mod sealed {
     ///
     /// `Sync` because per-target runs share one action concurrently.
     pub trait ToArgs: Sync {
-        /// What `.await` yields for each target when `codesign` succeeds.
+        /// What a run yields for each target when `codesign` succeeds.
         ///
         /// It depends on the action type only, never on the option values.
         type Output: Send + 'static;
