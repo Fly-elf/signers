@@ -15,7 +15,6 @@ pub mod blocking;
 mod core;
 mod types;
 
-pub use action::Action;
 pub use actions::{
     Display, ExtractCertificates, RemoveSignature, Requirements, Sign, ValidateConstraint, Verify,
 };

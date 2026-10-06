@@ -9,18 +9,6 @@ use std::path::PathBuf;
 
 use bitflags::Flags;
 
-/// An action type that [`Codesign`](crate::Codesign) can run, such as
-/// [`Sign`](crate::codesign::Sign).
-///
-/// Use it as a bound to accept a single-target `Codesign<A>` of any action. `A::Output` is what
-/// one target yields on success, `()` for the actions with nothing to return, and a
-/// [`Signature`](crate::codesign::Signature) for [`display`](crate::Codesign#method.display);
-/// `.await` returns it shaped like the targets (see [`IntoTargets`](crate::IntoTargets)). It's
-/// sealed, so only this crate defines actions.
-pub trait Action: sealed::ToArgs {}
-
-impl<T: sealed::ToArgs> Action for T {}
-
 /// Holds [`ToArgs`](sealed::ToArgs) where other crates can't name it, which seals [`Action`].
 pub(crate) mod sealed {
     use std::borrow::Cow;

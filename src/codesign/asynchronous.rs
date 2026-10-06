@@ -12,8 +12,7 @@ use super::core::Core;
 use crate::codesign::action;
 use crate::codesign::action::sealed::ToArgs;
 use crate::codesign::{
-    Action, Display, ExtractCertificates, RemoveSignature, Requirements, Sign, ValidateConstraint,
-    Verify,
+    Display, ExtractCertificates, RemoveSignature, Requirements, Sign, ValidateConstraint, Verify,
 };
 use crate::errors::{CodesignError, Error, Result};
 use crate::target::{IntoTargets, Shape};
@@ -396,7 +395,7 @@ pub fn extract_certificates<T: IntoTargets>(target: T) -> ExtractCertificates<T:
 }
 
 /// Checks the options and targets, then runs `codesign` once over all targets or once per target.
-async fn execute<A: Action>(
+async fn execute<A: ToArgs>(
     action: &A,
     targets: &[PathBuf],
     per_target: bool,
@@ -463,7 +462,7 @@ async fn execute<A: Action>(
 }
 
 /// Runs one `codesign` over `targets` and turns its exit into outputs or an error.
-async fn run<A: Action>(action: &A, targets: &[PathBuf]) -> Result<Vec<A::Output>> {
+async fn run<A: ToArgs>(action: &A, targets: &[PathBuf]) -> Result<Vec<A::Output>> {
     let args = action.to_args(targets);
     tracing::trace!(
         "running codesign {}",
