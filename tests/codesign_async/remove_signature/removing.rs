@@ -1,7 +1,8 @@
 //! Stripping a bare Mach-O: the happy path, batches, universal binaries, and
 //! the two states in which a successful run removes nothing at all.
 
-use signers::Codesign;
+use signers::codesign::remove_signature;
+use signers::codesign::sign;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect::{self, Signature};
@@ -16,7 +17,7 @@ async fn a_signed_binary_loses_its_signature() {
         "the fixture started out unsigned"
     );
 
-    Codesign::remove_signature(&target).await.unwrap();
+    remove_signature(&target).await.unwrap();
 
     assert!(!inspect::is_signed(&target));
 }
@@ -31,7 +32,7 @@ async fn a_linker_signature_is_removed_too() {
         skip!("only the Apple Silicon linker signs what it links");
     }
 
-    Codesign::remove_signature(&target).await.unwrap();
+    remove_signature(&target).await.unwrap();
 
     assert!(!inspect::is_signed(&target));
 }
@@ -45,7 +46,7 @@ async fn every_slice_of_a_universal_binary_is_stripped() {
     let Some(target) = workspace.unsigned_universal("hello-universal") else {
         skip!("this toolchain has only one architecture's SDK");
     };
-    Codesign::sign(&target, "-").await.unwrap();
+    sign(&target, "-").await.unwrap();
     for arch in ["arm64", "x86_64"] {
         assert_eq!(
             Signature::of_arch(&target, arch).signature(),
@@ -54,7 +55,7 @@ async fn every_slice_of_a_universal_binary_is_stripped() {
         );
     }
 
-    Codesign::remove_signature(&target).await.unwrap();
+    remove_signature(&target).await.unwrap();
 
     for arch in ["arm64", "x86_64"] {
         assert!(
@@ -69,7 +70,7 @@ async fn every_target_in_a_batch_is_stripped() {
     let workspace = Workspace::new();
     let targets = ["first", "second", "third"].map(|name| workspace.adhoc_signed(name));
 
-    Codesign::remove_signature(targets.to_vec()).await.unwrap();
+    remove_signature(targets.to_vec()).await.unwrap();
 
     for target in &targets {
         assert!(
@@ -89,7 +90,7 @@ async fn stripping_an_unsigned_target_succeeds_and_changes_nothing() {
     let target = workspace.unsigned("hello");
     let before = std::fs::read(&target).unwrap();
 
-    Codesign::remove_signature(&target).await.unwrap();
+    remove_signature(&target).await.unwrap();
 
     assert!(!inspect::is_signed(&target));
     assert_eq!(
@@ -106,7 +107,7 @@ async fn stripping_a_file_that_is_not_code_succeeds() {
     let workspace = Workspace::new();
     let target = workspace.write("notes.txt", "not a Mach-O file\n");
 
-    Codesign::remove_signature(&target).await.unwrap();
+    remove_signature(&target).await.unwrap();
 
     assert!(!inspect::is_signed(&target));
 }
@@ -116,7 +117,7 @@ async fn spaces_and_non_ascii_in_a_path_are_passed_through_verbatim() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("héllo wörld ✓.bin");
 
-    Codesign::remove_signature(&target).await.unwrap();
+    remove_signature(&target).await.unwrap();
 
     assert!(!inspect::is_signed(&target));
 }
@@ -127,9 +128,9 @@ async fn spaces_and_non_ascii_in_a_path_are_passed_through_verbatim() {
 async fn awaiting_a_removal_yields_unit() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
-    Codesign::sign(&target, "-").await.unwrap();
+    sign(&target, "-").await.unwrap();
 
-    let result: signers::Result<()> = Codesign::remove_signature(&target).await;
+    let result: signers::Result<()> = remove_signature(&target).await;
 
     assert!(matches!(result, Ok(())));
 }
@@ -141,9 +142,9 @@ async fn awaiting_a_collection_of_targets_yields_one_unit_per_target() {
     let workspace = Workspace::new();
     let targets = ["first", "second", "third"].map(|name| workspace.adhoc_signed(name));
 
-    let from_a_list: signers::Result<Vec<()>> = Codesign::remove_signature(targets.to_vec()).await;
-    let from_a_slice: signers::Result<Vec<()>> = Codesign::remove_signature(&targets[..2]).await;
-    let from_an_array: signers::Result<[(); 3]> = Codesign::remove_signature(targets.clone()).await;
+    let from_a_list: signers::Result<Vec<()>> = remove_signature(targets.to_vec()).await;
+    let from_a_slice: signers::Result<Vec<()>> = remove_signature(&targets[..2]).await;
+    let from_an_array: signers::Result<[(); 3]> = remove_signature(targets.clone()).await;
 
     assert_eq!(from_a_list.unwrap().len(), 3);
     assert_eq!(from_a_slice.unwrap().len(), 2);

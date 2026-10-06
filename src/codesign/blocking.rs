@@ -1,12 +1,33 @@
-//! The blocking [`Codesign`], also at [`signers::blocking`](crate::blocking).
+//! The actions of [`codesign`](super), run by blocking the calling thread.
+//!
+//! Each function here takes the same arguments as its async twin and returns a builder with the
+//! same options, the same output shapes and the same errors. Only the start differs: `.run()`
+//! instead of `.await`. The examples in [`codesign`](super) use `.await`; here, read it as
+//! `.run()`.
+//!
+//! `.run()` builds a single-threaded Tokio runtime for the call and drops it before returning, so
+//! it needs no runtime of yours and leaves no threads behind. It panics inside a Tokio runtime:
+//! async code uses the functions of [`codesign`](super) instead.
+//!
+//! ```no_run
+//! # fn main() -> signers::Result<()> {
+//! use signers::codesign::SigningFlags;
+//! use signers::codesign::blocking;
+//!
+//! blocking::sign_for_distribution("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
+//!     .entitlements("MyApp.entitlements")
+//!     .options(SigningFlags::RUNTIME | SigningFlags::LIBRARY)
+//!     .run()?;
+//! blocking::verify("MyApp.app").deep(true).run()?;
+//! # Ok(()) }
+//! ```
 
-use std::future::IntoFuture;
-
+use super::actions::sign;
 use super::asynchronous::Async;
-use super::runner::{Runner, Runtime};
-use crate::codesign::Action;
+use super::core::Core;
+use crate::codesign::action::sealed::ToArgs;
 use crate::errors::{CodesignError, Result};
-use crate::target::{One, Shape};
+use crate::target::{IntoTargets, One, Shape};
 
 // Private so the marker stays unnameable: a `pub(crate)` type in the public alias is a privacy error.
 mod marker {
@@ -14,71 +35,113 @@ mod marker {
     pub struct Blocking;
 }
 
-use marker::Blocking;
+pub(crate) use marker::Blocking;
 
-impl Runtime for Blocking {}
-
-/// A `codesign` run that blocks the calling thread, started by [`run`](Codesign#method.run).
-///
-/// The blocking twin of [`signers::Codesign`](crate::Codesign), with the same constructors and
-/// setters, listed below, the same output shapes and the same errors. Only the start differs:
-/// `.run()` instead of `.await`. The examples on the shared methods use `.await`; here, read it
-/// as `.run()`.
-///
-/// Nothing runs until `.run()`. Until then this is a plain value that you can build over
-/// several statements, clone or drop.
-///
-/// # Examples
-///
-/// ```no_run
-/// # fn main() -> signers::Result<()> {
-/// use signers::blocking::Codesign;
-/// use signers::codesign::SigningFlags;
-///
-/// Codesign::sign_for_distribution("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
-///     .entitlements("MyApp.entitlements")
-///     .options(SigningFlags::RUNTIME | SigningFlags::LIBRARY)
-///     .run()?;
-/// Codesign::verify("MyApp.app").deep(true).run()?;
-/// # Ok(()) }
-/// ```
-pub type Codesign<A, S = One> = Runner<A, S, Blocking>;
-
-impl<A: Action + Send + 'static, S: Shape> Runner<A, S, Blocking> {
-    /// Runs the action, blocking the calling thread until every `codesign` has finished.
-    ///
-    /// It checks, runs and returns exactly like `.await` on
-    /// [`signers::Codesign`](crate::Codesign): the same output shape, the same errors, and the
-    /// same concurrent processes with [`per_target`](Codesign#method.per_target). It builds a
-    /// single-threaded Tokio runtime for the call and drops it before returning.
-    ///
-    /// # Errors
-    ///
-    /// Those listed on [`signers::Codesign`](crate::Codesign#errors). A runtime that can't be
-    /// created fails with [`CodesignError::Spawn`].
-    ///
-    /// # Panics
-    ///
-    /// Panics when called inside a Tokio runtime, such as from an `async fn` it runs. There,
-    /// `.await` [`signers::Codesign`](crate::Codesign) instead.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # fn main() -> signers::Result<()> {
-    /// use signers::blocking::Codesign;
-    ///
-    /// let [ls, cat] = Codesign::display(["/bin/ls", "/bin/cat"]).run()?;
-    /// println!("{} {}", ls.identifier, cat.identifier);
-    /// # Ok(()) }
-    /// ```
-    pub fn run(self) -> Result<S::Out<A::Output>> {
+impl<S> Core<S, Blocking>
+where
+    S: Shape,
+{
+    pub(super) fn run<O>(self, options: O) -> Result<S::Out<O::Output>>
+    where
+        O: ToArgs + Send + 'static,
+    {
         // A runtime per call costs microseconds against the milliseconds of each `codesign`
         // process, and leaves no global state or threads behind.
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .map_err(CodesignError::Spawn)?;
-        runtime.block_on(self.with_runtime::<Async>().into_future())
+        runtime.block_on(self.into_runtime::<Async>().run(options))
     }
+}
+
+/// A blocking [`RemoveSignature`](super::RemoveSignature), started by `.run()`.
+pub type RemoveSignature<S = One> = super::RemoveSignature<S, Blocking>;
+
+/// Removes the signature from `target` (`--remove-signature`).
+///
+/// Blocking form of [`codesign::remove_signature`](super::remove_signature), which has the details.
+pub fn remove_signature<T: IntoTargets>(target: T) -> RemoveSignature<T::Shape> {
+    super::RemoveSignature::new(target, Default::default())
+}
+
+/// A blocking [`ValidateConstraint`](super::ValidateConstraint), started by `.run()`.
+pub type ValidateConstraint<S = One> = super::ValidateConstraint<S, Blocking>;
+
+/// Checks that each plist is a valid launch or library constraint (`--validate-constraint`).
+///
+/// Blocking form of [`codesign::validate_constraint`](super::validate_constraint), which
+/// has the details.
+pub fn validate_constraint<T: IntoTargets>(plist: T) -> ValidateConstraint<T::Shape> {
+    super::ValidateConstraint::new(plist, Default::default())
+}
+
+/// A blocking [`Requirements`](super::Requirements), started by `.run()`.
+pub type Requirements<S = One> = super::Requirements<S, Blocking>;
+
+/// Reads the requirements of the signature of `target` (`--display -r-`).
+///
+/// Blocking form of [`codesign::requirements`](super::requirements), which has the details.
+pub fn requirements<T: IntoTargets>(target: T) -> Requirements<T::Shape> {
+    super::Requirements::new(target, Default::default())
+}
+
+/// A blocking [`ExtractCertificates`](super::ExtractCertificates), started by `.run()`.
+pub type ExtractCertificates<S = One> = super::ExtractCertificates<S, Blocking>;
+
+/// Reads the certificate chain that signed `target`, leaf first (`--extract-certificates`).
+///
+/// Blocking form of [`codesign::extract_certificates`](super::extract_certificates), which
+/// has the details.
+pub fn extract_certificates<T: IntoTargets>(target: T) -> ExtractCertificates<T::Shape> {
+    super::ExtractCertificates::new(target, Default::default())
+}
+
+/// A blocking [`Sign`](super::Sign), started by `.run()`.
+pub type Sign<S = One> = super::Sign<S, Blocking>;
+
+/// Signs `target` with the identity that `identity` names (`--sign`).
+///
+/// Blocking form of [`codesign::sign`](super::sign), which has the details.
+pub fn sign<T: IntoTargets>(target: T, identity: impl Into<String>) -> Sign<T::Shape> {
+    super::Sign::new(target, sign::Options::new(identity))
+}
+
+/// Signs `target` ad hoc, with no certificate (`--sign -`).
+///
+/// Blocking form of [`codesign::sign_adhoc`](super::sign_adhoc), which has the details.
+pub fn sign_adhoc<T: IntoTargets>(target: T) -> Sign<T::Shape> {
+    super::Sign::new(target, sign::Options::adhoc())
+}
+
+/// Signs `target` for notarization: hardened runtime and timestamp
+/// (`--options runtime --timestamp`).
+///
+/// Blocking form of [`codesign::sign_for_distribution`](super::sign_for_distribution), which
+/// has the details.
+pub fn sign_for_distribution<T: IntoTargets>(
+    target: T,
+    identity: impl Into<String>,
+) -> Sign<T::Shape> {
+    super::Sign::new(target, sign::Options::for_distribution(identity))
+}
+
+/// A blocking [`Verify`](super::Verify), started by `.run()`.
+pub type Verify<S = One> = super::Verify<S, Blocking>;
+
+/// Checks the signature of `target` (`--verify`), changing nothing.
+///
+/// Blocking form of [`codesign::verify`](super::verify), which has the details.
+pub fn verify<T: IntoTargets>(target: T) -> Verify<T::Shape> {
+    super::Verify::new(target, Default::default())
+}
+
+/// A blocking [`Display`](super::Display), started by `.run()`.
+pub type Display<S = One> = super::Display<S, Blocking>;
+
+/// Reads the signature of `target` (`--display`), changing nothing.
+///
+/// Blocking form of [`codesign::display`](super::display), which has the details.
+pub fn display<T: IntoTargets>(target: T) -> Display<T::Shape> {
+    super::Display::new(target, Default::default())
 }

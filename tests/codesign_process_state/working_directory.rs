@@ -3,7 +3,8 @@
 use std::env;
 use std::future::IntoFuture;
 
-use signers::Codesign;
+use signers::codesign::extract_certificates;
+use signers::codesign::{display, sign, verify};
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect::{self, Signature};
@@ -22,7 +23,7 @@ fn a_target_starting_with_a_dash_is_not_mistaken_for_an_option() {
     env::set_current_dir(workspace.path()).expect("could not enter the workspace");
 
     let result = crate::runtime().block_on(
-        Codesign::sign("-patched.bin", "-")
+        sign("-patched.bin", "-")
             .identifier("com.example.dashed")
             .into_future(),
     );
@@ -43,8 +44,8 @@ fn a_verified_target_starting_with_a_dash_is_not_mistaken_for_an_option() {
     let previous = env::current_dir().expect("no working directory");
     env::set_current_dir(workspace.path()).expect("could not enter the workspace");
 
-    let valid = crate::runtime().block_on(Codesign::verify("-signed.bin").into_future());
-    let invalid = crate::runtime().block_on(Codesign::verify("-unsigned.bin").into_future());
+    let valid = crate::runtime().block_on(verify("-signed.bin").into_future());
+    let invalid = crate::runtime().block_on(verify("-unsigned.bin").into_future());
 
     env::set_current_dir(previous).expect("could not leave the workspace");
     valid.expect("a dash-prefixed target did not verify");
@@ -71,7 +72,7 @@ fn a_dash_prefixed_target_is_displayed_not_parsed_as_an_option() {
     let previous = env::current_dir().expect("no working directory");
     env::set_current_dir(workspace.path()).expect("could not enter the workspace");
 
-    let result = crate::runtime().block_on(Codesign::display("-patched.bin").into_future());
+    let result = crate::runtime().block_on(display("-patched.bin").into_future());
 
     env::set_current_dir(previous).expect("could not leave the workspace");
     let signature = result.expect("a dash-prefixed target was not displayed");
@@ -90,11 +91,7 @@ fn a_dash_prefixed_target_has_its_certificates_extracted_and_saved() {
     let previous = env::current_dir().expect("no working directory");
     env::set_current_dir(workspace.path()).expect("could not enter the workspace");
 
-    let result = crate::runtime().block_on(
-        Codesign::extract_certificates("-ls")
-            .save_to(&out)
-            .into_future(),
-    );
+    let result = crate::runtime().block_on(extract_certificates("-ls").save_to(&out).into_future());
 
     env::set_current_dir(previous).expect("could not leave the workspace");
     let chain = result.expect("a dash-prefixed target was not read");
@@ -116,7 +113,7 @@ fn the_current_directory_as_target_is_saved_under_its_own_name() {
     env::set_current_dir(app).expect("could not enter the bundle");
 
     let result = crate::runtime().block_on(
-        Codesign::extract_certificates(".")
+        extract_certificates(".")
             .save_to(workspace.path())
             .into_future(),
     );

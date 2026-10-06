@@ -1,4 +1,4 @@
-//! `Codesign::verify`, end to end — one submodule per test category, named for
+//! `verify`, end to end — one submodule per test category, named for
 //! what it covers.
 //!
 //! Every target is made valid or broken with the `codesign` CLI itself and

@@ -13,7 +13,7 @@ use std::future::IntoFuture;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
-use signers::Codesign;
+use signers::codesign::{sign, verify};
 use signers::{CodesignError, Error};
 
 use crate::support::fixture::Workspace;
@@ -32,7 +32,7 @@ fn a_missing_codesign_binary_is_reported_as_such() {
     // `codesign`. Scoped, since the assertions below need the real one back.
     let result = {
         let _path = ScopedPath::to(&workspace.dir("empty"));
-        crate::runtime().block_on(Codesign::sign(&target, "-").into_future())
+        crate::runtime().block_on(sign(&target, "-").into_future())
     };
 
     match result.unwrap_err() {
@@ -58,7 +58,7 @@ fn a_codesign_that_cannot_be_executed_is_a_spawn_failure() {
 
     let result = {
         let _path = ScopedPath::to(&bin);
-        crate::runtime().block_on(Codesign::sign(&target, "-").into_future())
+        crate::runtime().block_on(sign(&target, "-").into_future())
     };
 
     match result.unwrap_err() {
@@ -83,7 +83,7 @@ fn a_codesign_killed_by_a_signal_is_reported_as_terminated() {
 
     let result = {
         let _path = ScopedPath::to(&bin);
-        crate::runtime().block_on(Codesign::sign(&target, "-").into_future())
+        crate::runtime().block_on(sign(&target, "-").into_future())
     };
 
     match result.unwrap_err() {
@@ -114,7 +114,7 @@ fn a_silent_failure_still_reports_its_exit_code() {
 
     let result = {
         let _path = ScopedPath::to(&bin);
-        crate::runtime().block_on(Codesign::sign(&target, "-").into_future())
+        crate::runtime().block_on(sign(&target, "-").into_future())
     };
 
     let error = result.unwrap_err();
@@ -155,7 +155,7 @@ fn a_failure_keeps_what_codesign_printed_on_both_streams() {
 
     let result = {
         let _path = ScopedPath::to(&bin);
-        crate::runtime().block_on(Codesign::sign(&target, "-").into_future())
+        crate::runtime().block_on(sign(&target, "-").into_future())
     };
 
     let error = result.unwrap_err();
@@ -187,7 +187,7 @@ fn a_killed_codesign_keeps_what_it_printed_on_both_streams() {
 
     let result = {
         let _path = ScopedPath::to(&bin);
-        crate::runtime().block_on(Codesign::sign(&target, "-").into_future())
+        crate::runtime().block_on(sign(&target, "-").into_future())
     };
 
     match result.unwrap_err() {
@@ -209,11 +209,7 @@ fn one_process_handles_every_target_unless_asked_otherwise() {
 
     let result = {
         let _path = ScopedPath::to(&bin);
-        crate::runtime().block_on(
-            Codesign::sign(targets.clone(), "-")
-                .force(true)
-                .into_future(),
-        )
+        crate::runtime().block_on(sign(targets.clone(), "-").force(true).into_future())
     };
 
     assert_eq!(result.unwrap().len(), 3);
@@ -240,7 +236,7 @@ fn per_target_starts_one_process_for_each_target() {
     let result = {
         let _path = ScopedPath::to(&bin);
         crate::runtime().block_on(
-            Codesign::sign(targets.clone(), "-")
+            sign(targets.clone(), "-")
                 .force(true)
                 .per_target(true)
                 .into_future(),
@@ -295,7 +291,7 @@ fn per_target_processes_overlap_but_never_exceed_the_cpu_count() {
 
     let result = {
         let _path = ScopedPath::to(&bin);
-        crate::runtime().block_on(Codesign::sign(targets, "-").per_target(true).into_future())
+        crate::runtime().block_on(sign(targets, "-").per_target(true).into_future())
     };
 
     assert_eq!(result.unwrap().len(), 3 * cap);
@@ -335,11 +331,7 @@ fn per_target_failures_keep_the_order_of_the_targets_not_of_the_exits() {
 
     let result = {
         let _path = ScopedPath::to(&bin);
-        crate::runtime().block_on(
-            Codesign::sign(targets.clone(), "-")
-                .per_target(true)
-                .into_future(),
-        )
+        crate::runtime().block_on(sign(targets.clone(), "-").per_target(true).into_future())
     };
 
     let failures = match result.unwrap_err() {
@@ -378,11 +370,7 @@ fn a_per_target_process_killed_by_a_signal_is_charged_to_its_target() {
 
     let result = {
         let _path = ScopedPath::to(&bin);
-        crate::runtime().block_on(
-            Codesign::sign(targets.clone(), "-")
-                .per_target(true)
-                .into_future(),
-        )
+        crate::runtime().block_on(sign(targets.clone(), "-").per_target(true).into_future())
     };
 
     let failures = match result.unwrap_err() {
@@ -423,7 +411,7 @@ fn a_refused_stdio_path_starts_no_process() {
             errors.push(
                 runtime
                     .block_on(
-                        Codesign::sign(targets.clone(), "-")
+                        sign(targets.clone(), "-")
                             .requirements("-")
                             .per_target(per_target)
                             .into_future(),
@@ -433,7 +421,7 @@ fn a_refused_stdio_path_starts_no_process() {
             errors.push(
                 runtime
                     .block_on(
-                        Codesign::sign(targets.clone(), "-")
+                        sign(targets.clone(), "-")
                             .file_list("-")
                             .per_target(per_target)
                             .into_future(),
@@ -443,7 +431,7 @@ fn a_refused_stdio_path_starts_no_process() {
             errors.push(
                 runtime
                     .block_on(
-                        Codesign::verify(targets.clone())
+                        verify(targets.clone())
                             .test_requirement_file("-")
                             .per_target(per_target)
                             .into_future(),
@@ -453,11 +441,7 @@ fn a_refused_stdio_path_starts_no_process() {
         }
         errors.push(
             runtime
-                .block_on(
-                    Codesign::verify(&targets[0])
-                        .test_requirement_file("-")
-                        .into_future(),
-                )
+                .block_on(verify(&targets[0]).test_requirement_file("-").into_future())
                 .unwrap_err(),
         );
         errors
@@ -484,7 +468,7 @@ fn verify_passes_a_requirement_file_and_a_slot_as_separate_arguments() {
     let result = {
         let _path = ScopedPath::to(&bin);
         crate::runtime().block_on(
-            Codesign::verify(&targets[0])
+            verify(&targets[0])
                 .test_requirement_file("my reqs.txt")
                 .signature_slot(SignatureSlot::Second)
                 .detached("-")
@@ -523,13 +507,9 @@ fn a_missing_codesign_binary_fails_a_per_target_batch_as_a_whole() {
         let _path = ScopedPath::to(&workspace.dir("empty"));
         let runtime = crate::runtime();
         (
+            runtime.block_on(sign(targets.clone(), "-").per_target(true).into_future()),
             runtime.block_on(
-                Codesign::sign(targets.clone(), "-")
-                    .per_target(true)
-                    .into_future(),
-            ),
-            runtime.block_on(
-                Codesign::sign([targets[0].clone(), targets[1].clone()], "-")
+                sign([targets[0].clone(), targets[1].clone()], "-")
                     .per_target(true)
                     .into_future(),
             ),
@@ -555,7 +535,7 @@ fn a_codesign_that_cannot_be_executed_fails_a_per_target_batch_as_a_whole() {
 
     let result = {
         let _path = ScopedPath::to(&bin);
-        crate::runtime().block_on(Codesign::sign(targets, "-").per_target(true).into_future())
+        crate::runtime().block_on(sign(targets, "-").per_target(true).into_future())
     };
 
     match result.unwrap_err() {

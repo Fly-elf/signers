@@ -3,8 +3,11 @@
 
 use std::path::Path;
 
-use signers::blocking::Codesign;
 use signers::codesign::RequirementKind;
+use signers::codesign::blocking::{display, sign, sign_adhoc, verify};
+use signers::codesign::blocking::{
+    extract_certificates, remove_signature, requirements, validate_constraint,
+};
 
 use crate::support::fixture::{Workspace, fixture};
 use crate::support::inspect;
@@ -14,7 +17,7 @@ fn sign_signs_the_target() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    let () = Codesign::sign(&target, "-").run().unwrap();
+    let () = sign(&target, "-").run().unwrap();
 
     inspect::assert_valid(&target);
 }
@@ -25,7 +28,7 @@ fn sign_adhoc_re_signs_with_the_options_set() {
     let workspace = Workspace::new();
     let target = workspace.presigned("hello", &["-i", "com.example.original"]);
 
-    let () = Codesign::sign_adhoc(&target)
+    let () = sign_adhoc(&target)
         .force(true)
         .identifier("com.example.blocking")
         .run()
@@ -43,7 +46,7 @@ fn remove_signature_strips_the_signature() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
 
-    let () = Codesign::remove_signature(&target).run().unwrap();
+    let () = remove_signature(&target).run().unwrap();
 
     assert!(!inspect::is_signed(&target), "the signature is still there");
 }
@@ -53,7 +56,7 @@ fn verify_accepts_a_valid_signature() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
 
-    let () = Codesign::verify(&target).run().unwrap();
+    let () = verify(&target).run().unwrap();
 
     inspect::assert_valid(&target);
 }
@@ -63,7 +66,7 @@ fn display_reports_what_codesign_reports() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
 
-    let signature = Codesign::display(&target).run().unwrap();
+    let signature = display(&target).run().unwrap();
 
     let oracle = inspect::Signature::of(&target);
     assert_eq!(signature.raw(), oracle.raw());
@@ -71,10 +74,10 @@ fn display_reports_what_codesign_reports() {
 }
 
 #[test]
-fn internal_requirements_reads_the_designated_requirement() {
+fn requirements_reads_the_designated_requirement() {
     let target = Path::new("/bin/ls");
 
-    let found = Codesign::internal_requirements(target).run().unwrap();
+    let found = requirements(target).run().unwrap();
 
     let [only] = &found[..] else {
         panic!("expected one requirement, got {found:?}")
@@ -89,7 +92,7 @@ fn internal_requirements_reads_the_designated_requirement() {
 
 #[test]
 fn validate_constraint_accepts_a_valid_constraint() {
-    let () = Codesign::validate_constraint(fixture("constraint-team.plist"))
+    let () = validate_constraint(fixture("constraint-team.plist"))
         .run()
         .unwrap();
 }
@@ -98,7 +101,7 @@ fn validate_constraint_accepts_a_valid_constraint() {
 fn extract_certificates_yields_the_chain_codesign_extracts() {
     let target = Path::new("/bin/ls");
 
-    let chain = Codesign::extract_certificates(target).run().unwrap();
+    let chain = extract_certificates(target).run().unwrap();
 
     let expected = inspect::certificates(target);
     assert!(!expected.is_empty(), "/bin/ls carries no chain");
@@ -111,10 +114,7 @@ fn extract_certificates_saves_the_chain_where_asked() {
     let workspace = Workspace::new();
     let out = workspace.join("certificates");
 
-    Codesign::extract_certificates("/bin/ls")
-        .save_to(&out)
-        .run()
-        .unwrap();
+    extract_certificates("/bin/ls").save_to(&out).run().unwrap();
 
     let saved = std::fs::read_to_string(out.join("ls.pem")).unwrap();
     let expected: String = inspect::certificates(Path::new("/bin/ls"))

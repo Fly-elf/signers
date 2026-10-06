@@ -3,104 +3,73 @@ use std::ffi::OsStr;
 use std::path::PathBuf;
 
 use crate::codesign::action::PushArgs;
+use crate::codesign::action::action;
 use crate::codesign::action::sealed::{SharedRun, ToArgs};
-use crate::codesign::runner::{Runner, Runtime};
 use crate::codesign::types::parse_report;
 use crate::codesign::{Signature, SignatureSlot};
 use crate::errors::{CodesignError, Result};
-use crate::target::Shape;
 
-/// Options of the display action: the `A` in `Codesign<Display>`.
-///
-/// [`Codesign::display`](crate::Codesign#method.display) creates it. You set its options with [the
-/// display setters](crate::Codesign#impl-Runner%3CDisplay,+S,+R%3E). An option you never set keeps
-/// `codesign`'s default.
-///
-/// # Examples
-///
-/// List the code nested in a bundle:
-///
-/// ```no_run
-/// # async fn run() -> signers::Result<()> {
-/// use signers::Codesign;
-///
-/// let signature = Codesign::display("MyApp.app").deep(true).await?;
-/// for path in &signature.nested {
-///     println!("{path}");
-/// }
-/// # Ok(()) }
-/// ```
-///
-/// Read one slice of a universal binary:
-///
-/// ```no_run
-/// # async fn run() -> signers::Result<()> {
-/// use signers::Codesign;
-/// use signers::codesign::Format;
-///
-/// let signature = Codesign::display("/bin/ls").architecture("arm64e").await?;
-/// assert_eq!(signature.format, Format::MachOThin("arm64e".into()));
-/// # Ok(()) }
-/// ```
-#[derive(Debug, Clone, Default)]
-pub struct Display {
-    architecture: Option<String>,
-    bundle_version: Option<String>,
-    deep: bool,
-    detached: Option<PathBuf>,
-    signature_slot: Option<SignatureSlot>,
-}
-
-/// Options for [`display`](crate::Codesign#method.display).
-///
-/// Each setter maps to one `codesign` flag. A later call replaces an earlier one, and `false`
-/// leaves a flag out.
-impl<S: Shape, R: Runtime> Runner<Display, S, R> {
-    /// Reads this slice of a universal binary, e.g. `arm64` or `x86_64` (`--architecture`).
+action! {
+    /// Builder of a run that reads signatures, returned by [`display`](crate::codesign::display).
     ///
-    /// Without it a universal binary is reported whole, as
-    /// [`Format::MachOUniversal`](crate::codesign::Format::MachOUniversal). A slice the binary
-    /// doesn't have fails with [`CodesignError::Failed`].
-    pub fn architecture(mut self, arch: impl Into<String>) -> Self {
-        self.action.architecture = Some(arch.into());
-        self
-    }
-
-    /// Reads this version of a versioned bundle instead of `Current` (`--bundle-version`).
+    /// Each setter maps to one `codesign` flag. A later call replaces an earlier one, `false`
+    /// leaves the flag out, and an option you never set keeps `codesign`'s default.
     ///
-    /// A version the bundle doesn't have fails with [`CodesignError::Failed`].
-    pub fn bundle_version(mut self, version: impl Into<String>) -> Self {
-        self.action.bundle_version = Some(version.into());
-        self
-    }
-
-    /// Lists the code nested in a bundle, in [`Signature::nested`] (`--deep`).
+    /// # Examples
     ///
-    /// Only the items directly inside the bundle are listed, and their own signatures aren't read.
-    pub fn deep(mut self, deep: bool) -> Self {
-        self.action.deep = deep;
-        self
-    }
-
-    /// Reads the signature from a detached signature file instead of from the code (`--detached`).
-    pub fn detached(mut self, path: impl Into<PathBuf>) -> Self {
-        self.action.detached = Some(path.into());
-        self
-    }
-
-    /// Reads this signature when the code carries two (`--signature-slot`).
+    /// List the code nested in a bundle:
     ///
-    /// Code with one signature has only [`SignatureSlot::First`]. Asking for the second fails with
-    /// [`CodesignError::NoSignature`].
-    pub fn signature_slot(mut self, slot: SignatureSlot) -> Self {
-        self.action.signature_slot = Some(slot);
-        self
+    /// ```no_run
+    /// # async fn run() -> signers::Result<()> {
+    /// use signers::codesign;
+    ///
+    /// let signature = codesign::display("MyApp.app").deep(true).await?;
+    /// for path in &signature.nested {
+    ///     println!("{path}");
+    /// }
+    /// # Ok(()) }
+    /// ```
+    ///
+    /// Read one slice of a universal binary:
+    ///
+    /// ```no_run
+    /// # async fn run() -> signers::Result<()> {
+    /// use signers::codesign::{self, Format};
+    ///
+    /// let signature = codesign::display("/bin/ls").architecture("arm64e").await?;
+    /// assert_eq!(signature.format, Format::MachOThin("arm64e".into()));
+    /// # Ok(()) }
+    /// ```
+    Display => Signature {
+    }
+    setters {
+        /// Reads this slice of a universal binary, e.g. `arm64` or `x86_64` (`--architecture`).
+        ///
+        /// Without it a universal binary is reported whole, as
+        /// [`Format::MachOUniversal`](crate::codesign::Format::MachOUniversal). A slice the binary
+        /// doesn't have fails with [`CodesignError::Failed`].
+        architecture: Option<impl Into<String>>,
+        /// Reads this version of a versioned bundle instead of `Current` (`--bundle-version`).
+        ///
+        /// A version the bundle doesn't have fails with [`CodesignError::Failed`].
+        bundle_version: Option<impl Into<String>>,
+        /// Lists the code nested in a bundle, in [`Signature::nested`] (`--deep`).
+        ///
+        /// Only the items directly inside the bundle are listed, and their own signatures aren't read.
+        deep: bool,
+        /// Reads the signature from a detached signature file instead of from the code (`--detached`).
+        detached: Option<impl Into<PathBuf>>,
+        /// Reads this signature when the code carries two (`--signature-slot`).
+        ///
+        /// Code with one signature has only [`SignatureSlot::First`]. Asking for the second fails with
+        /// [`CodesignError::NoSignature`].
+        signature_slot: Option<SignatureSlot>,
     }
 }
 
-impl SharedRun for Display {}
+impl<S, R> SharedRun for Display<S, R> {}
 
-impl ToArgs for Display {
+impl ToArgs for Options {
     type Output = Signature;
     const PER_TARGET: bool = true;
 
@@ -223,17 +192,17 @@ mod tests {
     use std::os::unix::ffi::OsStrExt;
 
     use super::*;
-    use crate::codesign::Codesign;
     use crate::codesign::SignatureKind;
+    use crate::codesign::display;
 
     fn os(strings: &[&str]) -> Vec<OsString> {
         strings.iter().map(OsString::from).collect()
     }
 
-    fn args_of<S>(builder: &Codesign<Display, S>) -> Vec<OsString> {
+    fn args_of<S>(builder: &Display<S>) -> Vec<OsString> {
         builder
-            .action
-            .to_args(&builder.targets)
+            .options
+            .to_args(&builder.core.targets)
             .into_iter()
             .map(Cow::into_owned)
             .collect()
@@ -284,15 +253,15 @@ Chosen signature=1
             "app",
         ]);
 
-        assert_eq!(args_of(&Codesign::display("app")), expected);
-        assert_eq!(args_of(&Codesign::display(vec!["app"])), expected);
-        assert_eq!(args_of(&Codesign::display(["app"])), expected);
+        assert_eq!(args_of(&display("app")), expected);
+        assert_eq!(args_of(&display(vec!["app"])), expected);
+        assert_eq!(args_of(&display(["app"])), expected);
     }
 
     #[test]
     fn several_targets_in_one_run_do_not_ask_for_entitlements() {
         assert_eq!(
-            args_of(&Codesign::display(vec!["a", "b"])),
+            args_of(&display(vec!["a", "b"])),
             os(&["--display", "--verbose=4", "--", "a", "b"])
         );
     }
@@ -301,7 +270,7 @@ Chosen signature=1
     /// rendering it, or rendering it in the wrong form, fails here.
     #[test]
     fn every_option_renders_exactly_once() {
-        let builder = Codesign::display("app")
+        let builder = display("app")
             .architecture("x86_64")
             .bundle_version("B")
             .deep(true)
@@ -333,7 +302,7 @@ Chosen signature=1
 
     #[test]
     fn repeating_an_option_keeps_the_last_value() {
-        let builder = Codesign::display(vec!["a", "b"])
+        let builder = display(vec!["a", "b"])
             .architecture("x86_64")
             .architecture("arm64")
             .bundle_version("A")
@@ -368,7 +337,7 @@ Chosen signature=1
     #[test]
     fn a_target_with_a_leading_dash_stays_a_target() {
         assert_eq!(
-            args_of(&Codesign::display("-app")),
+            args_of(&display("-app")),
             os(&[
                 "--display",
                 "--verbose=4",
@@ -383,15 +352,29 @@ Chosen signature=1
 
     #[test]
     fn collections_default_to_one_run_per_target() {
-        assert!(Codesign::display(vec!["a", "b"]).per_target);
-        assert!(Codesign::display(["a", "b"]).per_target);
+        assert!(display(vec!["a", "b"]).core.per_target);
+        assert!(display(["a", "b"]).core.per_target);
+    }
+
+    /// The setter is typed on the shape, not on the length.
+    #[test]
+    fn a_one_element_collection_keeps_the_per_target_setter() {
+        assert!(!display(vec!["a"]).per_target(false).core.per_target);
+        assert!(!display(["a"]).per_target(false).core.per_target);
+        assert!(
+            display(vec!["a"])
+                .per_target(false)
+                .per_target(true)
+                .core
+                .per_target
+        );
     }
 
     #[test]
     fn each_report_becomes_one_signature_in_order() {
         let stderr = format!("{}{}", report("/x/a", "first"), report("/x/b", "second"));
 
-        let signatures = Display::default()
+        let signatures = Options::default()
             .output(&paths(&["a", "b"]), String::new(), stderr)
             .unwrap();
 
@@ -417,7 +400,7 @@ Chosen signature=1
             assert!(blocks.iter().all(|b| *b == b.trim_end()), "{blocks:?}");
             assert!(blocks[0].ends_with("Chosen signature=1"));
         }
-        let signatures = Display::default()
+        let signatures = Options::default()
             .output(&paths(&["a", "b"]), String::new(), stderr)
             .unwrap();
         assert!(signatures.iter().all(|s| s.raw() == s.raw().trim_end()));
@@ -430,7 +413,7 @@ Chosen signature=1
             report("/x/a", "first")
         );
 
-        let signatures = Display::default()
+        let signatures = Options::default()
             .output(&paths(&["a"]), String::new(), stderr)
             .unwrap();
 
@@ -451,7 +434,7 @@ Chosen signature=1
         ];
 
         for (targets, stderr) in cases {
-            unexpected_output(Display::default().output(&targets, String::new(), stderr));
+            unexpected_output(Options::default().output(&targets, String::new(), stderr));
         }
     }
 
@@ -460,14 +443,14 @@ Chosen signature=1
         let stderr = report("/x/a", "first").replace("Total signatures=1", "Total signatures=x");
 
         let detail =
-            unexpected_output(Display::default().output(&paths(&["a"]), String::new(), stderr));
+            unexpected_output(Options::default().output(&paths(&["a"]), String::new(), stderr));
 
         assert!(detail.contains("Total signatures"), "{detail}");
     }
 
     #[test]
     fn a_single_target_reads_its_entitlements_from_stdout() {
-        let signatures = Display::default()
+        let signatures = Options::default()
             .output(
                 &paths(&["a"]),
                 ENTITLEMENTS.to_owned(),
@@ -495,7 +478,7 @@ Chosen signature=1
 
     #[test]
     fn a_single_target_with_nothing_on_stdout_has_no_entitlements() {
-        let signatures = Display::default()
+        let signatures = Options::default()
             .output(&paths(&["a"]), String::new(), report("/x/a", "first"))
             .unwrap();
 
@@ -509,7 +492,7 @@ Chosen signature=1
             "<?xml not a plist",
             "\t[Dict]\n<?xml version=\"1.0\"?><plist",
         ] {
-            unexpected_output(Display::default().output(
+            unexpected_output(Options::default().output(
                 &paths(&["a"]),
                 stdout.to_owned(),
                 report("/x/a", "first"),
@@ -520,7 +503,7 @@ Chosen signature=1
     const DUMP: &str = "\t[Dict]\n\t\t[Key] ccat\n\t\t[Value]\n\t\t\t[Int] 0\n";
 
     fn entitlement_keys(stdout: String) -> Option<Vec<String>> {
-        let signatures = Display::default()
+        let signatures = Options::default()
             .output(&paths(&["a"]), stdout, report("/x/a", "first"))
             .unwrap();
         signatures[0]
@@ -561,7 +544,7 @@ Chosen signature=1
     fn several_targets_in_one_run_have_no_entitlements() {
         let stderr = format!("{}{}", report("/x/a", "first"), report("/x/b", "second"));
 
-        let signatures = Display::default()
+        let signatures = Options::default()
             .output(&paths(&["a", "b"]), ENTITLEMENTS.to_owned(), stderr)
             .unwrap();
 
@@ -573,7 +556,7 @@ Chosen signature=1
         let stdout = format!("\n\n{ENTITLEMENTS}\n\n");
         let stderr = format!("\n{}\n\n", report("/x/a", "first"));
 
-        let signatures = Display::default()
+        let signatures = Options::default()
             .output_bytes(&paths(&["a"]), stdout.into_bytes(), stderr.into_bytes())
             .unwrap();
 
@@ -593,7 +576,7 @@ Chosen signature=1
                 .as_bytes(),
         );
 
-        let signatures = Display::default()
+        let signatures = Options::default()
             .output_bytes(
                 &[PathBuf::from(OsStr::from_bytes(b"caf\xE9"))],
                 Vec::new(),
@@ -624,7 +607,7 @@ Chosen signature=1
     fn a_report_that_says_no_signature_in_place_of_the_signature_line_is_no_signature() {
         let stderr = without_signature("/x/a");
 
-        let (out, err) = no_signature(Display::default().output(
+        let (out, err) = no_signature(Options::default().output(
             &paths(&["a"]),
             ENTITLEMENTS.to_owned(),
             stderr.clone(),
@@ -638,7 +621,7 @@ Chosen signature=1
     fn one_target_without_a_signature_fails_the_whole_run_with_both_streams() {
         let stderr = format!("{}{}", report("/x/a", "first"), without_signature("/x/b"));
 
-        let (out, err) = no_signature(Display::default().output(
+        let (out, err) = no_signature(Options::default().output(
             &paths(&["a", "b"]),
             "out".to_owned(),
             stderr.clone(),
@@ -653,7 +636,7 @@ Chosen signature=1
         let stderr = report("/x/a", "first").replace("Signature=adhoc\n", "");
 
         let detail =
-            unexpected_output(Display::default().output(&paths(&["a"]), String::new(), stderr));
+            unexpected_output(Options::default().output(&paths(&["a"]), String::new(), stderr));
 
         assert!(detail.contains("Signature"), "{detail}");
     }
@@ -665,7 +648,7 @@ Chosen signature=1
             "/x/a: no signature\nInfo.plist=not bound\n",
         );
 
-        let signatures = Display::default()
+        let signatures = Options::default()
             .output(&paths(&["a"]), String::new(), stderr)
             .unwrap();
 
@@ -676,14 +659,14 @@ Chosen signature=1
     fn a_line_that_only_mentions_no_signature_is_not_the_note() {
         let stderr = report("/x/a", "first").replace("Signature=adhoc\n", "no signature at all\n");
 
-        unexpected_output(Display::default().output(&paths(&["a"]), String::new(), stderr));
+        unexpected_output(Options::default().output(&paths(&["a"]), String::new(), stderr));
     }
 
     #[test]
     fn the_signature_slot_renders_one_or_two() {
         for (slot, number) in [(SignatureSlot::First, "1"), (SignatureSlot::Second, "2")] {
             assert_eq!(
-                args_of(&Codesign::display(vec!["a", "b"]).signature_slot(slot)),
+                args_of(&display(vec!["a", "b"]).signature_slot(slot)),
                 os(&[
                     "--display",
                     "--verbose=4",

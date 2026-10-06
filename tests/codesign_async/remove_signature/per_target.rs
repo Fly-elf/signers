@@ -6,7 +6,7 @@
 
 use std::path::PathBuf;
 
-use signers::Codesign;
+use signers::codesign::remove_signature;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect;
@@ -18,7 +18,7 @@ async fn every_target_is_stripped() {
         .map(|name| workspace.adhoc_signed(name))
         .into();
 
-    let outputs: Vec<()> = Codesign::remove_signature(targets.clone())
+    let outputs: Vec<()> = remove_signature(targets.clone())
         .per_target(true)
         .await
         .unwrap();
@@ -38,7 +38,7 @@ async fn an_array_of_targets_yields_an_array_of_the_same_length() {
     let workspace = Workspace::new();
     let targets = ["first", "second"].map(|name| workspace.adhoc_signed(name));
 
-    let [(), ()] = Codesign::remove_signature(targets.clone())
+    let [(), ()] = remove_signature(targets.clone())
         .per_target(true)
         .await
         .unwrap();
@@ -55,7 +55,7 @@ async fn a_single_target_fails_with_its_plain_error() {
     let workspace = Workspace::new();
     let target = workspace.dir("not-a-bundle");
 
-    let error = Codesign::remove_signature(&target).await.unwrap_err();
+    let error = remove_signature(&target).await.unwrap_err();
 
     assert!(crate::codesign_error(error).contains("bundle format unrecognized"));
 }
@@ -76,10 +76,7 @@ async fn refused_targets_are_collected_in_input_order_and_the_rest_are_stripped(
         last.clone(),
     ];
 
-    let error = Codesign::remove_signature(batch)
-        .per_target(true)
-        .await
-        .unwrap_err();
+    let error = remove_signature(batch).per_target(true).await.unwrap_err();
 
     let failures: Vec<(PathBuf, String)> = crate::batch_failures(error)
         .into_iter()
@@ -113,11 +110,11 @@ async fn a_single_failure_in_a_collection_is_still_a_batch() {
     let workspace = Workspace::new();
     let directory = workspace.dir("not-a-bundle");
 
-    let in_a_list = Codesign::remove_signature(vec![directory.clone()])
+    let in_a_list = remove_signature(vec![directory.clone()])
         .per_target(true)
         .await
         .unwrap_err();
-    let in_an_array = Codesign::remove_signature([directory.clone()])
+    let in_an_array = remove_signature([directory.clone()])
         .per_target(true)
         .await
         .unwrap_err();

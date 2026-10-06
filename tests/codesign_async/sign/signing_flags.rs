@@ -1,8 +1,8 @@
 //! `SigningFlags` (`--options`) and the hardened-runtime version that rides
 //! along with them.
 
-use signers::Codesign;
 use signers::codesign::SigningFlags;
+use signers::codesign::sign;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect::Signature;
@@ -12,7 +12,7 @@ async fn option_flags_are_sealed_into_the_code_directory() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    Codesign::sign(&target, "-")
+    sign(&target, "-")
         .options(SigningFlags::RUNTIME | SigningFlags::KILL)
         .await
         .unwrap();
@@ -37,7 +37,7 @@ async fn each_signing_flag_seals_the_bit_it_claims() {
     for (index, flag) in SigningFlags::all().iter().enumerate() {
         let target = workspace.unsigned(format!("flag-{index}"));
 
-        Codesign::sign(&target, "-")
+        sign(&target, "-")
             .options(flag)
             .await
             .unwrap_or_else(|e| panic!("`codesign` rejected {flag:?}: {e}"));
@@ -55,7 +55,7 @@ async fn the_last_set_of_option_flags_wins() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    Codesign::sign(&target, "-")
+    sign(&target, "-")
         .options(SigningFlags::RUNTIME)
         .options(SigningFlags::LIBRARY)
         .await
@@ -76,7 +76,7 @@ async fn an_empty_flag_set_seals_nothing() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    Codesign::sign(&target, "-")
+    sign(&target, "-")
         .options(SigningFlags::empty())
         .await
         .unwrap();
@@ -89,7 +89,7 @@ async fn the_hardened_runtime_version_is_recorded() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    Codesign::sign(&target, "-")
+    sign(&target, "-")
         .options(SigningFlags::RUNTIME)
         .runtime_version("12.0")
         .await

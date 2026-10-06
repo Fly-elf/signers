@@ -19,11 +19,9 @@ use crate::errors::{CodesignError, Error, Result};
 ///
 /// ```no_run
 /// # async fn run() -> signers::Result<()> {
-/// use signers::Codesign;
-/// use signers::codesign::SignatureKind;
-/// use signers::codesign::SigningFlags;
+/// use signers::codesign::{self, SignatureKind, SigningFlags};
 ///
-/// let signature = Codesign::display("MyApp.app").await?;
+/// let signature = codesign::display("MyApp.app").await?;
 ///
 /// println!("{} ({})", signature.identifier, signature.cd_hash);
 /// if signature.code_directory.flags.contains(SigningFlags::RUNTIME) {
@@ -43,8 +41,8 @@ pub struct Signature {
     /// The path of the main executable (`Executable`).
     ///
     /// For a bundle it is the executable inside it, and for a versioned bundle read with
-    /// [`bundle_version`](crate::Codesign#method.bundle_version) it names that version. The report
-    /// is decoded lossily, so a byte that isn't UTF-8 in the path becomes U+FFFD.
+    /// [`bundle_version`](crate::codesign::Display::bundle_version) it names that version. The
+    /// report is decoded lossily, so a byte that isn't UTF-8 in the path becomes U+FFFD.
     pub executable: PathBuf,
     /// The signing identifier (`Identifier`).
     pub identifier: String,
@@ -103,7 +101,7 @@ pub struct Signature {
     pub sealed_resources: Option<SealedResources>,
     /// How many requirements the signature embeds, and their size; `None` when there are none
     /// (`Internal requirements`).
-    /// [`internal_requirements`](crate::Codesign#method.internal_requirements) reads the
+    /// [`requirements`](crate::codesign::requirements) reads the
     /// requirements themselves.
     pub internal_requirements: Option<RequirementsSummary>,
     /// The number of signatures in the code (`Total signatures`).
@@ -116,7 +114,7 @@ pub struct Signature {
     pub chosen_signature: Option<u32>,
     /// The code nested directly in a bundle, as `codesign` prints each path (`Nested`).
     ///
-    /// Only [`deep`](crate::Codesign#method.deep) lists them; without it this is empty.
+    /// Only [`deep`](crate::codesign::Display::deep) lists them; without it this is empty.
     pub nested: Vec<String>,
     /// The launch and library constraints the code carries.
     pub constraints: Constraints,
@@ -124,8 +122,8 @@ pub struct Signature {
     ///
     /// They are read only when `codesign` runs over a single target, because over several in one
     /// run it prints entitlements that can't be matched back to their targets. With
-    /// [`per_target(false)`](crate::Codesign#method.per_target) and several targets, this is `None`
-    /// for all of them.
+    /// [`per_target(false)`](crate::codesign::Display::per_target) and several targets, this is
+    /// `None` for all of them.
     pub entitlements: Option<plist::Dictionary>,
     raw: String,
 }
@@ -148,9 +146,9 @@ impl Signature {
     ///
     /// ```no_run
     /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
+    /// use signers::codesign;
     ///
-    /// let signature = Codesign::display("mytool").await?;
+    /// let signature = codesign::display("mytool").await?;
     /// assert_eq!(signature.field("Identifier"), Some(signature.identifier.as_str()));
     /// # Ok(()) }
     /// ```
@@ -225,7 +223,7 @@ pub struct CodeHashes {
 pub enum Location {
     /// Inside the code itself, or in its extended attributes.
     Embedded,
-    /// In a separate file, read with [`detached`](crate::Codesign#method.detached).
+    /// In a separate file, read with [`detached`](crate::codesign::Display::detached).
     ExplicitDetached,
     /// In the system's database of detached signatures.
     System,
@@ -379,8 +377,7 @@ pub struct SealedResources {
 
 /// How many requirements a signature embeds, and their size (`Internal requirements`).
 ///
-/// [`InternalRequirements`](crate::codesign::InternalRequirements) reads the requirements
-/// themselves.
+/// [`requirements`](crate::codesign::requirements) reads the requirements themselves.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RequirementsSummary {
@@ -399,10 +396,9 @@ bitflags! {
     ///
     /// ```no_run
     /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
-    /// use signers::codesign::Constraints;
+    /// use signers::codesign::{self, Constraints};
     ///
-    /// let signature = Codesign::display("MyApp.app").await?;
+    /// let signature = codesign::display("MyApp.app").await?;
     /// if signature.constraints.contains(Constraints::LAUNCH_SELF) {
     ///     println!("constrained at launch");
     /// }

@@ -4,7 +4,7 @@
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 
-use signers::Codesign;
+use signers::codesign::remove_signature;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect;
@@ -15,7 +15,7 @@ async fn a_plain_directory_is_rejected() {
     let workspace = Workspace::new();
     let target = workspace.dir("not-a-bundle");
 
-    let error = Codesign::remove_signature(&target).await.unwrap_err();
+    let error = remove_signature(&target).await.unwrap_err();
 
     assert!(crate::codesign_error(error).contains("bundle format unrecognized"));
 }
@@ -28,7 +28,7 @@ async fn a_rejected_target_stops_the_batch_where_it_stands() {
     let bad = workspace.dir("not-a-bundle");
     let after = workspace.adhoc_signed("after");
 
-    let error = Codesign::remove_signature(vec![bad, after.clone()])
+    let error = remove_signature(vec![bad, after.clone()])
         .await
         .unwrap_err();
 
@@ -49,7 +49,7 @@ async fn a_read_only_directory_is_surfaced_with_its_diagnostics() {
     let target = workspace.adhoc_signed("locked/hello");
     fs::set_permissions(&locked, fs::Permissions::from_mode(0o555)).unwrap();
 
-    let result = Codesign::remove_signature(&target).await;
+    let result = remove_signature(&target).await;
 
     fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
     let stderr = crate::codesign_error(result.unwrap_err());

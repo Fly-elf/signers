@@ -4,7 +4,7 @@
 
 use std::fs;
 
-use signers::Codesign;
+use signers::codesign::sign;
 use signers::codesign::{SigningFlags, Timestamp};
 
 use crate::support::fixture::{Workspace, fixture, output_of};
@@ -27,7 +27,7 @@ async fn a_fully_loaded_builder_renders_a_command_codesign_accepts() {
     let list = workspace.join("signed.txt");
     let requirement = r#"designated => identifier "com.example.constrained""#;
 
-    Codesign::sign(&target, "-")
+    sign(&target, "-")
         .identifier("com.example.constrained")
         .requirements(format!("={requirement}"))
         .keychain("/nonexistent/does-not.keychain")

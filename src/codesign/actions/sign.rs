@@ -2,88 +2,215 @@ use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
+use crate::codesign::action::action;
 use crate::codesign::action::sealed::{SharedRun, ToArgs};
 use crate::codesign::action::{PushArgs, joined};
-use crate::codesign::runner::{Runner, Runtime};
 use crate::codesign::{PreserveMetadata, SigningFlags, Timestamp};
-use crate::target::Shape;
 
-/// Options of the signing action: the `A` in `Codesign<Sign>`.
-///
-/// [`Codesign::sign`](crate::Codesign#method.sign),
-/// [`Codesign::sign_adhoc`](crate::Codesign#method.sign_adhoc) and
-/// [`Codesign::sign_for_distribution`](crate::Codesign#method.sign_for_distribution) create it. You
-/// set its options with [the signing setters](crate::Codesign#impl-Runner%3CSign,+S,+R%3E). An
-/// option you never set keeps `codesign`'s default.
-///
-/// # Examples
-///
-/// Sign the nested code first, then the bundle that seals it. This replaces the deprecated
-/// [`deep`](crate::Codesign#method.deep):
-///
-/// ```no_run
-/// # async fn run() -> signers::Result<()> {
-/// use signers::Codesign;
-///
-/// let identity = "Developer ID Application: Jane Doe (A1B2C3D4E5)";
-///
-/// Codesign::sign_for_distribution("MyApp.app/Contents/Frameworks/Engine.framework", identity)
-///     .await?;
-/// Codesign::sign_for_distribution("MyApp.app", identity)
-///     .entitlements("MyApp.entitlements")
-///     .await?;
-/// # Ok(()) }
-/// ```
-///
-/// Leave the binary unchanged and write its signature to a separate file:
-///
-/// ```no_run
-/// # async fn run() -> signers::Result<()> {
-/// use signers::Codesign;
-///
-/// Codesign::sign_adhoc("mytool").detached("mytool.sig").await?;
-/// # Ok(()) }
-/// ```
-#[derive(Debug, Clone, Default)]
-pub struct Sign {
-    identity: String,
+action! {
+    /// Builder of a signing run, returned by [`sign`](crate::codesign::sign) and its presets.
+    ///
+    /// [`sign_adhoc`](crate::codesign::sign_adhoc) and
+    /// [`sign_for_distribution`](crate::codesign::sign_for_distribution) are the presets. Each
+    /// setter maps to one `codesign` flag. A later call replaces an earlier one, `false` leaves the
+    /// flag out, and an option you never set keeps `codesign`'s default.
+    ///
+    /// # Examples
+    ///
+    /// Sign the nested code first, then the bundle that seals it. This replaces the deprecated
+    /// [`deep`](Sign::deep):
+    ///
+    /// ```no_run
+    /// # async fn run() -> signers::Result<()> {
+    /// use signers::codesign;
+    ///
+    /// let identity = "Developer ID Application: Jane Doe (A1B2C3D4E5)";
+    ///
+    /// codesign::sign_for_distribution("MyApp.app/Contents/Frameworks/Engine.framework", identity)
+    ///     .await?;
+    /// codesign::sign_for_distribution("MyApp.app", identity)
+    ///     .entitlements("MyApp.entitlements")
+    ///     .await?;
+    /// # Ok(()) }
+    /// ```
+    ///
+    /// Leave the binary unchanged and write its signature to a separate file:
+    ///
+    /// ```no_run
+    /// # async fn run() -> signers::Result<()> {
+    /// use signers::codesign;
+    ///
+    /// codesign::sign_adhoc("mytool").detached("mytool.sig").await?;
+    /// # Ok(()) }
+    /// ```
+    Sign => () {
+        identity: String,
+    }
+    setters {
+        // Identity and requirements
+        /// Seals this identifier instead of deriving one from `Info.plist` or the file name
+        /// (`--identifier`).
+        ///
+        /// Every target in the batch gets this identifier, and each program should have its own.
+        identifier: Option<impl Into<String>>,
+        /// Embeds internal requirements from a file, or from source prefixed with `=`
+        /// (`--requirements`).
+        ///
+        /// The kinds of requirement you don't specify get `codesign`'s defaults. On the command line,
+        /// `-` reads from standard input. Here `codesign` gets no input, so `-` makes `.await` fail
+        /// with [`Error::StdioPath`](crate::Error::StdioPath) before anything runs.
+        ///
+        /// # Examples
+        ///
+        /// ```no_run
+        /// # async fn run() -> signers::Result<()> {
+        /// use signers::codesign;
+        ///
+        /// codesign::sign("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
+        ///     .requirements("=designated => identifier \"com.example.myapp\" and anchor apple generic")
+        ///     .await?;
+        /// # Ok(()) }
+        /// ```
+        requirements: Option<impl Into<String>>,
+        /// Prefixes a derived identifier that contains no dot, e.g. with `com.example.` (`--prefix`).
+        ///
+        /// Include the trailing dot. It has no effect when you set
+        /// [`identifier`](Self::identifier).
+        prefix: Option<impl Into<String>>,
+        /// Looks up the signing identity in this keychain only (`--keychain`).
+        ///
+        /// The keychain doesn't need to be on the search list, so a temporary one works. The
+        /// certificate chain still comes from the search list only.
+        keychain: Option<impl Into<PathBuf>>,
 
-    // Identity and requirements
-    identifier: Option<String>,
-    requirements: Option<String>,
-    prefix: Option<String>,
-    keychain: Option<PathBuf>,
+        // Entitlements and security
+        /// Embeds the entitlements in this plist (`--entitlements`).
+        ///
+        /// `codesign` leaves them out of libraries unless you also set
+        /// [`force_library_entitlements`](Self::force_library_entitlements).
+        entitlements: Option<impl Into<PathBuf>>,
+        /// Embeds the entitlements in libraries too, not only in main executables
+        /// (`--force-library-entitlements`).
+        ///
+        /// Without it, `codesign` signs a library with no entitlements and reports no error.
+        force_library_entitlements: bool,
+        /// Embeds the entitlements as DER as well as XML (`--generate-entitlement-der`).
+        ///
+        /// This has been the default since macOS 12.
+        generate_entitlement_der: bool,
+        /// Sets the code signing flags to seal (`--options`).
+        ///
+        /// This replaces the whole set, including the one from
+        /// [`sign_for_distribution`](crate::codesign::sign_for_distribution).
+        options: SigningFlags,
+        /// Records this hardened runtime version instead of the SDK's (`--runtime-version`).
+        ///
+        /// Only takes effect with [`SigningFlags::RUNTIME`]. Without that flag, `codesign` ignores it.
+        runtime_version: Option<impl Into<String>>,
+        /// Embeds the launch constraint in this plist, on the executable itself
+        /// (`--launch-constraint-self`).
+        launch_constraint_self: Option<impl Into<PathBuf>>,
+        /// Embeds the launch constraint in this plist, on the executable's parent process
+        /// (`--launch-constraint-parent`).
+        launch_constraint_parent: Option<impl Into<PathBuf>>,
+        /// Embeds the launch constraint in this plist, on the executable's responsible process
+        /// (`--launch-constraint-responsible`).
+        launch_constraint_responsible: Option<impl Into<PathBuf>>,
+        /// Embeds the constraint in this plist on the libraries the executable may load
+        /// (`--library-constraint`).
+        ///
+        /// System libraries are exempt.
+        library_constraint: Option<impl Into<PathBuf>>,
+        /// Makes an invalid constraint fail the signing instead of only warning
+        /// (`--enforce-constraint-validity`).
+        ///
+        /// By default `codesign` reports unknown keys and malformed constraints but signs anyway, so
+        /// you can sign constraints meant for a newer macOS.
+        ///
+        /// <div class="warning">
+        ///
+        /// On macOS 27.0, `codesign` rejects every constraint when this is set, valid ones included,
+        /// with "Failure serializing Lightweight code requirement".
+        ///
+        /// </div>
+        enforce_constraint_validity: bool,
 
-    // Entitlements and security
-    entitlements: Option<PathBuf>,
-    force_library_entitlements: bool,
-    generate_entitlement_der: bool,
-    options: SigningFlags,
-    runtime_version: Option<String>,
-    launch_constraint_self: Option<PathBuf>,
-    launch_constraint_parent: Option<PathBuf>,
-    launch_constraint_responsible: Option<PathBuf>,
-    library_constraint: Option<PathBuf>,
-    enforce_constraint_validity: bool,
+        // Signing behaviour
+        /// Replaces an existing signature instead of failing (`--force`).
+        ///
+        /// Patching a binary breaks its signature but leaves it in place, so re-signing it needs
+        /// `force`. Setting it on an unsigned target does no harm.
+        force: bool,
+        /// Signs the nested code too, applying every option to it as well (`--deep`).
+        ///
+        /// Apple deprecated this for signing in macOS 13, because the options rarely suit the nested
+        /// code. Instead, sign the nested code first and the bundle last, as in the [`Sign`] examples.
+        #[deprecated(
+            since = "0.1.0",
+            note = "Apple deprecated --deep for signing as of macOS 13.0; \
+                    sign nested bundle content explicitly instead"
+        )]
+        deep: bool,
+        /// Reuses parts of the signature being replaced (`--preserve-metadata`).
+        ///
+        /// Needs [`force`](Self::force), since without it there is no replacing.
+        /// Values you set explicitly win over preserved ones. `codesign` ignores this option when the
+        /// old signature came from the linker.
+        preserve_metadata: PreserveMetadata,
+        /// Sets the signing page size in bytes, or `0` for a single page (`--pagesize`).
+        ///
+        /// Anything but a power of two or `0` makes `codesign` fail. Only the main executable is
+        /// affected, not resources.
+        page_size: Option<u32>,
+        /// Sets whether to get a secure timestamp, and from where (`--timestamp`).
+        ///
+        /// If you don't set it, `codesign` decides on its own. The server is contacted during
+        /// `.await`, and if it can't be reached the signing fails. Ad hoc signatures ignore this
+        /// option.
+        timestamp: Option<Timestamp>,
+        /// Signs this version of a versioned bundle instead of the current one (`--bundle-version`).
+        ///
+        /// The version names a directory under the bundle's `Versions`, e.g. `"A"`.
+        bundle_version: Option<impl Into<String>>,
+        /// Removes extended attributes that block signing, such as resource forks
+        /// (`--strip-disallowed-xattrs`).
+        ///
+        /// Without it, a target that carries one fails with "resource fork, Finder information, or
+        /// similar detritus not allowed".
+        strip_disallowed_xattrs: bool,
+        /// Builds the resource seal on one thread (`--single-threaded-signing`).
+        single_threaded_signing: bool,
+        /// Runs the whole signing, identity and keychain access included, but writes nothing
+        /// (`--dryrun`).
+        dry_run: bool,
 
-    // Signing behaviour
-    force: bool,
-    deep: bool,
-    preserve_metadata: PreserveMetadata,
-    page_size: Option<u32>,
-    timestamp: Option<Timestamp>,
-    bundle_version: Option<String>,
-    strip_disallowed_xattrs: bool,
-    single_threaded_signing: bool,
-    dry_run: bool,
-
-    // Output and collateral files
-    detached: Option<PathBuf>,
-    detached_database: bool,
-    file_list: Option<PathBuf>,
+        // Output and collateral files
+        /// Writes the signature to this file and leaves the target unchanged (`--detached`).
+        ///
+        /// Every target's signature goes to this one file, so with
+        /// [`per_target(true)`](Self::per_target) `.await` fails with
+        /// [`Error::SharedOutputPerTarget`](crate::Error::SharedOutputPerTarget).
+        detached: Option<impl Into<PathBuf>>,
+        /// Writes a detached signature to the system database (`--detached-database`).
+        ///
+        /// This needs root. Otherwise `codesign` fails with "cannot access a database" and leaves the
+        /// target unchanged.
+        detached_database: bool,
+        /// Appends to this file the paths that signing may have changed, one per line
+        /// (`--file-list`).
+        ///
+        /// Any file not listed is unchanged. A listed file may be unchanged too.
+        ///
+        /// On the command line, `-` means standard output. Here the crate captures that output, so `-`
+        /// makes `.await` fail with [`Error::StdioPath`](crate::Error::StdioPath) before anything runs.
+        /// With [`per_target(true)`](Self::per_target) it fails with
+        /// [`Error::SharedOutputPerTarget`](crate::Error::SharedOutputPerTarget), since every process
+        /// would append to the same file.
+        file_list: Option<impl Into<PathBuf>>,
+    }
 }
 
-impl Sign {
+impl Options {
     /// Options for `identity`, with everything else at `codesign`'s defaults.
     pub(crate) fn new(identity: impl Into<String>) -> Self {
         Self {
@@ -107,272 +234,9 @@ impl Sign {
     }
 }
 
-/// Signing options, for [`sign`](crate::Codesign#method.sign) and its presets.
-///
-/// Each setter maps to one `codesign` flag. A later call replaces an earlier one, and `false`
-/// leaves a flag out.
-impl<S: Shape, R: Runtime> Runner<Sign, S, R> {
-    /// Seals this identifier instead of deriving one from `Info.plist` or the file name
-    /// (`--identifier`).
-    ///
-    /// Every target in the batch gets this identifier, and each program should have its own.
-    pub fn identifier(mut self, identifier: impl Into<String>) -> Self {
-        self.action.identifier = Some(identifier.into());
-        self
-    }
+impl<S, R> SharedRun for Sign<S, R> {}
 
-    /// Embeds internal requirements from a file, or from source prefixed with `=`
-    /// (`--requirements`).
-    ///
-    /// The kinds of requirement you don't specify get `codesign`'s defaults. On the command line,
-    /// `-` reads from standard input. Here `codesign` gets no input, so `-` makes `.await` fail
-    /// with [`Error::StdioPath`](crate::Error::StdioPath) before anything runs.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
-    ///
-    /// Codesign::sign("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
-    ///     .requirements("=designated => identifier \"com.example.myapp\" and anchor apple generic")
-    ///     .await?;
-    /// # Ok(()) }
-    /// ```
-    pub fn requirements(mut self, requirements: impl Into<String>) -> Self {
-        self.action.requirements = Some(requirements.into());
-        self
-    }
-
-    /// Prefixes a derived identifier that contains no dot, e.g. with `com.example.` (`--prefix`).
-    ///
-    /// Include the trailing dot. It has no effect when you set
-    /// [`identifier`](crate::Codesign#method.identifier).
-    pub fn prefix(mut self, prefix: impl Into<String>) -> Self {
-        self.action.prefix = Some(prefix.into());
-        self
-    }
-
-    /// Looks up the signing identity in this keychain only (`--keychain`).
-    ///
-    /// The keychain doesn't need to be on the search list, so a temporary one works. The
-    /// certificate chain still comes from the search list only.
-    pub fn keychain(mut self, path: impl Into<PathBuf>) -> Self {
-        self.action.keychain = Some(path.into());
-        self
-    }
-
-    /// Embeds the entitlements in this plist (`--entitlements`).
-    ///
-    /// `codesign` leaves them out of libraries unless you also set
-    /// [`force_library_entitlements`](crate::Codesign#method.force_library_entitlements).
-    pub fn entitlements(mut self, path: impl Into<PathBuf>) -> Self {
-        self.action.entitlements = Some(path.into());
-        self
-    }
-
-    /// Embeds the entitlements in libraries too, not only in main executables
-    /// (`--force-library-entitlements`).
-    ///
-    /// Without it, `codesign` signs a library with no entitlements and reports no error.
-    pub fn force_library_entitlements(mut self, force_library_entitlements: bool) -> Self {
-        self.action.force_library_entitlements = force_library_entitlements;
-        self
-    }
-
-    /// Embeds the entitlements as DER as well as XML (`--generate-entitlement-der`).
-    ///
-    /// This has been the default since macOS 12.
-    pub fn generate_entitlement_der(mut self, generate_entitlement_der: bool) -> Self {
-        self.action.generate_entitlement_der = generate_entitlement_der;
-        self
-    }
-
-    /// Sets the code signing flags to seal (`--options`).
-    ///
-    /// This replaces the whole set, including the one from
-    /// [`sign_for_distribution`](crate::Codesign#method.sign_for_distribution).
-    pub fn options(mut self, options: SigningFlags) -> Self {
-        self.action.options = options;
-        self
-    }
-
-    /// Records this hardened runtime version instead of the SDK's (`--runtime-version`).
-    ///
-    /// Only takes effect with [`SigningFlags::RUNTIME`]. Without that flag, `codesign` ignores it.
-    pub fn runtime_version(mut self, version: impl Into<String>) -> Self {
-        self.action.runtime_version = Some(version.into());
-        self
-    }
-
-    /// Embeds the launch constraint in this plist, on the executable itself
-    /// (`--launch-constraint-self`).
-    pub fn launch_constraint_self(mut self, path: impl Into<PathBuf>) -> Self {
-        self.action.launch_constraint_self = Some(path.into());
-        self
-    }
-
-    /// Embeds the launch constraint in this plist, on the executable's parent process
-    /// (`--launch-constraint-parent`).
-    pub fn launch_constraint_parent(mut self, path: impl Into<PathBuf>) -> Self {
-        self.action.launch_constraint_parent = Some(path.into());
-        self
-    }
-
-    /// Embeds the launch constraint in this plist, on the executable's responsible process
-    /// (`--launch-constraint-responsible`).
-    pub fn launch_constraint_responsible(mut self, path: impl Into<PathBuf>) -> Self {
-        self.action.launch_constraint_responsible = Some(path.into());
-        self
-    }
-
-    /// Embeds the constraint in this plist on the libraries the executable may load
-    /// (`--library-constraint`).
-    ///
-    /// System libraries are exempt.
-    pub fn library_constraint(mut self, path: impl Into<PathBuf>) -> Self {
-        self.action.library_constraint = Some(path.into());
-        self
-    }
-
-    /// Makes an invalid constraint fail the signing instead of only warning
-    /// (`--enforce-constraint-validity`).
-    ///
-    /// By default `codesign` reports unknown keys and malformed constraints but signs anyway, so
-    /// you can sign constraints meant for a newer macOS.
-    ///
-    /// <div class="warning">
-    ///
-    /// On macOS 27.0, `codesign` rejects every constraint when this is set, valid ones included,
-    /// with "Failure serializing Lightweight code requirement".
-    ///
-    /// </div>
-    pub fn enforce_constraint_validity(mut self, enforce_constraint_validity: bool) -> Self {
-        self.action.enforce_constraint_validity = enforce_constraint_validity;
-        self
-    }
-
-    /// Replaces an existing signature instead of failing (`--force`).
-    ///
-    /// Patching a binary breaks its signature but leaves it in place, so re-signing it needs
-    /// `force`. Setting it on an unsigned target does no harm.
-    pub fn force(mut self, force: bool) -> Self {
-        self.action.force = force;
-        self
-    }
-
-    /// Signs the nested code too, applying every option to it as well (`--deep`).
-    ///
-    /// Apple deprecated this for signing in macOS 13, because the options rarely suit the nested
-    /// code. Instead, sign the nested code first and the bundle last, as in the [`Sign`] examples.
-    #[deprecated(
-        since = "0.1.0",
-        note = "Apple deprecated --deep for signing as of macOS 13.0; \
-                sign nested bundle content explicitly instead"
-    )]
-    pub fn deep(mut self, deep: bool) -> Self {
-        self.action.deep = deep;
-        self
-    }
-
-    /// Reuses parts of the signature being replaced (`--preserve-metadata`).
-    ///
-    /// Needs [`force`](crate::Codesign#method.force), since without it there is no replacing.
-    /// Values you set explicitly win over preserved ones. `codesign` ignores this option when the
-    /// old signature came from the linker.
-    pub fn preserve_metadata(mut self, metadata: PreserveMetadata) -> Self {
-        self.action.preserve_metadata = metadata;
-        self
-    }
-
-    /// Sets the signing page size in bytes, or `0` for a single page (`--pagesize`).
-    ///
-    /// Anything but a power of two or `0` makes `codesign` fail. Only the main executable is
-    /// affected, not resources.
-    pub fn page_size(mut self, page_size: u32) -> Self {
-        self.action.page_size = Some(page_size);
-        self
-    }
-
-    /// Sets whether to get a secure timestamp, and from where (`--timestamp`).
-    ///
-    /// If you don't set it, `codesign` decides on its own. The server is contacted during
-    /// `.await`, and if it can't be reached the signing fails. Ad hoc signatures ignore this
-    /// option.
-    pub fn timestamp(mut self, timestamp: Timestamp) -> Self {
-        self.action.timestamp = Some(timestamp);
-        self
-    }
-
-    /// Signs this version of a versioned bundle instead of the current one (`--bundle-version`).
-    ///
-    /// `version` names a directory under the bundle's `Versions`, e.g. `"A"`.
-    pub fn bundle_version(mut self, version: impl Into<String>) -> Self {
-        self.action.bundle_version = Some(version.into());
-        self
-    }
-
-    /// Removes extended attributes that block signing, such as resource forks
-    /// (`--strip-disallowed-xattrs`).
-    ///
-    /// Without it, a target that carries one fails with "resource fork, Finder information, or
-    /// similar detritus not allowed".
-    pub fn strip_disallowed_xattrs(mut self, strip_disallowed_xattrs: bool) -> Self {
-        self.action.strip_disallowed_xattrs = strip_disallowed_xattrs;
-        self
-    }
-
-    /// Builds the resource seal on one thread (`--single-threaded-signing`).
-    pub fn single_threaded_signing(mut self, single_threaded_signing: bool) -> Self {
-        self.action.single_threaded_signing = single_threaded_signing;
-        self
-    }
-
-    /// Runs the whole signing, identity and keychain access included, but writes nothing
-    /// (`--dryrun`).
-    pub fn dry_run(mut self, dry_run: bool) -> Self {
-        self.action.dry_run = dry_run;
-        self
-    }
-
-    /// Writes the signature to this file and leaves the target unchanged (`--detached`).
-    ///
-    /// Every target's signature goes to this one file, so with
-    /// [`per_target(true)`](crate::Codesign#method.per_target) `.await` fails with
-    /// [`Error::SharedOutputPerTarget`](crate::Error::SharedOutputPerTarget).
-    pub fn detached(mut self, path: impl Into<PathBuf>) -> Self {
-        self.action.detached = Some(path.into());
-        self
-    }
-
-    /// Writes a detached signature to the system database (`--detached-database`).
-    ///
-    /// This needs root. Otherwise `codesign` fails with "cannot access a database" and leaves the
-    /// target unchanged.
-    pub fn detached_database(mut self, detached_database: bool) -> Self {
-        self.action.detached_database = detached_database;
-        self
-    }
-
-    /// Appends to this file the paths that signing may have changed, one per line
-    /// (`--file-list`).
-    ///
-    /// Any file not listed is unchanged. A listed file may be unchanged too.
-    ///
-    /// On the command line, `-` means standard output. Here the crate captures that output, so `-`
-    /// makes `.await` fail with [`Error::StdioPath`](crate::Error::StdioPath) before anything runs.
-    /// With [`per_target(true)`](crate::Codesign#method.per_target) it fails with
-    /// [`Error::SharedOutputPerTarget`](crate::Error::SharedOutputPerTarget), since every process
-    /// would append to the same file.
-    pub fn file_list(mut self, path: impl Into<PathBuf>) -> Self {
-        self.action.file_list = Some(path.into());
-        self
-    }
-}
-
-impl SharedRun for Sign {}
-
-impl ToArgs for Sign {
+impl ToArgs for Options {
     type Output = ();
     const PER_TARGET: bool = false;
 
@@ -512,7 +376,7 @@ mod tests {
     use std::ffi::OsString;
 
     use super::*;
-    use crate::codesign::Codesign;
+    use crate::codesign::{sign, sign_adhoc, sign_for_distribution};
 
     fn os(strings: &[&str]) -> Vec<OsString> {
         strings.iter().map(OsString::from).collect()
@@ -520,10 +384,10 @@ mod tests {
 
     /// Renders the arguments, taking ownership so assertions can compare them
     /// against plain `OsString`s.
-    fn args_of<S>(builder: &Codesign<Sign, S>) -> Vec<OsString> {
+    fn args_of<S>(builder: &Sign<S>) -> Vec<OsString> {
         builder
-            .action
-            .to_args(&builder.targets)
+            .options
+            .to_args(&builder.core.targets)
             .into_iter()
             .map(Cow::into_owned)
             .collect()
@@ -532,7 +396,7 @@ mod tests {
     #[test]
     fn bare_action_only_signs() {
         assert_eq!(
-            args_of(&Codesign::sign("app", "-")),
+            args_of(&sign("app", "-")),
             os(&["--sign", "-", "--", "app"])
         );
     }
@@ -540,7 +404,7 @@ mod tests {
     #[test]
     fn adhoc_signs_with_dash_identity() {
         assert_eq!(
-            args_of(&Codesign::sign_adhoc("app")),
+            args_of(&sign_adhoc("app")),
             os(&["--sign", "-", "--", "app"])
         );
     }
@@ -548,7 +412,7 @@ mod tests {
     #[test]
     fn for_distribution_enables_hardened_runtime_and_timestamp() {
         assert_eq!(
-            args_of(&Codesign::sign_for_distribution("app", "Developer ID")),
+            args_of(&sign_for_distribution("app", "Developer ID")),
             os(&[
                 "--sign",
                 "Developer ID",
@@ -564,7 +428,7 @@ mod tests {
     #[test]
     #[expect(deprecated, reason = "`--deep` is still rendered, deprecated or not")]
     fn scalar_setters_are_forwarded() {
-        let action = Codesign::sign("app", "Developer ID")
+        let action = sign("app", "Developer ID")
             .identifier("com.example.app")
             .entitlements("app.entitlements")
             .force(true)
@@ -600,7 +464,7 @@ mod tests {
     #[test]
     #[expect(deprecated, reason = "`--deep` is still rendered, deprecated or not")]
     fn every_option_renders_exactly_once() {
-        let action = Codesign::sign("app", "Developer ID")
+        let action = sign("app", "Developer ID")
             .identifier("com.example.app")
             .requirements("=designated => anchor apple")
             .prefix("com.example.")
@@ -698,7 +562,7 @@ mod tests {
     #[test]
     fn empty_flag_sets_render_no_argument_at_all() {
         // Not `--options ""`, which `codesign` rejects: the option is dropped.
-        let action = Codesign::sign("app", "-")
+        let action = sign("app", "-")
             .options(SigningFlags::empty())
             .preserve_metadata(PreserveMetadata::empty());
         assert_eq!(args_of(&action), os(&["--sign", "-", "--", "app"]));
@@ -706,7 +570,7 @@ mod tests {
 
     #[test]
     fn flag_sets_render_in_declaration_order() {
-        let action = Codesign::sign("app", "-")
+        let action = sign("app", "-")
             .options(SigningFlags::RUNTIME | SigningFlags::KILL)
             .preserve_metadata(PreserveMetadata::ENTITLEMENTS | PreserveMetadata::IDENTIFIER);
         assert_eq!(
@@ -725,7 +589,7 @@ mod tests {
 
     #[test]
     fn flag_sets_replace_rather_than_accumulate() {
-        let action = Codesign::sign("app", "-")
+        let action = sign("app", "-")
             .options(SigningFlags::RUNTIME)
             .options(SigningFlags::LIBRARY);
         assert_eq!(
@@ -739,7 +603,7 @@ mod tests {
     /// request followed by a target named `none`.
     #[test]
     fn timestamp_variants_each_render_as_one_argument() {
-        let rendered = |timestamp| args_of(&Codesign::sign("app", "-").timestamp(timestamp));
+        let rendered = |timestamp| args_of(&sign("app", "-").timestamp(timestamp));
         assert_eq!(
             rendered(Timestamp::Enabled),
             os(&["--sign", "-", "--timestamp", "--", "app"]),
@@ -756,7 +620,7 @@ mod tests {
 
     #[test]
     fn every_constraint_kind_is_emitted() {
-        let action = Codesign::sign("app", "-")
+        let action = sign("app", "-")
             .library_constraint("library.plist")
             .launch_constraint_self("self.plist")
             .launch_constraint_parent("parent.plist")
@@ -782,7 +646,7 @@ mod tests {
 
     #[test]
     fn repeating_a_constraint_kind_keeps_the_last_path() {
-        let action = Codesign::sign("app", "-")
+        let action = sign("app", "-")
             .launch_constraint_self("first.plist")
             .launch_constraint_self("third.plist");
         assert_eq!(
@@ -800,8 +664,8 @@ mod tests {
 
     #[test]
     fn a_file_list_of_stdout_fails_validation() {
-        let action = Codesign::sign("app", "-").file_list("-");
-        let error = action.action.validate().unwrap_err();
+        let action = sign("app", "-").file_list("-");
+        let error = action.options.validate().unwrap_err();
         assert!(
             matches!(error, crate::errors::Error::StdioPath("file_list")),
             "got {error:?}"
@@ -810,14 +674,14 @@ mod tests {
 
     #[test]
     fn a_file_list_pointing_at_a_real_path_passes_validation() {
-        let action = Codesign::sign("app", "-").file_list("signed.txt");
-        assert!(action.action.validate().is_ok());
+        let action = sign("app", "-").file_list("signed.txt");
+        assert!(action.options.validate().is_ok());
     }
 
     #[test]
     fn requirements_of_stdin_fail_validation() {
-        let action = Codesign::sign("app", "-").requirements("-");
-        let error = action.action.validate().unwrap_err();
+        let action = sign("app", "-").requirements("-");
+        let error = action.options.validate().unwrap_err();
         assert!(
             matches!(error, crate::errors::Error::StdioPath("requirements")),
             "got {error:?}"
@@ -829,15 +693,15 @@ mod tests {
     #[test]
     fn requirements_other_than_a_lone_dash_pass_validation() {
         for value in ["=-", "= -", "-x", "--", "./-", "-/a.rqset", " -", "- ", ""] {
-            let action = Codesign::sign("app", "-").requirements(value);
-            assert!(action.action.validate().is_ok(), "{value:?}");
+            let action = sign("app", "-").requirements(value);
+            assert!(action.options.validate().is_ok(), "{value:?}");
         }
     }
 
     /// `codesign` reads these `-` as a plain file name, so they are not refused.
     #[test]
     fn a_dash_in_any_other_option_passes_validation() {
-        let action = Codesign::sign("app", "-")
+        let action = sign("app", "-")
             .entitlements("-")
             .detached("-")
             .keychain("-")
@@ -847,12 +711,12 @@ mod tests {
             .library_constraint("-")
             .identifier("-")
             .prefix("-");
-        assert!(action.action.validate().is_ok());
+        assert!(action.options.validate().is_ok());
     }
 
     #[test]
     fn requirements_source_text_is_one_argument_after_the_flag() {
-        let action = Codesign::sign("app", "-").requirements("=designated => anchor apple");
+        let action = sign("app", "-").requirements("=designated => anchor apple");
         assert_eq!(
             args_of(&action),
             os(&[
@@ -868,7 +732,7 @@ mod tests {
 
     #[test]
     fn targets_come_last() {
-        let action = Codesign::sign(vec!["a.app", "b.app"], "-").force(true);
+        let action = sign(vec!["a.app", "b.app"], "-").force(true);
         assert_eq!(
             args_of(&action),
             os(&["--sign", "-", "--force", "--", "a.app", "b.app"])
@@ -877,7 +741,7 @@ mod tests {
 
     #[test]
     fn the_output_is_one_unit_per_target_whatever_codesign_printed() {
-        let action = Codesign::sign("app", "-").action;
+        let action = sign("app", "-").options;
         let targets = [PathBuf::from("a"), PathBuf::from("b"), PathBuf::from("c")];
 
         let silent: Vec<()> = action
@@ -896,39 +760,43 @@ mod tests {
     /// unless the caller asks otherwise.
     #[test]
     fn every_constructor_defaults_to_one_process_for_all_targets() {
-        assert!(!Codesign::sign("app", "-").per_target);
-        assert!(!Codesign::sign_adhoc(vec!["a.app", "b.app"]).per_target);
-        assert!(!Codesign::sign_for_distribution(["a.app", "b.app"], "Developer ID").per_target);
+        assert!(!sign("app", "-").core.per_target);
+        assert!(!sign_adhoc(vec!["a.app", "b.app"]).core.per_target);
+        assert!(
+            !sign_for_distribution(["a.app", "b.app"], "Developer ID")
+                .core
+                .per_target
+        );
     }
 
     #[test]
     fn per_target_keeps_the_last_value_and_renders_no_argument() {
-        let action = Codesign::sign(vec!["app"], "-").per_target(true);
-        assert!(action.per_target);
+        let action = sign(vec!["app"], "-").per_target(true);
+        assert!(action.core.per_target);
         assert_eq!(args_of(&action), os(&["--sign", "-", "--", "app"]));
 
         let action = action.per_target(false);
-        assert!(!action.per_target);
+        assert!(!action.core.per_target);
         assert_eq!(args_of(&action), os(&["--sign", "-", "--", "app"]));
     }
 
     #[test]
     fn only_options_writing_one_shared_file_are_reported_as_shared_output() {
-        let shared = |builder: Codesign<Sign>| builder.action.shared_output();
+        let shared = |builder: Sign| builder.options.shared_output();
 
-        assert_eq!(shared(Codesign::sign("app", "-")), None);
+        assert_eq!(shared(sign("app", "-")), None);
         assert_eq!(
-            shared(Codesign::sign("app", "-").file_list("signed.txt")),
+            shared(sign("app", "-").file_list("signed.txt")),
             Some("file_list")
         );
         assert_eq!(
-            shared(Codesign::sign("app", "-").detached("app.sig")),
+            shared(sign("app", "-").detached("app.sig")),
             Some("detached")
         );
         // The other options that take a path only read it.
         assert_eq!(
             shared(
-                Codesign::sign("app", "-")
+                sign("app", "-")
                     .entitlements("app.entitlements")
                     .keychain("build.keychain")
                     .detached_database(true)
@@ -941,14 +809,10 @@ mod tests {
     #[test]
     fn the_file_list_is_the_shared_output_named_when_both_are_set() {
         for action in [
-            Codesign::sign("app", "-")
-                .file_list("signed.txt")
-                .detached("app.sig"),
-            Codesign::sign("app", "-")
-                .detached("app.sig")
-                .file_list("signed.txt"),
+            sign("app", "-").file_list("signed.txt").detached("app.sig"),
+            sign("app", "-").detached("app.sig").file_list("signed.txt"),
         ] {
-            assert_eq!(action.action.shared_output(), Some("file_list"));
+            assert_eq!(action.options.shared_output(), Some("file_list"));
         }
     }
 
@@ -956,7 +820,7 @@ mod tests {
     /// stays the generic failure, whatever it printed on standard output.
     #[test]
     fn a_failed_run_is_reported_with_its_code_and_diagnostics() {
-        let action = Codesign::sign("app", "-").action;
+        let action = sign("app", "-").options;
         for code in [1, 2, 3] {
             match action.failure(
                 code,

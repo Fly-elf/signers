@@ -4,8 +4,8 @@
 
 use std::path::{Path, PathBuf};
 
-use signers::Codesign;
 use signers::codesign::SignatureSlot;
+use signers::codesign::display;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect;
@@ -50,8 +50,8 @@ async fn the_first_slot_reads_the_same_report_as_no_slot() {
     let target = workspace.presigned("hello", &["-i", "com.example.slot"]);
 
     for path in [target.as_path(), Path::new("/bin/ls")] {
-        let default = Codesign::display(path).await.unwrap();
-        let first = Codesign::display(path)
+        let default = display(path).await.unwrap();
+        let first = display(path)
             .signature_slot(SignatureSlot::First)
             .await
             .unwrap();
@@ -66,7 +66,7 @@ async fn the_second_slot_of_an_ad_hoc_binary_follows_codesign() {
     let workspace = Workspace::new();
     let target = workspace.presigned("hello", &["-i", "com.example.slot"]);
 
-    let signature = Codesign::display(&target)
+    let signature = display(&target)
         .signature_slot(SignatureSlot::Second)
         .await
         .unwrap();
@@ -81,10 +81,7 @@ async fn an_unsigned_target_fails_in_either_slot() {
     let target = workspace.unsigned("hello");
 
     for slot in [SignatureSlot::First, SignatureSlot::Second] {
-        let error = Codesign::display(&target)
-            .signature_slot(slot)
-            .await
-            .unwrap_err();
+        let error = display(&target).signature_slot(slot).await.unwrap_err();
 
         let stderr = crate::codesign_error(error);
         assert!(
@@ -99,7 +96,7 @@ async fn the_last_slot_wins() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
 
-    let signature = Codesign::display(&target)
+    let signature = display(&target)
         .signature_slot(SignatureSlot::Second)
         .signature_slot(SignatureSlot::First)
         .await
@@ -117,7 +114,7 @@ async fn a_slot_applies_to_every_target_of_a_collection() {
     ];
 
     for per_target in [true, false] {
-        let signatures = Codesign::display(targets.clone())
+        let signatures = display(targets.clone())
             .signature_slot(SignatureSlot::First)
             .per_target(per_target)
             .await
@@ -135,7 +132,7 @@ async fn a_slot_combines_with_the_other_display_options() {
     let app = workspace.app_bundle("Host");
     super::adhoc_sign(&app, &[]);
 
-    let signature = Codesign::display(&app)
+    let signature = display(&app)
         .signature_slot(SignatureSlot::First)
         .deep(true)
         .await
@@ -174,7 +171,7 @@ fn no_signature(error: signers::Error) -> (String, String) {
 
 #[tokio::test]
 async fn a_slot_the_target_has_no_signature_in_is_no_signature() {
-    let error = Codesign::display("/bin/ls")
+    let error = display("/bin/ls")
         .signature_slot(SignatureSlot::Second)
         .await
         .unwrap_err();
@@ -189,7 +186,7 @@ async fn a_slot_the_target_has_no_signature_in_is_no_signature() {
 
 #[tokio::test]
 async fn no_signature_says_so_in_its_message() {
-    let error = Codesign::display("/bin/ls")
+    let error = display("/bin/ls")
         .signature_slot(SignatureSlot::Second)
         .await
         .unwrap_err();
@@ -199,7 +196,7 @@ async fn no_signature_says_so_in_its_message() {
 
 #[tokio::test]
 async fn the_first_slot_of_the_same_binary_is_not_an_error() {
-    let signature = Codesign::display("/bin/ls")
+    let signature = display("/bin/ls")
         .signature_slot(SignatureSlot::First)
         .await
         .unwrap();
@@ -213,7 +210,7 @@ async fn one_run_over_several_targets_fails_as_a_whole_with_both_reports() {
     let target = workspace.presigned("hello", &["-i", "com.example.slot"]);
     let path = target.to_str().unwrap();
 
-    let error = Codesign::display(vec![path, "/bin/ls"])
+    let error = display(vec![path, "/bin/ls"])
         .signature_slot(SignatureSlot::Second)
         .per_target(false)
         .await
@@ -232,7 +229,7 @@ async fn per_target_collects_the_targets_without_a_signature() {
     let workspace = Workspace::new();
     let target = workspace.presigned("hello", &["-i", "com.example.slot"]);
 
-    let error = Codesign::display(vec![target.clone(), PathBuf::from("/bin/ls")])
+    let error = display(vec![target.clone(), PathBuf::from("/bin/ls")])
         .signature_slot(SignatureSlot::Second)
         .await
         .unwrap_err();
