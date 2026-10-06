@@ -5,6 +5,7 @@ use std::path::Path;
 
 use signers::blocking::Codesign;
 use signers::codesign::RequirementKind;
+use signers::codesign::blocking::remove_signature;
 
 use crate::support::fixture::{Workspace, fixture};
 use crate::support::inspect;
@@ -43,7 +44,7 @@ fn remove_signature_strips_the_signature() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
 
-    let () = Codesign::remove_signature(&target).run().unwrap();
+    let () = remove_signature(&target).run().unwrap();
 
     assert!(!inspect::is_signed(&target), "the signature is still there");
 }
