@@ -144,3 +144,9 @@ pub fn sign_for_distribution<T: IntoTargets>(
 ) -> Sign<T::Shape> {
     super::Sign::new(target, sign::Options::for_distribution(identity))
 }
+
+pub type Verify<S = One> = super::Verify<S, Blocking>;
+
+pub fn verify<T: IntoTargets>(target: T) -> Verify<T::Shape> {
+    super::Verify::new(target, Default::default())
+}
