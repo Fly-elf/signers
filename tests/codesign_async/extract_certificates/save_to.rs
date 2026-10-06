@@ -1,11 +1,12 @@
 //! `save_to`: one PEM file per target with a chain, named after the target,
 //! never overwriting anything, plus the I/O failures it can run into.
 
+use signers::codesign::extract_certificates;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use signers::{Codesign, Error};
+use signers::Error;
 
 use super::{PLATFORM_BINARY, SYSTEM_APP, ders, expected_pem, file_names, platform_copy, read};
 use crate::support::fixture::Workspace;
@@ -17,10 +18,7 @@ async fn the_chain_is_written_as_pem_named_after_the_target() {
     let target = platform_copy(&workspace, "tool");
     let out = workspace.dir("out");
 
-    let chain = Codesign::extract_certificates(&target)
-        .save_to(&out)
-        .await
-        .unwrap();
+    let chain = extract_certificates(&target).save_to(&out).await.unwrap();
 
     assert_eq!(file_names(&out), ["tool.pem"]);
     assert_eq!(read(&out, "tool.pem"), expected_pem(&target));
@@ -34,7 +32,7 @@ async fn the_pem_file_round_trips_to_the_chain() {
     let workspace = Workspace::new();
     let out = workspace.join("out");
 
-    let chain = Codesign::extract_certificates(PLATFORM_BINARY)
+    let chain = extract_certificates(PLATFORM_BINARY)
         .save_to(&out)
         .await
         .unwrap();
@@ -55,7 +53,7 @@ async fn a_bundle_is_saved_under_its_bundle_name() {
     let workspace = Workspace::new();
     let out = workspace.join("out");
 
-    Codesign::extract_certificates(SYSTEM_APP)
+    extract_certificates(SYSTEM_APP)
         .save_to(&out)
         .await
         .unwrap();
@@ -75,10 +73,7 @@ async fn a_target_ending_in_a_parent_reference_is_named_after_what_it_resolves_t
     let out = workspace.join("out");
     let target = Path::new(SYSTEM_APP).join("Contents/..");
 
-    Codesign::extract_certificates(&target)
-        .save_to(&out)
-        .await
-        .unwrap();
+    extract_certificates(&target).save_to(&out).await.unwrap();
 
     assert_eq!(file_names(&out), ["Calculator.app.pem"]);
 }
@@ -92,7 +87,7 @@ async fn the_same_path_repeated_gets_numbered_files() {
     let out = workspace.join("out");
     let expected = expected_pem(Path::new(PLATFORM_BINARY));
 
-    let chains = Codesign::extract_certificates(vec![PLATFORM_BINARY; 3])
+    let chains = extract_certificates(vec![PLATFORM_BINARY; 3])
         .save_to(&out)
         .await
         .unwrap();
@@ -119,10 +114,7 @@ async fn targets_sharing_a_file_name_across_directories_get_numbered_files() {
     ];
     let out = workspace.join("out");
 
-    Codesign::extract_certificates(targets)
-        .save_to(&out)
-        .await
-        .unwrap();
+    extract_certificates(targets).save_to(&out).await.unwrap();
 
     assert_eq!(file_names(&out), ["ls.pem", "ls2.pem", "ls3.pem"]);
 }
@@ -135,7 +127,7 @@ async fn files_already_there_are_never_overwritten() {
     fs::write(out.join("ls3.pem"), "third\n").unwrap();
     let expected = expected_pem(Path::new(PLATFORM_BINARY));
 
-    Codesign::extract_certificates(vec![PLATFORM_BINARY; 2])
+    extract_certificates(vec![PLATFORM_BINARY; 2])
         .save_to(&out)
         .await
         .unwrap();
@@ -154,7 +146,7 @@ async fn files_already_there_are_never_overwritten() {
 async fn running_again_into_the_same_directory_adds_a_file() {
     let workspace = Workspace::new();
     let out = workspace.join("out");
-    let builder = Codesign::extract_certificates(PLATFORM_BINARY).save_to(&out);
+    let builder = extract_certificates(PLATFORM_BINARY).save_to(&out);
 
     builder.clone().await.unwrap();
     builder.await.unwrap();
@@ -169,7 +161,7 @@ async fn an_ad_hoc_target_gets_no_file() {
     let signed = platform_copy(&workspace, "signed");
     let out = workspace.dir("out");
 
-    let chains = Codesign::extract_certificates(vec![adhoc.clone(), signed])
+    let chains = extract_certificates(vec![adhoc.clone(), signed])
         .save_to(&out)
         .await
         .unwrap();
@@ -177,10 +169,7 @@ async fn an_ad_hoc_target_gets_no_file() {
     assert_eq!(chains[0], []);
     assert_eq!(file_names(&out), ["signed.pem"]);
 
-    let chain = Codesign::extract_certificates(&adhoc)
-        .save_to(&out)
-        .await
-        .unwrap();
+    let chain = extract_certificates(&adhoc).save_to(&out).await.unwrap();
     assert_eq!(chain, []);
     assert_eq!(file_names(&out), ["signed.pem"]);
 }
@@ -190,7 +179,7 @@ async fn a_missing_directory_is_created_with_its_parents() {
     let workspace = Workspace::new();
     let out = workspace.join("not/there/yet");
 
-    Codesign::extract_certificates(PLATFORM_BINARY)
+    extract_certificates(PLATFORM_BINARY)
         .save_to(&out)
         .await
         .unwrap();
@@ -204,7 +193,7 @@ async fn the_last_directory_set_wins() {
     let first = workspace.join("first");
     let last = workspace.join("last");
 
-    Codesign::extract_certificates(PLATFORM_BINARY)
+    extract_certificates(PLATFORM_BINARY)
         .save_to(&first)
         .save_to(&last)
         .await
@@ -230,10 +219,7 @@ async fn awkward_target_names_carry_over_to_the_file_name() {
         .collect();
     let out = workspace.join("out");
 
-    Codesign::extract_certificates(targets)
-        .save_to(&out)
-        .await
-        .unwrap();
+    extract_certificates(targets).save_to(&out).await.unwrap();
 
     for name in names {
         let mut file = name.to_owned();
@@ -253,7 +239,7 @@ async fn a_directory_that_is_a_file_is_an_io_error() {
     let workspace = Workspace::new();
     let out = workspace.write("out", "not a directory\n");
 
-    let error = Codesign::extract_certificates(PLATFORM_BINARY)
+    let error = extract_certificates(PLATFORM_BINARY)
         .save_to(&out)
         .await
         .unwrap_err();
@@ -276,7 +262,7 @@ async fn an_io_error_in_a_batch_is_collected_per_target() {
     let signed = platform_copy(&workspace, "signed");
     let targets = vec![PathBuf::from(PLATFORM_BINARY), signed.clone()];
 
-    let error = Codesign::extract_certificates(targets)
+    let error = extract_certificates(targets)
         .save_to(&out)
         .await
         .unwrap_err();
@@ -303,9 +289,7 @@ async fn a_read_only_directory_is_an_io_error() {
     let out = workspace.dir("out");
     fs::set_permissions(&out, fs::Permissions::from_mode(0o555)).unwrap();
 
-    let result = Codesign::extract_certificates(PLATFORM_BINARY)
-        .save_to(&out)
-        .await;
+    let result = extract_certificates(PLATFORM_BINARY).save_to(&out).await;
 
     fs::set_permissions(&out, fs::Permissions::from_mode(0o755)).unwrap();
     match result.unwrap_err() {

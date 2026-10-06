@@ -4,7 +4,8 @@
 
 use std::path::PathBuf;
 
-use signers::{Codesign, CodesignError, Error};
+use signers::codesign::verify;
+use signers::{CodesignError, Error};
 
 use super::{break_signature, requirement_unsatisfied, verification_failed};
 use crate::support::fixture::Workspace;
@@ -16,15 +17,9 @@ async fn every_valid_target_verifies() {
         .map(|name| workspace.adhoc_signed(name))
         .into();
 
-    let outputs: Vec<()> = Codesign::verify(targets.clone()).await.unwrap();
-    let explicit: Vec<()> = Codesign::verify(targets.clone())
-        .per_target(true)
-        .await
-        .unwrap();
-    let together: Vec<()> = Codesign::verify(targets.clone())
-        .per_target(false)
-        .await
-        .unwrap();
+    let outputs: Vec<()> = verify(targets.clone()).await.unwrap();
+    let explicit: Vec<()> = verify(targets.clone()).per_target(true).await.unwrap();
+    let together: Vec<()> = verify(targets.clone()).per_target(false).await.unwrap();
 
     assert_eq!(outputs.len(), 3);
     assert_eq!(explicit.len(), 3);
@@ -36,8 +31,8 @@ async fn an_array_of_targets_yields_an_array_of_the_same_length() {
     let workspace = Workspace::new();
     let targets = ["first", "second"].map(|name| workspace.adhoc_signed(name));
 
-    let [(), ()] = Codesign::verify(targets.clone()).await.unwrap();
-    let [(), ()] = Codesign::verify(targets).per_target(false).await.unwrap();
+    let [(), ()] = verify(targets.clone()).await.unwrap();
+    let [(), ()] = verify(targets).per_target(false).await.unwrap();
 }
 
 #[tokio::test]
@@ -45,7 +40,7 @@ async fn a_slice_of_targets_yields_a_vec() {
     let workspace = Workspace::new();
     let targets = ["first", "second", "third"].map(|name| workspace.adhoc_signed(name));
 
-    let outputs: Vec<()> = Codesign::verify(&targets[..2]).await.unwrap();
+    let outputs: Vec<()> = verify(&targets[..2]).await.unwrap();
 
     assert_eq!(outputs.len(), 2);
 }
@@ -67,7 +62,7 @@ async fn every_failing_target_is_collected_in_input_order() {
         missing_signature.clone(),
     ];
 
-    let error = Codesign::verify(batch).await.unwrap_err();
+    let error = verify(batch).await.unwrap_err();
 
     let Error::Batch(failures) = error else {
         panic!("expected a batch, got {error:?}");
@@ -92,7 +87,7 @@ async fn failures_are_not_mixed_up_between_targets() {
     let broken = workspace.adhoc_signed("broken");
     break_signature(&broken);
 
-    let error = Codesign::verify(vec![broken.clone(), unsigned.clone()])
+    let error = verify(vec![broken.clone(), unsigned.clone()])
         .await
         .unwrap_err();
 
@@ -123,7 +118,7 @@ async fn a_batch_can_mix_broken_signatures_and_unsatisfied_requirements() {
     break_signature(&broken);
     let valid = workspace.adhoc_signed("valid");
 
-    let error = Codesign::verify(vec![broken.clone(), valid.clone()])
+    let error = verify(vec![broken.clone(), valid.clone()])
         .test_requirement("anchor apple")
         .await
         .unwrap_err();
@@ -142,8 +137,8 @@ async fn a_single_failure_in_a_collection_is_still_a_batch() {
     let workspace = Workspace::new();
     let unsigned = workspace.unsigned("unsigned");
 
-    let in_a_list = Codesign::verify(vec![unsigned.clone()]).await.unwrap_err();
-    let in_an_array = Codesign::verify([unsigned.clone()]).await.unwrap_err();
+    let in_a_list = verify(vec![unsigned.clone()]).await.unwrap_err();
+    let in_an_array = verify([unsigned.clone()]).await.unwrap_err();
 
     for error in [in_a_list, in_an_array] {
         let Error::Batch(failures) = error else {
@@ -162,7 +157,7 @@ async fn a_single_target_fails_with_its_plain_error() {
     let workspace = Workspace::new();
     let unsigned = workspace.unsigned("unsigned");
 
-    let error = Codesign::verify(&unsigned).await.unwrap_err();
+    let error = verify(&unsigned).await.unwrap_err();
 
     verification_failed(error);
 }
@@ -176,7 +171,7 @@ async fn one_process_stops_at_the_first_failing_target() {
     let first_bad = workspace.unsigned("first-bad");
     let second_bad = workspace.unsigned("second-bad");
 
-    let error = Codesign::verify(vec![good, first_bad.clone(), second_bad.clone()])
+    let error = verify(vec![good, first_bad.clone(), second_bad.clone()])
         .per_target(false)
         .await
         .unwrap_err();
@@ -197,7 +192,7 @@ async fn one_process_reports_an_unsatisfied_requirement_as_one_plain_error() {
     let workspace = Workspace::new();
     let targets = ["first", "second"].map(|name| workspace.adhoc_signed(name));
 
-    let error = Codesign::verify(targets)
+    let error = verify(targets)
         .per_target(false)
         .test_requirement("anchor apple")
         .await
@@ -213,12 +208,12 @@ async fn per_target_keeps_the_last_value() {
     let second = workspace.unsigned("second");
     let batch = vec![first, second];
 
-    let collected = Codesign::verify(batch.clone())
+    let collected = verify(batch.clone())
         .per_target(false)
         .per_target(true)
         .await
         .unwrap_err();
-    let stopped = Codesign::verify(batch)
+    let stopped = verify(batch)
         .per_target(true)
         .per_target(false)
         .await
@@ -237,7 +232,7 @@ async fn options_apply_to_every_target() {
         workspace.adhoc_signed("second"),
     ];
 
-    Codesign::verify(targets)
+    verify(targets)
         .deep(true)
         .strict(signers::codesign::Strict::All)
         .test_requirement("!anchor apple")
@@ -260,7 +255,7 @@ async fn a_large_batch_is_fully_judged() {
         }
     }
 
-    let error = Codesign::verify(batch).await.unwrap_err();
+    let error = verify(batch).await.unwrap_err();
 
     let Error::Batch(failures) = error else {
         panic!("expected a batch, got {error:?}");

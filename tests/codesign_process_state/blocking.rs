@@ -3,7 +3,7 @@
 
 use std::io;
 
-use signers::blocking::Codesign;
+use signers::codesign::blocking::{display, sign_adhoc};
 use signers::{CodesignError, Error};
 
 use crate::executable_path::{ScopedPath, fake_codesign, plain_targets};
@@ -21,8 +21,8 @@ fn a_missing_codesign_binary_is_reported_as_such() {
     let (single, batch) = {
         let _path = ScopedPath::to(&workspace.dir("empty"));
         (
-            Codesign::sign_adhoc(&target).run(),
-            Codesign::sign_adhoc(targets).per_target(true).run(),
+            sign_adhoc(&target).run(),
+            sign_adhoc(targets).per_target(true).run(),
         )
     };
 
@@ -46,7 +46,7 @@ fn a_codesign_that_cannot_be_executed_is_a_spawn_failure() {
 
     let result = {
         let _path = ScopedPath::to(&bin);
-        Codesign::sign_adhoc(&target).run()
+        sign_adhoc(&target).run()
     };
 
     match result.unwrap_err() {
@@ -69,7 +69,7 @@ fn a_codesign_killed_by_a_signal_is_reported_as_terminated() {
 
     let result = {
         let _path = ScopedPath::to(&bin);
-        Codesign::sign_adhoc(&target).run()
+        sign_adhoc(&target).run()
     };
 
     match result.unwrap_err() {
@@ -97,7 +97,7 @@ fn a_report_short_of_the_targets_is_unexpected_output() {
 
     let result = {
         let _path = ScopedPath::to(&bin);
-        Codesign::display(&target).run()
+        display(&target).run()
     };
 
     match result.unwrap_err() {
@@ -140,7 +140,7 @@ fn per_target_processes_overlap() {
 
     let result = {
         let _path = ScopedPath::to(&bin);
-        Codesign::sign_adhoc(targets).per_target(true).run()
+        sign_adhoc(targets).per_target(true).run()
     };
 
     assert_eq!(result.unwrap().len(), 2 * cap);

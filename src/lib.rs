@@ -1,49 +1,48 @@
 //! Sign, re-sign and strip code signatures on macOS, from async or blocking Rust.
 //!
-//! [`Codesign`] runs Apple's `codesign` tool, which ships with macOS. Pick an action with a
-//! constructor, chain its options, then `.await` it inside a Tokio runtime:
+//! [`codesign`] runs Apple's `codesign` tool, which ships with macOS. Call the function of an
+//! action, chain its options, then `.await` it inside a Tokio runtime:
 //!
 //! ```no_run
 //! # async fn run() -> signers::Result<()> {
-//! use signers::Codesign;
+//! use signers::codesign;
 //!
 //! // Re-sign a binary after patching it: `force` replaces the signature the patch broke.
-//! Codesign::sign_adhoc("patched.dylib").force(true).await?;
+//! codesign::sign_adhoc("patched.dylib").force(true).await?;
 //!
 //! // Sign an app for notarization: hardened runtime and a secure timestamp.
-//! Codesign::sign_for_distribution("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
+//! codesign::sign_for_distribution("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
 //!     .entitlements("MyApp.entitlements")
 //!     .await?;
 //! # Ok(()) }
 //! ```
 //!
 //! For code that isn't async, the `blocking` feature adds
-#![cfg_attr(feature = "blocking", doc = "[`blocking::Codesign`]")]
-#![cfg_attr(not(feature = "blocking"), doc = "`blocking::Codesign`")]
-//! with the same actions and options, where `.run()` takes the place of `.await`:
+#![cfg_attr(feature = "blocking", doc = "[`codesign::blocking`]")]
+#![cfg_attr(not(feature = "blocking"), doc = "`codesign::blocking`")]
+//! with the same functions and options, where `.run()` takes the place of `.await`:
 //!
 //! ```no_run
 //! # fn main() -> signers::Result<()> {
-//! use signers::blocking::Codesign;
+//! use signers::codesign::blocking;
 //!
-//! Codesign::sign_adhoc("patched.dylib").force(true).run()?;
+//! blocking::sign_adhoc("patched.dylib").force(true).run()?;
 //! # Ok(()) }
 //! ```
 //!
-//! The Cargo features pick the API: `async`, on by default, provides [`Codesign`]; `blocking`
-//! adds `blocking::Codesign` and turns `async` on too, since `.run()` drives the same async
-//! code on a runtime of its own. At least one of them must be enabled.
+//! The Cargo features pick the API: `async`, on by default, provides the functions of
+//! [`codesign`]; `blocking` adds `codesign::blocking` and turns `async` on too, since `.run()`
+//! drives the same async code on a runtime of its own. At least one of them must be enabled.
 //!
 //! Where to go next:
 //!
-//! - [`Codesign`]: the actions, what `.await` checks before running anything, and running one
-//!   `codesign` per target of a collection. `blocking::Codesign` behaves the same.
-//! - [`codesign`]: everything `Codesign` takes and returns. The action types
-//!   ([`Sign`](codesign::Sign), [`RemoveSignature`](codesign::RemoveSignature),
-//!   [`Verify`](codesign::Verify), [`Display`](codesign::Display),
+//! - [`codesign`]: the actions, what `.await` checks before running anything, and running one
+//!   `codesign` per target of a collection. Each action's builder type
+//!   ([`Sign`](codesign::Sign), [`Verify`](codesign::Verify), [`Display`](codesign::Display),
+//!   [`RemoveSignature`](codesign::RemoveSignature),
 //!   [`ValidateConstraint`](codesign::ValidateConstraint),
-//!   [`ExtractCertificates`](codesign::ExtractCertificates),
-//!   [`InternalRequirements`](codesign::InternalRequirements)) carry more examples for each action.
+//!   [`Requirements`](codesign::Requirements),
+//!   [`ExtractCertificates`](codesign::ExtractCertificates)) lists its options.
 //! - [`IntoTargets`]: what you can pass as targets. One path yields one result; a `Vec`, slice
 //!   or array yields one per target, in a `Vec` or an array.
 //! - [`Error`]: what can fail.
@@ -55,30 +54,6 @@ compile_error!("signers needs the `async` or the `blocking` feature");
 pub mod codesign;
 pub mod errors;
 mod target;
-
-#[cfg(feature = "async")]
-pub use codesign::Codesign;
-/// The blocking API: the same actions, run with `.run()` on the calling thread.
-///
-/// Each `.run()` starts a single-threaded Tokio runtime of its own and drops it before
-/// returning, so the caller needs no runtime. Inside one it panics: async code uses
-/// [`signers::Codesign`](crate::Codesign) instead.
-///
-/// # Examples
-///
-/// ```no_run
-/// # fn main() -> signers::Result<()> {
-/// use signers::blocking::Codesign;
-///
-/// Codesign::sign_adhoc(vec!["mytool", "libfoo.dylib"]).force(true).run()?;
-/// let signature = Codesign::display("mytool").run()?;
-/// println!("{}", signature.identifier);
-/// # Ok(()) }
-/// ```
-#[cfg(feature = "blocking")]
-pub mod blocking {
-    pub use crate::codesign::blocking::Codesign;
-}
 
 pub use errors::{CodesignError, Error, Result};
 pub use target::IntoTargets;

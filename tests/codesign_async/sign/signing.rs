@@ -2,8 +2,8 @@
 //! constructors, identifier derivation, and everything `IntoTargets` accepts to
 //! get there.
 
-use signers::Codesign;
 use signers::codesign::SigningFlags;
+use signers::codesign::{sign, sign_adhoc, sign_for_distribution};
 
 use crate::support::fixture::{Workspace, output_of};
 use crate::support::inspect::{self, Signature};
@@ -18,7 +18,7 @@ async fn an_unsigned_binary_gets_a_valid_ad_hoc_signature() {
         "the fixture started out signed"
     );
 
-    Codesign::sign(&target, "-").await.unwrap();
+    sign(&target, "-").await.unwrap();
 
     inspect::assert_valid(&target);
     let signature = Signature::of(&target);
@@ -37,7 +37,7 @@ async fn an_ad_hoc_signing_needs_no_identity() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    Codesign::sign_adhoc(&target).await.unwrap();
+    sign_adhoc(&target).await.unwrap();
 
     inspect::assert_valid(&target);
     assert_eq!(Signature::of(&target).signature(), "adhoc");
@@ -50,7 +50,7 @@ async fn the_distribution_preset_enables_the_hardened_runtime() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    Codesign::sign_for_distribution(&target, "-").await.unwrap();
+    sign_for_distribution(&target, "-").await.unwrap();
 
     inspect::assert_valid(&target);
     assert_eq!(
@@ -64,7 +64,7 @@ async fn the_distribution_preset_gives_way_to_later_options() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    Codesign::sign_for_distribution(&target, "-")
+    sign_for_distribution(&target, "-")
         .options(SigningFlags::KILL)
         .await
         .unwrap();
@@ -82,7 +82,7 @@ async fn a_signed_binary_still_runs() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    Codesign::sign(&target, "-").await.unwrap();
+    sign(&target, "-").await.unwrap();
 
     assert_eq!(output_of(&target), "hello, signers");
 }
@@ -96,7 +96,7 @@ async fn every_slice_of_a_universal_binary_is_signed() {
         skip!("this toolchain has only one architecture's SDK");
     };
 
-    Codesign::sign(&target, "-")
+    sign(&target, "-")
         .identifier("com.example.universal")
         .await
         .unwrap();
@@ -125,7 +125,7 @@ async fn the_identifier_is_derived_from_the_file_name() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    Codesign::sign(&target, "-").await.unwrap();
+    sign(&target, "-").await.unwrap();
 
     // `codesign` appends a hash of the enclosing directory when the derived
     // identifier contains no dot, so only the stem is predictable.
@@ -138,7 +138,7 @@ async fn an_explicit_identifier_replaces_the_derived_one() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    Codesign::sign(&target, "-")
+    sign(&target, "-")
         .identifier("com.example.explicit")
         .await
         .unwrap();
@@ -151,10 +151,7 @@ async fn a_prefix_completes_a_derived_identifier() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    Codesign::sign(&target, "-")
-        .prefix("com.example.")
-        .await
-        .unwrap();
+    sign(&target, "-").prefix("com.example.").await.unwrap();
 
     assert_eq!(Signature::of(&target).identifier(), "com.example.hello");
 }
@@ -164,7 +161,7 @@ async fn every_target_in_a_batch_is_signed() {
     let workspace = Workspace::new();
     let targets = ["first", "second", "third"].map(|name| workspace.unsigned(name));
 
-    Codesign::sign(targets.to_vec(), "-")
+    sign(targets.to_vec(), "-")
         .identifier("com.example.batch")
         .await
         .unwrap();
@@ -187,22 +184,20 @@ async fn every_kind_of_target_argument_reaches_codesign() {
     let as_vec = workspace.unsigned("as_vec");
     let as_slice = workspace.unsigned("as_slice");
 
-    Codesign::sign(as_str.to_str().unwrap(), "-").await.unwrap();
-    Codesign::sign(as_string.to_str().unwrap().to_owned(), "-")
+    sign(as_str.to_str().unwrap(), "-").await.unwrap();
+    sign(as_string.to_str().unwrap().to_owned(), "-")
         .await
         .unwrap();
-    Codesign::sign(as_os_string.clone().into_os_string(), "-")
+    sign(as_os_string.clone().into_os_string(), "-")
         .await
         .unwrap();
-    Codesign::sign(as_path.as_path(), "-").await.unwrap();
-    Codesign::sign(as_path_buf.clone(), "-").await.unwrap();
+    sign(as_path.as_path(), "-").await.unwrap();
+    sign(as_path_buf.clone(), "-").await.unwrap();
     // The one a caller reaches for most: a borrowed field, neither cloned nor
     // narrowed to `&Path` at the call site.
-    Codesign::sign(&as_path_buf_ref, "-").await.unwrap();
-    Codesign::sign(vec![as_vec.clone()], "-").await.unwrap();
-    Codesign::sign(std::slice::from_ref(&as_slice), "-")
-        .await
-        .unwrap();
+    sign(&as_path_buf_ref, "-").await.unwrap();
+    sign(vec![as_vec.clone()], "-").await.unwrap();
+    sign(std::slice::from_ref(&as_slice), "-").await.unwrap();
 
     for target in [
         as_str,
@@ -223,7 +218,7 @@ async fn spaces_and_non_ascii_in_a_path_are_passed_through_verbatim() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("héllo wörld ✓.bin");
 
-    Codesign::sign(&target, "-")
+    sign(&target, "-")
         .identifier("com.example.unicode")
         .await
         .unwrap();

@@ -3,8 +3,9 @@
 
 use std::future::IntoFuture;
 
+use signers::IntoTargets;
 use signers::codesign::Sign;
-use signers::{Codesign, IntoTargets};
+use signers::codesign::sign;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect::{self, Signature};
@@ -14,7 +15,7 @@ async fn a_builder_that_is_never_awaited_does_nothing() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    let _unused = Codesign::sign(&target, "-")
+    let _unused = sign(&target, "-")
         .force(true)
         .identifier("com.example.never");
     tokio::task::yield_now().await;
@@ -30,7 +31,7 @@ async fn a_cloned_builder_is_independent_of_the_original() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    let base = Codesign::sign(&target, "-")
+    let base = sign(&target, "-")
         .force(true)
         .identifier("com.example.base");
     let variant = base.clone().identifier("com.example.variant");
@@ -50,7 +51,7 @@ async fn a_cloned_collection_builder_keeps_its_targets_and_its_mode() {
     let directory = workspace.dir("not-a-bundle");
     let target = workspace.unsigned("hello");
 
-    let base = Codesign::sign([directory.clone(), target.clone()], "-")
+    let base = sign([directory.clone(), target.clone()], "-")
         .force(true)
         .per_target(true);
     let copy = base.clone();
@@ -78,7 +79,7 @@ async fn many_signings_can_run_at_once() {
             // Spawned bare, rather than wrapped in an `async` block, so this
             // only compiles while the future stays `Send + 'static`.
             tokio::spawn(
-                Codesign::sign(target.clone(), "-")
+                sign(target.clone(), "-")
                     .identifier(format!("com.example.h{i}"))
                     .into_future(),
             )
@@ -106,7 +107,7 @@ async fn awaiting_a_signing_yields_unit() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    let result: signers::Result<()> = Codesign::sign(&target, "-").await;
+    let result: signers::Result<()> = sign(&target, "-").await;
 
     assert!(matches!(result, Ok(())));
 }
@@ -120,11 +121,10 @@ async fn awaiting_a_list_of_targets_yields_one_unit_per_target() {
         .map(|name| workspace.unsigned(name))
         .into();
 
-    let from_a_list: signers::Result<Vec<()>> = Codesign::sign(targets.clone(), "-").await;
-    let from_a_slice: signers::Result<Vec<()>> =
-        Codesign::sign(&targets[..2], "-").force(true).await;
+    let from_a_list: signers::Result<Vec<()>> = sign(targets.clone(), "-").await;
+    let from_a_slice: signers::Result<Vec<()>> = sign(&targets[..2], "-").force(true).await;
     let from_a_list_of_one: signers::Result<Vec<()>> =
-        Codesign::sign(vec![&targets[0]], "-").force(true).await;
+        sign(vec![&targets[0]], "-").force(true).await;
 
     assert_eq!(from_a_list.unwrap().len(), 3);
     assert_eq!(from_a_slice.unwrap().len(), 2);
@@ -141,11 +141,8 @@ async fn awaiting_an_array_of_targets_yields_an_array_of_the_same_length() {
     let workspace = Workspace::new();
     let targets = ["first", "second", "third"].map(|name| workspace.unsigned(name));
 
-    let [(), (), ()] = Codesign::sign(targets.clone(), "-").await.unwrap();
-    let [()] = Codesign::sign([&targets[0]], "-")
-        .force(true)
-        .await
-        .unwrap();
+    let [(), (), ()] = sign(targets.clone(), "-").await.unwrap();
+    let [()] = sign([&targets[0]], "-").force(true).await.unwrap();
 
     for target in &targets {
         inspect::assert_valid(target);
@@ -157,8 +154,8 @@ async fn awaiting_an_array_of_targets_yields_an_array_of_the_same_length() {
 /// output type follows the target type.
 #[tokio::test]
 async fn a_helper_generic_over_the_target_type_configures_any_builder() {
-    fn named<T: IntoTargets>(target: T) -> Codesign<Sign, T::Shape> {
-        Codesign::sign(target, "-").identifier("com.example.shaped")
+    fn named<T: IntoTargets>(target: T) -> Sign<T::Shape> {
+        sign(target, "-").identifier("com.example.shaped")
     }
 
     let workspace = Workspace::new();
@@ -179,14 +176,14 @@ async fn a_helper_generic_over_the_target_type_configures_any_builder() {
     }
 }
 
-/// `Codesign<Sign>` keeps naming the single-target builder: the shape
+/// `Sign` keeps naming the single-target builder: the shape
 /// parameter defaults to one target.
 #[tokio::test]
 async fn the_builder_type_without_a_shape_is_the_single_target_one() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    let builder: Codesign<Sign> = Codesign::sign(&target, "-");
+    let builder: Sign = sign(&target, "-");
     builder.await.unwrap();
 
     inspect::assert_valid(&target);

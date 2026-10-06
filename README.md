@@ -2,52 +2,52 @@
 
 Sign, re-sign, strip, verify and inspect code signatures on macOS, from async or blocking Rust.
 
-`signers` runs Apple's `codesign` tool through a typed builder. Each action offers only the options
-`codesign` honours for it, and nothing runs until you `.await` it, or call `.run()` in the blocking
-API. The target decides the result: one path gives one value, a `Vec` or slice gives a `Vec`, an array
+`signers` runs Apple's `codesign` tool. Each action is a function that returns a typed builder, which
+offers only the options `codesign` honours for that action. Nothing runs until you `.await` it, or call
+`.run()` in the blocking API. The target decides the result: one path gives one value, a `Vec` or slice gives a `Vec`, an array
 gives an array.
 
 ```rust
-use signers::Codesign;
+use signers::codesign;
 
 // Re-sign a binary after patching it: `force` replaces the signature the patch broke.
-Codesign::sign_adhoc("patched.dylib").force(true).await?;
+codesign::sign_adhoc("patched.dylib").force(true).await?;
 
 // Sign an app for notarization: hardened runtime and a secure timestamp.
-Codesign::sign_for_distribution("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
+codesign::sign_for_distribution("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
     .entitlements("MyApp.entitlements")
     .await?;
 
 // Remove signatures, several targets in one run.
-Codesign::remove_signature(vec!["mytool", "libfoo.dylib"]).await?;
+codesign::remove_signature(vec!["mytool", "libfoo.dylib"]).await?;
 ```
 
 Read signatures back:
 
 ```rust
-use signers::{Codesign, CodesignError, Error};
+use signers::{CodesignError, Error, codesign};
 
 // Verify, optionally against a requirement.
-match Codesign::verify("mytool").deep(true).test_requirement("anchor apple").await {
+match codesign::verify("mytool").deep(true).test_requirement("anchor apple").await {
     Ok(()) => println!("signed by Apple"),
     Err(Error::Codesign(CodesignError::RequirementUnsatisfied { .. })) => println!("not by Apple"),
     Err(error) => return Err(error),
 }
 
 // Read the signature: one `Signature` per target, a fixed-size array for an array.
-let [ls, cat] = Codesign::display(["/bin/ls", "/bin/cat"]).await?;
+let [ls, cat] = codesign::display(["/bin/ls", "/bin/cat"]).await?;
 println!("{} {}", ls.cd_hash, cat.cd_hash);
 
 // Embedded requirements.
-for requirement in Codesign::internal_requirements("MyApp.app").await? {
+for requirement in codesign::requirements("MyApp.app").await? {
     println!("{:?}: {}", requirement.kind, requirement.expression);
 }
 
 // Certificate chains, leaf first; `save_to` also writes them as PEM files.
-let chains = Codesign::extract_certificates(vec!["A.app", "B.app"]).save_to("certs").await?;
+let chains = codesign::extract_certificates(vec!["A.app", "B.app"]).save_to("certs").await?;
 
 // Check launch and library constraint plists.
-Codesign::validate_constraint("launch-constraint.plist").await?;
+codesign::validate_constraint("launch-constraint.plist").await?;
 ```
 
 ## Several targets
@@ -56,7 +56,7 @@ Given a `Vec`, slice or array, `.per_target(true)` runs one `codesign` per targe
 target runs, and the failures come together in `Error::Batch`:
 
 ```rust
-match Codesign::verify(vec!["a.app", "b.app"]).per_target(true).await {
+match codesign::verify(vec!["a.app", "b.app"]).per_target(true).await {
     Ok(_) => {}
     Err(Error::Batch(failures)) => {
         for (path, error) in &failures {
@@ -71,19 +71,19 @@ Reading actions default to per target. `sign` and `remove_signature` default to 
 
 ## Blocking API
 
-With the `blocking` feature, `signers::blocking::Codesign` has the same actions and options, makes the
-same checks, returns the same errors and result shapes, and `.run()` takes the place of `.await`:
+With the `blocking` feature, `signers::codesign::blocking` has the same functions and options, makes
+the same checks, returns the same errors and result shapes, and `.run()` takes the place of `.await`:
 
 ```rust
-use signers::blocking::Codesign;
+use signers::codesign::blocking;
 
-Codesign::sign_adhoc("patched.dylib").force(true).run()?;
-let [ls, cat] = Codesign::display(["/bin/ls", "/bin/cat"]).run()?;
+blocking::sign_adhoc("patched.dylib").force(true).run()?;
+let [ls, cat] = blocking::display(["/bin/ls", "/bin/cat"]).run()?;
 ```
 
 Each `.run()` builds a single-threaded Tokio runtime for the call and drops it before returning, so the
 caller needs none, and `per_target` still runs concurrently. Calling `.run()` inside a Tokio runtime
-panics: async code uses `signers::Codesign`.
+panics: async code uses the functions of `signers::codesign`.
 
 ## Requirements
 
@@ -112,7 +112,7 @@ signers = { git = "https://github.com/Fly-elf/signers", features = ["blocking"] 
 Early development: the API may still change.
 
 - [x] `codesign` backend, async: `sign`, `remove_signature`, `verify`, `display`,
-      `internal_requirements`, `extract_certificates`, `validate_constraint`
+      `requirements`, `extract_certificates`, `validate_constraint`
 - [x] `codesign` backend, blocking: the same actions, behind the `blocking` feature
 - [ ] `rcodesign` backend: native, through the [`apple-codesign`](https://crates.io/crates/apple-codesign)
       crate, on any OS
