@@ -3,7 +3,7 @@ use bitflags::bitflags;
 /// Which of the two signatures of a code object to use (`--signature-slot`).
 ///
 /// Without it, `codesign` uses the slot the system prefers. The second slot exists only if the
-/// code carries two signatures. Pass it to [`verify`](crate::Codesign#method.verify).
+/// code carries two signatures. Pass it to [`verify`](crate::codesign::verify).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SignatureSlot {
     /// The first signature (`1`).
@@ -21,7 +21,7 @@ impl SignatureSlot {
     }
 }
 
-/// Where [`timestamp`](crate::Codesign#method.timestamp) gets a secure timestamp from, if anywhere.
+/// Where [`timestamp`](crate::codesign::Sign::timestamp) gets a secure timestamp from, if anywhere.
 ///
 /// Leaving the option unset isn't the same as [`Disabled`](Timestamp::Disabled): unset lets
 /// `codesign` decide.
@@ -30,18 +30,17 @@ impl SignatureSlot {
 ///
 /// ```no_run
 /// # async fn run() -> signers::Result<()> {
-/// use signers::Codesign;
-/// use signers::codesign::Timestamp;
+/// use signers::codesign::{self, Timestamp};
 ///
 /// let identity = "Developer ID Application: Jane Doe (A1B2C3D4E5)";
 ///
 /// // An offline build: no timestamp server is contacted.
-/// Codesign::sign("MyApp.app", identity)
+/// codesign::sign("MyApp.app", identity)
 ///     .timestamp(Timestamp::Disabled)
 ///     .await?;
 ///
 /// // Your own timestamp authority instead of Apple's.
-/// Codesign::sign("MyApp.app", identity)
+/// codesign::sign("MyApp.app", identity)
 ///     .timestamp(Timestamp::ServerUrl("http://tsa.example.com".into()))
 ///     .await?;
 /// # Ok(()) }
@@ -57,7 +56,7 @@ pub enum Timestamp {
 }
 
 bitflags! {
-    /// Code signing flags that [`options`](crate::Codesign#method.options) seals into the
+    /// Code signing flags that [`options`](crate::codesign::Sign::options) seals into the
     /// signature.
     ///
     /// Combine them with `|`. The bits are the ones `codesign -dv` prints as `flags=0x…`.
@@ -66,10 +65,9 @@ bitflags! {
     ///
     /// ```no_run
     /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
-    /// use signers::codesign::SigningFlags;
+    /// use signers::codesign::{self, SigningFlags};
     ///
-    /// Codesign::sign("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
+    /// codesign::sign("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
     ///     .options(SigningFlags::RUNTIME | SigningFlags::LIBRARY)
     ///     .await?;
     /// # Ok(()) }
@@ -104,7 +102,7 @@ bitflags! {
 
 bitflags! {
     /// Parts of the old signature that
-    /// [`preserve_metadata`](crate::Codesign#method.preserve_metadata) carries over.
+    /// [`preserve_metadata`](crate::codesign::Sign::preserve_metadata) carries over.
     ///
     /// Combine them with `|`.
     ///
@@ -112,11 +110,10 @@ bitflags! {
     ///
     /// ```no_run
     /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
-    /// use signers::codesign::PreserveMetadata;
+    /// use signers::codesign::{self, PreserveMetadata};
     ///
     /// // Re-sign a patched binary and keep the identifier and entitlements it had.
-    /// Codesign::sign_adhoc("patched")
+    /// codesign::sign_adhoc("patched")
     ///     .force(true)
     ///     .preserve_metadata(PreserveMetadata::IDENTIFIER | PreserveMetadata::ENTITLEMENTS)
     ///     .await?;
@@ -145,14 +142,14 @@ bitflags! {
         #[bitflags(flag_name = "launch-constraints")]
         const LAUNCH_CONSTRAINTS = 1 << 5;
         /// The library constraint, unless
-        /// [`library_constraint`](crate::Codesign#method.library_constraint) is set
+        /// [`library_constraint`](crate::codesign::Sign::library_constraint) is set
         /// (`library-constraints`).
         #[bitflags(flag_name = "library-constraints")]
         const LIBRARY_CONSTRAINTS = 1 << 6;
     }
 }
 
-/// The extra restrictions that [`strict`](crate::Codesign#method.strict) applies.
+/// The extra restrictions that [`strict`](crate::codesign::Verify::strict) applies.
 ///
 /// `codesign` takes one value here, so one is enough, and the last one set wins.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

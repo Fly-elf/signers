@@ -9,11 +9,10 @@ use crate::codesign::{SignatureSlot, Strict};
 use crate::errors::{Change, CodesignError, Error, ResourceChange};
 
 action! {
-    /// Options of the verification action: the `A` in `Codesign<Verify>`.
+    /// Builder of a verification run, returned by [`verify`](crate::codesign::verify).
     ///
-    /// [`Codesign::verify`](crate::Codesign#method.verify) creates it. You set its options with [the
-    /// verification setters](crate::Codesign#impl-Runner%3CVerify,+S,+R%3E). An option you never set
-    /// keeps `codesign`'s default.
+    /// Each setter maps to one `codesign` flag. A later call replaces an earlier one, `false`
+    /// leaves the flag out, and an option you never set keeps `codesign`'s default.
     ///
     /// # Examples
     ///
@@ -22,11 +21,11 @@ action! {
     ///
     /// ```no_run
     /// # async fn run() -> signers::Result<()> {
-    /// use signers::codesign::Strict;
-    /// use signers::{Codesign, Error};
+    /// use signers::Error;
+    /// use signers::codesign::{self, Strict};
     ///
     /// let apps = vec!["A.app", "B.app"];
-    /// match Codesign::verify(apps).deep(true).strict(Strict::All).await {
+    /// match codesign::verify(apps).deep(true).strict(Strict::All).await {
     ///     Ok(_) => {}
     ///     Err(Error::Batch(failures)) => {
     ///         for (path, error) in &failures {
@@ -42,9 +41,9 @@ action! {
     ///
     /// ```no_run
     /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
+    /// use signers::codesign;
     ///
-    /// Codesign::verify("mytool").detached("mytool.sig").await?;
+    /// codesign::verify("mytool").detached("mytool.sig").await?;
     /// # Ok(()) }
     /// ```
     Verify => () {
@@ -62,11 +61,10 @@ action! {
         ///
         /// ```no_run
         /// # async fn run() -> signers::Result<()> {
-        /// use signers::Codesign;
-        /// use signers::codesign::Strict;
+        /// use signers::codesign::{self, Strict};
         ///
         /// // Reject a symbolic link that leaves the bundle.
-        /// Codesign::verify("MyApp.app").strict(Strict::Symlinks).await?;
+        /// codesign::verify("MyApp.app").strict(Strict::Symlinks).await?;
         /// # Ok(()) }
         /// ```
         strict: Option<Strict>,
@@ -123,9 +121,9 @@ impl<S, R> Verify<S, R> {
     ///
     /// ```no_run
     /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
+    /// use signers::codesign;
     ///
-    /// Codesign::verify("MyApp.app")
+    /// codesign::verify("MyApp.app")
     ///     .test_requirement("identifier \"com.example.myapp\" and anchor apple generic")
     ///     .await?;
     /// # Ok(()) }
@@ -137,7 +135,7 @@ impl<S, R> Verify<S, R> {
 
     /// Requires the code to satisfy the requirement written in this file (`-R <path>`).
     ///
-    /// Failures are the same as for [`test_requirement`](crate::Codesign#method.test_requirement).
+    /// Failures are the same as for [`test_requirement`](Self::test_requirement).
     /// It replaces any earlier requirement, text or file. A path of `-` would read standard input,
     /// so it makes `.await` fail with [`Error::StdioPath`] before anything runs.
     pub fn test_requirement_file(mut self, path: impl Into<PathBuf>) -> Self {

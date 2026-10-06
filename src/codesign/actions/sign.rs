@@ -8,28 +8,27 @@ use crate::codesign::action::{PushArgs, joined};
 use crate::codesign::{PreserveMetadata, SigningFlags, Timestamp};
 
 action! {
-    /// Options of the signing action: the `A` in `Codesign<Sign>`.
+    /// Builder of a signing run, returned by [`sign`](crate::codesign::sign) and its presets.
     ///
-    /// [`Codesign::sign`](crate::Codesign#method.sign),
-    /// [`Codesign::sign_adhoc`](crate::Codesign#method.sign_adhoc) and
-    /// [`Codesign::sign_for_distribution`](crate::Codesign#method.sign_for_distribution) create it. You
-    /// set its options with [the signing setters](crate::Codesign#impl-Runner%3CSign,+S,+R%3E). An
-    /// option you never set keeps `codesign`'s default.
+    /// [`sign_adhoc`](crate::codesign::sign_adhoc) and
+    /// [`sign_for_distribution`](crate::codesign::sign_for_distribution) are the presets. Each
+    /// setter maps to one `codesign` flag. A later call replaces an earlier one, `false` leaves the
+    /// flag out, and an option you never set keeps `codesign`'s default.
     ///
     /// # Examples
     ///
     /// Sign the nested code first, then the bundle that seals it. This replaces the deprecated
-    /// [`deep`](crate::Codesign#method.deep):
+    /// [`deep`](Sign::deep):
     ///
     /// ```no_run
     /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
+    /// use signers::codesign;
     ///
     /// let identity = "Developer ID Application: Jane Doe (A1B2C3D4E5)";
     ///
-    /// Codesign::sign_for_distribution("MyApp.app/Contents/Frameworks/Engine.framework", identity)
+    /// codesign::sign_for_distribution("MyApp.app/Contents/Frameworks/Engine.framework", identity)
     ///     .await?;
-    /// Codesign::sign_for_distribution("MyApp.app", identity)
+    /// codesign::sign_for_distribution("MyApp.app", identity)
     ///     .entitlements("MyApp.entitlements")
     ///     .await?;
     /// # Ok(()) }
@@ -39,9 +38,9 @@ action! {
     ///
     /// ```no_run
     /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
+    /// use signers::codesign;
     ///
-    /// Codesign::sign_adhoc("mytool").detached("mytool.sig").await?;
+    /// codesign::sign_adhoc("mytool").detached("mytool.sig").await?;
     /// # Ok(()) }
     /// ```
     Sign => () {
@@ -65,9 +64,9 @@ action! {
         ///
         /// ```no_run
         /// # async fn run() -> signers::Result<()> {
-        /// use signers::Codesign;
+        /// use signers::codesign;
         ///
-        /// Codesign::sign("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
+        /// codesign::sign("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
         ///     .requirements("=designated => identifier \"com.example.myapp\" and anchor apple generic")
         ///     .await?;
         /// # Ok(()) }
@@ -76,7 +75,7 @@ action! {
         /// Prefixes a derived identifier that contains no dot, e.g. with `com.example.` (`--prefix`).
         ///
         /// Include the trailing dot. It has no effect when you set
-        /// [`identifier`](crate::Codesign#method.identifier).
+        /// [`identifier`](Self::identifier).
         prefix: Option<impl Into<String>>,
         /// Looks up the signing identity in this keychain only (`--keychain`).
         ///
@@ -88,7 +87,7 @@ action! {
         /// Embeds the entitlements in this plist (`--entitlements`).
         ///
         /// `codesign` leaves them out of libraries unless you also set
-        /// [`force_library_entitlements`](crate::Codesign#method.force_library_entitlements).
+        /// [`force_library_entitlements`](Self::force_library_entitlements).
         entitlements: Option<impl Into<PathBuf>>,
         /// Embeds the entitlements in libraries too, not only in main executables
         /// (`--force-library-entitlements`).
@@ -102,7 +101,7 @@ action! {
         /// Sets the code signing flags to seal (`--options`).
         ///
         /// This replaces the whole set, including the one from
-        /// [`sign_for_distribution`](crate::Codesign#method.sign_for_distribution).
+        /// [`sign_for_distribution`](crate::codesign::sign_for_distribution).
         options: SigningFlags,
         /// Records this hardened runtime version instead of the SDK's (`--runtime-version`).
         ///
@@ -154,7 +153,7 @@ action! {
         deep: bool,
         /// Reuses parts of the signature being replaced (`--preserve-metadata`).
         ///
-        /// Needs [`force`](crate::Codesign#method.force), since without it there is no replacing.
+        /// Needs [`force`](Self::force), since without it there is no replacing.
         /// Values you set explicitly win over preserved ones. `codesign` ignores this option when the
         /// old signature came from the linker.
         preserve_metadata: PreserveMetadata,
@@ -171,7 +170,7 @@ action! {
         timestamp: Option<Timestamp>,
         /// Signs this version of a versioned bundle instead of the current one (`--bundle-version`).
         ///
-        /// `version` names a directory under the bundle's `Versions`, e.g. `"A"`.
+        /// The version names a directory under the bundle's `Versions`, e.g. `"A"`.
         bundle_version: Option<impl Into<String>>,
         /// Removes extended attributes that block signing, such as resource forks
         /// (`--strip-disallowed-xattrs`).
@@ -189,7 +188,7 @@ action! {
         /// Writes the signature to this file and leaves the target unchanged (`--detached`).
         ///
         /// Every target's signature goes to this one file, so with
-        /// [`per_target(true)`](crate::Codesign#method.per_target) `.await` fails with
+        /// [`per_target(true)`](Self::per_target) `.await` fails with
         /// [`Error::SharedOutputPerTarget`](crate::Error::SharedOutputPerTarget).
         detached: Option<impl Into<PathBuf>>,
         /// Writes a detached signature to the system database (`--detached-database`).
@@ -204,7 +203,7 @@ action! {
         ///
         /// On the command line, `-` means standard output. Here the crate captures that output, so `-`
         /// makes `.await` fail with [`Error::StdioPath`](crate::Error::StdioPath) before anything runs.
-        /// With [`per_target(true)`](crate::Codesign#method.per_target) it fails with
+        /// With [`per_target(true)`](Self::per_target) it fails with
         /// [`Error::SharedOutputPerTarget`](crate::Error::SharedOutputPerTarget), since every process
         /// would append to the same file.
         file_list: Option<impl Into<PathBuf>>,
