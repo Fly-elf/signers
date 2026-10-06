@@ -3,104 +3,75 @@ use std::ffi::OsStr;
 use std::path::PathBuf;
 
 use crate::codesign::action::PushArgs;
+use crate::codesign::action::action;
 use crate::codesign::action::sealed::{SharedRun, ToArgs};
-use crate::codesign::runner::{Runner, Runtime};
 use crate::codesign::types::parse_report;
 use crate::codesign::{Signature, SignatureSlot};
 use crate::errors::{CodesignError, Result};
-use crate::target::Shape;
 
-/// Options of the display action: the `A` in `Codesign<Display>`.
-///
-/// [`Codesign::display`](crate::Codesign#method.display) creates it. You set its options with [the
-/// display setters](crate::Codesign#impl-Runner%3CDisplay,+S,+R%3E). An option you never set keeps
-/// `codesign`'s default.
-///
-/// # Examples
-///
-/// List the code nested in a bundle:
-///
-/// ```no_run
-/// # async fn run() -> signers::Result<()> {
-/// use signers::Codesign;
-///
-/// let signature = Codesign::display("MyApp.app").deep(true).await?;
-/// for path in &signature.nested {
-///     println!("{path}");
-/// }
-/// # Ok(()) }
-/// ```
-///
-/// Read one slice of a universal binary:
-///
-/// ```no_run
-/// # async fn run() -> signers::Result<()> {
-/// use signers::Codesign;
-/// use signers::codesign::Format;
-///
-/// let signature = Codesign::display("/bin/ls").architecture("arm64e").await?;
-/// assert_eq!(signature.format, Format::MachOThin("arm64e".into()));
-/// # Ok(()) }
-/// ```
-#[derive(Debug, Clone, Default)]
-pub struct Display {
-    architecture: Option<String>,
-    bundle_version: Option<String>,
-    deep: bool,
-    detached: Option<PathBuf>,
-    signature_slot: Option<SignatureSlot>,
-}
-
-/// Options for [`display`](crate::Codesign#method.display).
-///
-/// Each setter maps to one `codesign` flag. A later call replaces an earlier one, and `false`
-/// leaves a flag out.
-impl<S: Shape, R: Runtime> Runner<Display, S, R> {
-    /// Reads this slice of a universal binary, e.g. `arm64` or `x86_64` (`--architecture`).
+action! {
+    /// Options of the display action: the `A` in `Codesign<Display>`.
     ///
-    /// Without it a universal binary is reported whole, as
-    /// [`Format::MachOUniversal`](crate::codesign::Format::MachOUniversal). A slice the binary
-    /// doesn't have fails with [`CodesignError::Failed`].
-    pub fn architecture(mut self, arch: impl Into<String>) -> Self {
-        self.action.architecture = Some(arch.into());
-        self
-    }
-
-    /// Reads this version of a versioned bundle instead of `Current` (`--bundle-version`).
+    /// [`Codesign::display`](crate::Codesign#method.display) creates it. You set its options with [the
+    /// display setters](crate::Codesign#impl-Runner%3CDisplay,+S,+R%3E). An option you never set keeps
+    /// `codesign`'s default.
     ///
-    /// A version the bundle doesn't have fails with [`CodesignError::Failed`].
-    pub fn bundle_version(mut self, version: impl Into<String>) -> Self {
-        self.action.bundle_version = Some(version.into());
-        self
-    }
-
-    /// Lists the code nested in a bundle, in [`Signature::nested`] (`--deep`).
+    /// # Examples
     ///
-    /// Only the items directly inside the bundle are listed, and their own signatures aren't read.
-    pub fn deep(mut self, deep: bool) -> Self {
-        self.action.deep = deep;
-        self
-    }
-
-    /// Reads the signature from a detached signature file instead of from the code (`--detached`).
-    pub fn detached(mut self, path: impl Into<PathBuf>) -> Self {
-        self.action.detached = Some(path.into());
-        self
-    }
-
-    /// Reads this signature when the code carries two (`--signature-slot`).
+    /// List the code nested in a bundle:
     ///
-    /// Code with one signature has only [`SignatureSlot::First`]. Asking for the second fails with
-    /// [`CodesignError::NoSignature`].
-    pub fn signature_slot(mut self, slot: SignatureSlot) -> Self {
-        self.action.signature_slot = Some(slot);
-        self
+    /// ```no_run
+    /// # async fn run() -> signers::Result<()> {
+    /// use signers::Codesign;
+    ///
+    /// let signature = Codesign::display("MyApp.app").deep(true).await?;
+    /// for path in &signature.nested {
+    ///     println!("{path}");
+    /// }
+    /// # Ok(()) }
+    /// ```
+    ///
+    /// Read one slice of a universal binary:
+    ///
+    /// ```no_run
+    /// # async fn run() -> signers::Result<()> {
+    /// use signers::Codesign;
+    /// use signers::codesign::Format;
+    ///
+    /// let signature = Codesign::display("/bin/ls").architecture("arm64e").await?;
+    /// assert_eq!(signature.format, Format::MachOThin("arm64e".into()));
+    /// # Ok(()) }
+    /// ```
+    Display => Signature {
+    }
+    setters {
+        /// Reads this slice of a universal binary, e.g. `arm64` or `x86_64` (`--architecture`).
+        ///
+        /// Without it a universal binary is reported whole, as
+        /// [`Format::MachOUniversal`](crate::codesign::Format::MachOUniversal). A slice the binary
+        /// doesn't have fails with [`CodesignError::Failed`].
+        architecture: Option<impl Into<String>>,
+        /// Reads this version of a versioned bundle instead of `Current` (`--bundle-version`).
+        ///
+        /// A version the bundle doesn't have fails with [`CodesignError::Failed`].
+        bundle_version: Option<impl Into<String>>,
+        /// Lists the code nested in a bundle, in [`Signature::nested`] (`--deep`).
+        ///
+        /// Only the items directly inside the bundle are listed, and their own signatures aren't read.
+        deep: bool,
+        /// Reads the signature from a detached signature file instead of from the code (`--detached`).
+        detached: Option<impl Into<PathBuf>>,
+        /// Reads this signature when the code carries two (`--signature-slot`).
+        ///
+        /// Code with one signature has only [`SignatureSlot::First`]. Asking for the second fails with
+        /// [`CodesignError::NoSignature`].
+        signature_slot: Option<SignatureSlot>,
     }
 }
 
-impl SharedRun for Display {}
+impl<S, R> SharedRun for Display<S, R> {}
 
-impl ToArgs for Display {
+impl ToArgs for Options {
     type Output = Signature;
     const PER_TARGET: bool = true;
 
