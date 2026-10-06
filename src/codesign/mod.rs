@@ -22,7 +22,7 @@ pub use actions::{
 };
 #[cfg(feature = "async")]
 pub use asynchronous::{
-    Codesign, extract_certificates, remove_signature, requirements, sign, sign_adhoc,
+    Codesign, display, extract_certificates, remove_signature, requirements, sign, sign_adhoc,
     sign_for_distribution, validate_constraint, verify,
 };
 pub use runner::Runner;

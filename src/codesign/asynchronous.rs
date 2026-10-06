@@ -13,7 +13,8 @@ use super::runner::{Runner, Runtime};
 use crate::codesign::action;
 use crate::codesign::action::sealed::ToArgs;
 use crate::codesign::{
-    Action, ExtractCertificates, RemoveSignature, Requirements, Sign, ValidateConstraint, Verify,
+    Action, Display, ExtractCertificates, RemoveSignature, Requirements, Sign, ValidateConstraint,
+    Verify,
 };
 use crate::errors::{CodesignError, Error, Result};
 use crate::target::{IntoTargets, One, Shape};
@@ -274,6 +275,77 @@ pub fn sign_for_distribution<T: IntoTargets>(
 /// ```
 pub fn verify<T: IntoTargets>(target: T) -> Verify<T::Shape> {
     Verify::new(target, Default::default())
+}
+
+/// Reads the signature of `target` as a [`Signature`](crate::codesign::Signature)
+/// (`--display`), changing nothing.
+///
+/// `.await` yields one [`Signature`](crate::codesign::Signature) per target: identifier,
+/// signing flags, hashes, the certificate chain, entitlements and more.
+/// [`Signature::raw`](crate::codesign::Signature::raw) and
+/// [`Signature::field`](crate::codesign::Signature::field) reach whatever the typed fields
+/// don't.
+///
+/// Given several targets, each is read on its own by default, so one `.await` reports every
+/// target that failed, as [`Error::Batch`](crate::Error::Batch). The signatures of the targets
+/// that did read are dropped with it. [`per_target(false)`](crate::Codesign#method.per_target)
+/// runs one `codesign` instead: it stops at the first target it rejects, and the entitlements
+/// of every target stay [`None`](crate::codesign::Signature#structfield.entitlements).
+///
+/// # Errors
+///
+/// An unsigned target fails with [`CodesignError::Failed`](crate::CodesignError::Failed), exit
+/// code 1. With one `codesign` over several targets, its `stderr` also holds the reports of the
+/// targets before the unsigned one. A [`signature_slot`](crate::Codesign#method.signature_slot)
+/// the code has no signature in fails with
+/// [`CodesignError::NoSignature`](crate::CodesignError::NoSignature). A report or entitlements
+/// that can't be read fails with
+/// [`CodesignError::UnexpectedOutput`](crate::CodesignError::UnexpectedOutput). The checks made
+/// before `codesign` starts are on [`Codesign`](crate::Codesign#errors).
+///
+/// # Examples
+///
+/// ```no_run
+/// # async fn run() -> signers::Result<()> {
+/// use signers::Codesign;
+/// use signers::codesign::SignatureKind;
+///
+/// let signature = Codesign::display("MyApp.app").await?;
+/// if signature.signature == SignatureKind::AdHoc {
+///     println!("{} is signed ad hoc", signature.identifier);
+/// }
+/// # Ok(()) }
+/// ```
+///
+/// Read the entitlements of a binary:
+///
+/// ```no_run
+/// # async fn run() -> signers::Result<()> {
+/// use signers::Codesign;
+///
+/// let signature = Codesign::display("mytool").await?;
+/// let debuggable = signature
+///     .entitlements
+///     .as_ref()
+///     .and_then(|entitlements| entitlements.get("com.apple.security.get-task-allow"))
+///     .and_then(|value| value.as_boolean())
+///     .unwrap_or(false);
+/// # let _ = debuggable;
+/// # Ok(()) }
+/// ```
+///
+/// Read two binaries at once:
+///
+/// ```no_run
+/// # async fn run() -> signers::Result<()> {
+/// use signers::Codesign;
+///
+/// let [ls, cat] = Codesign::display(["/bin/ls", "/bin/cat"]).await?;
+/// println!("{} {}", ls.cd_hash, cat.cd_hash);
+/// # Ok(()) }
+/// ```
+pub fn display<T: IntoTargets>(target: T) -> Display<T::Shape> {
+    Display::new(target, Default::default())
 }
 
 /// Removes the signature from `target` (`--remove-signature`).
