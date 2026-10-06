@@ -4,6 +4,7 @@
 use std::thread;
 
 use signers::blocking::Codesign;
+use signers::codesign::blocking::remove_signature;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect;
@@ -22,7 +23,7 @@ fn runs_from_several_threads_at_once_and_one_after_another() {
             scope.spawn(move || {
                 Codesign::sign_adhoc(target).run().unwrap();
                 Codesign::verify(target).run().unwrap();
-                Codesign::remove_signature(target).run().unwrap();
+                remove_signature(target).run().unwrap();
             });
         }
     });

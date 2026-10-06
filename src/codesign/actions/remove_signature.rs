@@ -82,9 +82,10 @@ impl<S: Shape, R> RemoveSignature<S, R> {
 #[cfg(test)]
 mod tests {
     use std::ffi::OsString;
+    use std::future::IntoFuture;
 
     use super::*;
-    use crate::codesign::Codesign;
+    use crate::codesign::remove_signature;
 
     fn os(strings: &[&str]) -> Vec<OsString> {
         strings.iter().map(OsString::from).collect()
@@ -92,10 +93,10 @@ mod tests {
 
     /// Renders the arguments, taking ownership so assertions can compare them
     /// against plain `OsString`s.
-    fn args_of<S>(builder: &Codesign<RemoveSignature, S>) -> Vec<OsString> {
+    fn args_of<S>(builder: &RemoveSignature<S>) -> Vec<OsString> {
         builder
-            .action
-            .to_args(&builder.targets)
+            .options
+            .to_args(&builder.core.targets)
             .into_iter()
             .map(Cow::into_owned)
             .collect()
@@ -104,7 +105,7 @@ mod tests {
     #[test]
     fn bare_action_only_removes() {
         assert_eq!(
-            args_of(&Codesign::remove_signature("app")),
+            args_of(&remove_signature("app")),
             os(&["--remove-signature", "--", "app"])
         );
     }
@@ -114,7 +115,7 @@ mod tests {
     #[test]
     fn every_option_renders_exactly_once() {
         assert_eq!(
-            args_of(&Codesign::remove_signature("app").bundle_version("A")),
+            args_of(&remove_signature("app").bundle_version("A")),
             os(&["--remove-signature", "--bundle-version", "A", "--", "app"])
         );
     }
@@ -123,7 +124,7 @@ mod tests {
     fn repeating_the_bundle_version_keeps_the_last_one() {
         assert_eq!(
             args_of(
-                &Codesign::remove_signature("app")
+                &remove_signature("app")
                     .bundle_version("A")
                     .bundle_version("B")
             ),
@@ -134,7 +135,7 @@ mod tests {
     #[test]
     fn targets_come_last() {
         assert_eq!(
-            args_of(&Codesign::remove_signature(vec!["a.app", "b.app"]).bundle_version("A")),
+            args_of(&remove_signature(vec!["a.app", "b.app"]).bundle_version("A")),
             os(&[
                 "--remove-signature",
                 "--bundle-version",
@@ -150,13 +151,13 @@ mod tests {
     /// here, so the default no-op `validate` has to stay a no-op.
     #[test]
     fn there_is_nothing_to_validate() {
-        let action = Codesign::remove_signature("app").bundle_version("A");
-        assert!(action.action.validate().is_ok());
+        let action = remove_signature("app").bundle_version("A");
+        assert!(action.options.validate().is_ok());
     }
 
     #[test]
     fn the_output_is_one_unit_per_target_whatever_codesign_printed() {
-        let action = Codesign::remove_signature("app").action;
+        let action = remove_signature("app").options;
         let targets = [PathBuf::from("a"), PathBuf::from("b"), PathBuf::from("c")];
 
         let silent: Vec<()> = action
@@ -175,19 +176,19 @@ mod tests {
     /// unless the caller asks otherwise.
     #[test]
     fn the_constructor_defaults_to_one_process_for_all_targets() {
-        assert!(!Codesign::remove_signature("app").per_target);
-        assert!(!Codesign::remove_signature(vec!["a.app", "b.app"]).per_target);
-        assert!(!Codesign::remove_signature(["a.app", "b.app"]).per_target);
+        assert!(!remove_signature("app").core.per_target);
+        assert!(!remove_signature(vec!["a.app", "b.app"]).core.per_target);
+        assert!(!remove_signature(["a.app", "b.app"]).core.per_target);
     }
 
     #[test]
     fn per_target_keeps_the_last_value_and_renders_no_argument() {
-        let action = Codesign::remove_signature(vec!["app"]).per_target(true);
-        assert!(action.per_target);
+        let action = remove_signature(vec!["app"]).per_target(true);
+        assert!(action.core.per_target);
         assert_eq!(args_of(&action), os(&["--remove-signature", "--", "app"]));
 
         let action = action.per_target(false);
-        assert!(!action.per_target);
+        assert!(!action.core.per_target);
         assert_eq!(args_of(&action), os(&["--remove-signature", "--", "app"]));
     }
 
@@ -195,15 +196,15 @@ mod tests {
     /// that several processes would have to share.
     #[test]
     fn no_option_is_a_shared_output() {
-        let action = Codesign::remove_signature("app").bundle_version("A");
-        assert_eq!(action.action.shared_output(), None);
+        let action = remove_signature("app").bundle_version("A");
+        assert_eq!(action.options.shared_output(), None);
     }
 
     /// A removal has no exit code of its own to tell apart, so every one of
     /// them stays the generic failure, whatever it printed on standard output.
     #[test]
     fn a_failed_run_is_reported_with_its_code_and_diagnostics() {
-        let action = Codesign::remove_signature("app").action;
+        let action = remove_signature("app").options;
         for code in [1, 2, 3] {
             match action.failure(
                 code,
@@ -222,5 +223,18 @@ mod tests {
                 other => panic!("expected Failed, got {other:?}"),
             }
         }
+    }
+
+    /// The run is boxed with `Send`, so it can move to another task.
+    #[test]
+    fn the_run_future_can_be_sent_to_another_thread() {
+        fn assert_send<T: Send>(_: &T) {}
+
+        assert_send(&remove_signature("app").into_future());
+        assert_send(
+            &remove_signature(vec!["a", "b"])
+                .per_target(true)
+                .into_future(),
+        );
     }
 }
