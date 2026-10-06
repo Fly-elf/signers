@@ -13,7 +13,7 @@ use super::runner::{Runner, Runtime};
 use crate::codesign::action;
 use crate::codesign::action::sealed::ToArgs;
 use crate::codesign::{
-    Action, ExtractCertificates, RemoveSignature, Requirements, Sign, ValidateConstraint,
+    Action, ExtractCertificates, RemoveSignature, Requirements, Sign, ValidateConstraint, Verify,
 };
 use crate::errors::{CodesignError, Error, Result};
 use crate::target::{IntoTargets, One, Shape};
@@ -225,6 +225,55 @@ pub fn sign_for_distribution<T: IntoTargets>(
     identity: impl Into<String>,
 ) -> Sign<T::Shape> {
     Sign::new(target, sign::Options::for_distribution(identity))
+}
+
+/// Checks the signature of `target` (`--verify`), changing nothing.
+///
+/// `.await` yields `()` per target when every one verifies. Without options it checks that
+/// the signature is intact and covers the code. Whether the system would run the code is a
+/// different question: verified code can still be refused by Gatekeeper.
+///
+/// Given several targets, each is verified on its own by default, so one `.await` reports every
+/// target that failed, as [`Error::Batch`](crate::Error::Batch).
+/// [`per_target(false)`](crate::Codesign#method.per_target) runs one `codesign` instead, which
+/// stops at the first target it rejects.
+///
+/// # Errors
+///
+/// A target that doesn't verify fails with
+/// [`CodesignError::VerificationFailed`](crate::CodesignError::VerificationFailed): the
+/// signature is invalid or modified, the target is unsigned, or the requirement text doesn't
+/// compile. A valid signature that doesn't meet a requirement fails with
+/// [`CodesignError::RequirementUnsatisfied`](crate::CodesignError::RequirementUnsatisfied). The
+/// checks made before `codesign` starts are on [`Codesign`](crate::Codesign#errors).
+///
+/// # Examples
+///
+/// ```no_run
+/// # async fn run() -> signers::Result<()> {
+/// use signers::Codesign;
+///
+/// Codesign::verify("MyApp.app").deep(true).await?;
+/// # Ok(()) }
+/// ```
+///
+/// Tell a broken signature from a requirement that isn't met:
+///
+/// ```no_run
+/// # async fn run() -> signers::Result<()> {
+/// use signers::{Codesign, CodesignError, Error};
+///
+/// match Codesign::verify("mytool").test_requirement("anchor apple").await {
+///     Ok(()) => println!("signed by Apple"),
+///     Err(Error::Codesign(CodesignError::RequirementUnsatisfied { .. })) => {
+///         println!("validly signed, but not by Apple");
+///     }
+///     Err(error) => return Err(error),
+/// }
+/// # Ok(()) }
+/// ```
+pub fn verify<T: IntoTargets>(target: T) -> Verify<T::Shape> {
+    Verify::new(target, Default::default())
 }
 
 /// Removes the signature from `target` (`--remove-signature`).

@@ -3,62 +3,106 @@ use std::ffi::OsStr;
 use std::path::PathBuf;
 
 use crate::codesign::action::PushArgs;
+use crate::codesign::action::action;
 use crate::codesign::action::sealed::{SharedRun, ToArgs};
-use crate::codesign::runner::{Runner, Runtime};
 use crate::codesign::{SignatureSlot, Strict};
 use crate::errors::{Change, CodesignError, Error, ResourceChange};
-use crate::target::Shape;
 
-/// Options of the verification action: the `A` in `Codesign<Verify>`.
-///
-/// [`Codesign::verify`](crate::Codesign#method.verify) creates it. You set its options with [the
-/// verification setters](crate::Codesign#impl-Runner%3CVerify,+S,+R%3E). An option you never set
-/// keeps `codesign`'s default.
-///
-/// # Examples
-///
-/// Check a bundle as strictly as possible, nested code included, and keep going to the end of the
-/// list:
-///
-/// ```no_run
-/// # async fn run() -> signers::Result<()> {
-/// use signers::codesign::Strict;
-/// use signers::{Codesign, Error};
-///
-/// let apps = vec!["A.app", "B.app"];
-/// match Codesign::verify(apps).deep(true).strict(Strict::All).await {
-///     Ok(_) => {}
-///     Err(Error::Batch(failures)) => {
-///         for (path, error) in &failures {
-///             eprintln!("{}: {error}", path.display());
-///         }
-///     }
-///     Err(error) => return Err(error),
-/// }
-/// # Ok(()) }
-/// ```
-///
-/// Check an unsigned file against the signature that was written for it separately:
-///
-/// ```no_run
-/// # async fn run() -> signers::Result<()> {
-/// use signers::Codesign;
-///
-/// Codesign::verify("mytool").detached("mytool.sig").await?;
-/// # Ok(()) }
-/// ```
-#[derive(Debug, Clone, Default)]
-pub struct Verify {
-    deep: bool,
-    strict: Option<Strict>,
-    ignore_resources: bool,
-    architecture: Option<String>,
-    bundle_version: Option<String>,
-    check_designated_requirement: bool,
-    test_requirement: Option<TestRequirement>,
-    signature_slot: Option<SignatureSlot>,
-    detached: Option<PathBuf>,
-    check_notarization: bool,
+action! {
+    /// Options of the verification action: the `A` in `Codesign<Verify>`.
+    ///
+    /// [`Codesign::verify`](crate::Codesign#method.verify) creates it. You set its options with [the
+    /// verification setters](crate::Codesign#impl-Runner%3CVerify,+S,+R%3E). An option you never set
+    /// keeps `codesign`'s default.
+    ///
+    /// # Examples
+    ///
+    /// Check a bundle as strictly as possible, nested code included, and keep going to the end of the
+    /// list:
+    ///
+    /// ```no_run
+    /// # async fn run() -> signers::Result<()> {
+    /// use signers::codesign::Strict;
+    /// use signers::{Codesign, Error};
+    ///
+    /// let apps = vec!["A.app", "B.app"];
+    /// match Codesign::verify(apps).deep(true).strict(Strict::All).await {
+    ///     Ok(_) => {}
+    ///     Err(Error::Batch(failures)) => {
+    ///         for (path, error) in &failures {
+    ///             eprintln!("{}: {error}", path.display());
+    ///         }
+    ///     }
+    ///     Err(error) => return Err(error),
+    /// }
+    /// # Ok(()) }
+    /// ```
+    ///
+    /// Check an unsigned file against the signature that was written for it separately:
+    ///
+    /// ```no_run
+    /// # async fn run() -> signers::Result<()> {
+    /// use signers::Codesign;
+    ///
+    /// Codesign::verify("mytool").detached("mytool.sig").await?;
+    /// # Ok(()) }
+    /// ```
+    Verify => () {
+        test_requirement: Option<TestRequirement>,
+    }
+    setters {
+        /// Also verifies nested code on its own, not only through the bundle's seal (`--deep`).
+        ///
+        /// Without it, nested code is checked only against the hash the bundle sealed, so a byte
+        /// changed inside a nested library can still pass.
+        deep: bool,
+        /// Applies stricter checks than the default (`--strict`).
+        ///
+        /// # Examples
+        ///
+        /// ```no_run
+        /// # async fn run() -> signers::Result<()> {
+        /// use signers::Codesign;
+        /// use signers::codesign::Strict;
+        ///
+        /// // Reject a symbolic link that leaves the bundle.
+        /// Codesign::verify("MyApp.app").strict(Strict::Symlinks).await?;
+        /// # Ok(()) }
+        /// ```
+        strict: Option<Strict>,
+        /// Skips the bundle's resources (`--ignore-resources`).
+        ///
+        /// A bundle with corrupted or tampered resources passes, so weigh the result accordingly. On a
+        /// large bundle it is much faster.
+        ignore_resources: bool,
+        /// Verifies only this slice of a universal binary, e.g. `arm64` or `x86_64`
+        /// (`--architecture`).
+        ///
+        /// The default is every slice. A slice the binary doesn't have fails verification.
+        architecture: Option<impl Into<String>>,
+        /// Verifies this version of a versioned bundle instead of `Current` (`--bundle-version`).
+        ///
+        /// A version the bundle doesn't have fails verification.
+        bundle_version: Option<impl Into<String>>,
+        /// Also checks the code against its own designated requirement (`--verbose=1`).
+        ///
+        /// It also makes a failed verification list the altered files in
+        /// [`VerificationFailed::resources`](CodesignError::VerificationFailed). Without it that list
+        /// is always empty.
+        check_designated_requirement: bool,
+        /// Verifies this signature when the code carries two (`--signature-slot`).
+        ///
+        /// Without it `codesign` picks the slot itself. On code that carries only one signature,
+        /// [`Second`](SignatureSlot::Second) can fail as [`CodesignError::VerificationFailed`].
+        signature_slot: Option<SignatureSlot>,
+        /// Verifies an unsigned file against a detached signature written for it (`--detached`).
+        detached: Option<impl Into<PathBuf>>,
+        /// Forces an online check for a notarization ticket (`--check-notarization`).
+        ///
+        /// It contacts Apple's servers, so it needs network access. Don't rely on it to reject
+        /// unnotarized code: `codesign` accepted an unnotarized ad hoc binary with it.
+        check_notarization: bool,
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -67,74 +111,7 @@ enum TestRequirement {
     File(PathBuf),
 }
 
-/// Options for [`verify`](crate::Codesign#method.verify).
-///
-/// Each setter maps to one `codesign` flag. A later call replaces an earlier one, and `false`
-/// leaves a flag out.
-impl<S: Shape, R: Runtime> Runner<Verify, S, R> {
-    /// Also verifies nested code on its own, not only through the bundle's seal (`--deep`).
-    ///
-    /// Without it, nested code is checked only against the hash the bundle sealed, so a byte
-    /// changed inside a nested library can still pass.
-    pub fn deep(mut self, deep: bool) -> Self {
-        self.action.deep = deep;
-        self
-    }
-
-    /// Applies stricter checks than the default (`--strict`).
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
-    /// use signers::codesign::Strict;
-    ///
-    /// // Reject a symbolic link that leaves the bundle.
-    /// Codesign::verify("MyApp.app").strict(Strict::Symlinks).await?;
-    /// # Ok(()) }
-    /// ```
-    pub fn strict(mut self, strict: Strict) -> Self {
-        self.action.strict = Some(strict);
-        self
-    }
-
-    /// Skips the bundle's resources (`--ignore-resources`).
-    ///
-    /// A bundle with corrupted or tampered resources passes, so weigh the result accordingly. On a
-    /// large bundle it is much faster.
-    pub fn ignore_resources(mut self, ignore_resources: bool) -> Self {
-        self.action.ignore_resources = ignore_resources;
-        self
-    }
-
-    /// Verifies only this slice of a universal binary, e.g. `arm64` or `x86_64`
-    /// (`--architecture`).
-    ///
-    /// The default is every slice. A slice the binary doesn't have fails verification.
-    pub fn architecture(mut self, architecture: impl Into<String>) -> Self {
-        self.action.architecture = Some(architecture.into());
-        self
-    }
-
-    /// Verifies this version of a versioned bundle instead of `Current` (`--bundle-version`).
-    ///
-    /// A version the bundle doesn't have fails verification.
-    pub fn bundle_version(mut self, version: impl Into<String>) -> Self {
-        self.action.bundle_version = Some(version.into());
-        self
-    }
-
-    /// Also checks the code against its own designated requirement (`--verbose=1`).
-    ///
-    /// It also makes a failed verification list the altered files in
-    /// [`VerificationFailed::resources`](CodesignError::VerificationFailed). Without it that list
-    /// is always empty.
-    pub fn check_designated_requirement(mut self, check: bool) -> Self {
-        self.action.check_designated_requirement = check;
-        self
-    }
-
+impl<S, R> Verify<S, R> {
     /// Requires the code to satisfy this requirement, written as text (`-R=`).
     ///
     /// A valid signature that doesn't satisfy it fails as
@@ -154,7 +131,7 @@ impl<S: Shape, R: Runtime> Runner<Verify, S, R> {
     /// # Ok(()) }
     /// ```
     pub fn test_requirement(mut self, requirement: impl Into<String>) -> Self {
-        self.action.test_requirement = Some(TestRequirement::Text(requirement.into()));
+        self.options.test_requirement = Some(TestRequirement::Text(requirement.into()));
         self
     }
 
@@ -164,38 +141,14 @@ impl<S: Shape, R: Runtime> Runner<Verify, S, R> {
     /// It replaces any earlier requirement, text or file. A path of `-` would read standard input,
     /// so it makes `.await` fail with [`Error::StdioPath`] before anything runs.
     pub fn test_requirement_file(mut self, path: impl Into<PathBuf>) -> Self {
-        self.action.test_requirement = Some(TestRequirement::File(path.into()));
-        self
-    }
-
-    /// Verifies this signature when the code carries two (`--signature-slot`).
-    ///
-    /// Without it `codesign` picks the slot itself. On code that carries only one signature,
-    /// [`Second`](SignatureSlot::Second) can fail as [`CodesignError::VerificationFailed`].
-    pub fn signature_slot(mut self, slot: SignatureSlot) -> Self {
-        self.action.signature_slot = Some(slot);
-        self
-    }
-
-    /// Verifies an unsigned file against a detached signature written for it (`--detached`).
-    pub fn detached(mut self, path: impl Into<PathBuf>) -> Self {
-        self.action.detached = Some(path.into());
-        self
-    }
-
-    /// Forces an online check for a notarization ticket (`--check-notarization`).
-    ///
-    /// It contacts Apple's servers, so it needs network access. Don't rely on it to reject
-    /// unnotarized code: `codesign` accepted an unnotarized ad hoc binary with it.
-    pub fn check_notarization(mut self, check: bool) -> Self {
-        self.action.check_notarization = check;
+        self.options.test_requirement = Some(TestRequirement::File(path.into()));
         self
     }
 }
 
-impl SharedRun for Verify {}
+impl<S, R> SharedRun for Verify<S, R> {}
 
-impl ToArgs for Verify {
+impl ToArgs for Options {
     type Output = ();
     const PER_TARGET: bool = true;
 
