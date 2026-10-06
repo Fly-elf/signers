@@ -13,19 +13,16 @@ mod asynchronous;
 #[cfg(feature = "blocking")]
 pub mod blocking;
 mod core;
-mod runner;
 mod types;
 
-pub use action::Action;
 pub use actions::{
     Display, ExtractCertificates, RemoveSignature, Requirements, Sign, ValidateConstraint, Verify,
 };
 #[cfg(feature = "async")]
 pub use asynchronous::{
-    Codesign, display, extract_certificates, remove_signature, requirements, sign, sign_adhoc,
+    display, extract_certificates, remove_signature, requirements, sign, sign_adhoc,
     sign_for_distribution, validate_constraint, verify,
 };
-pub use runner::Runner;
 pub use types::{
     Authority, CdHash, Certificate, CmsDigest, CodeDirectory, CodeHashes, Constraints,
     ExecutableSegment, Format, HashType, InfoPlist, Location, OsVersion, Platform,
