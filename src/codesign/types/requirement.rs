@@ -2,14 +2,14 @@ use crate::errors::{CodesignError, Result};
 
 /// A code requirement of a signature: what it is for, and the expression to satisfy.
 ///
-/// [`internal_requirements`](crate::Codesign#method.internal_requirements) returns them.
+/// [`requirements`](crate::codesign::requirements) returns them.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Requirement {
     /// What the requirement is for.
     pub kind: RequirementKind,
     /// The requirement as source text, e.g. `identifier "com.apple.ls" and anchor apple`. It isn't
-    /// parsed: pass it to [`test_requirement`](crate::Codesign#method.test_requirement), for
+    /// parsed: pass it to [`test_requirement`](crate::codesign::Verify::test_requirement), for
     /// instance.
     pub expression: String,
     /// `true` when the signature doesn't embed this requirement and `codesign` shows the system's

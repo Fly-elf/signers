@@ -7,12 +7,12 @@ use crate::codesign::action::action;
 use crate::codesign::action::sealed::{SharedRun, ToArgs};
 
 action! {
-    /// Options of the signature-removal action: the `A` in `Codesign<RemoveSignature>`.
+    /// Builder of a signature removal, returned by
+    /// [`remove_signature`](crate::codesign::remove_signature).
     ///
-    /// [`Codesign::remove_signature`](crate::Codesign#method.remove_signature) creates it. Its only
-    /// option is [`bundle_version`](crate::Codesign#impl-Runner%3CRemoveSignature,+S,+R%3E). With this
-    /// operation, `codesign` ignores `--deep` and `--architecture`, still removes the signature under
-    /// `--dryrun`, and crashes on `--file-list`. So those options aren't offered.
+    /// Its only option is [`bundle_version`](Self::bundle_version). With this operation, `codesign`
+    /// ignores `--deep` and `--architecture`, still removes the signature under `--dryrun`, and
+    /// crashes on `--file-list`. So those options aren't offered.
     ///
     /// # Examples
     ///
@@ -20,9 +20,9 @@ action! {
     ///
     /// ```no_run
     /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
+    /// use signers::codesign;
     ///
-    /// Codesign::remove_signature("Engine.framework")
+    /// codesign::remove_signature("Engine.framework")
     ///     .bundle_version("A")
     ///     .await?;
     /// # Ok(()) }
@@ -31,7 +31,7 @@ action! {
     setters {
         /// Removes the signature from this version of a versioned bundle only (`--bundle-version`).
         ///
-        /// `version` names a directory under the bundle's `Versions`. Without this option,
+        /// The version names a directory under the bundle's `Versions`. Without this option,
         /// `codesign` uses the version that `Current` points to.
         bundle_version: Option<impl Into<String>>,
     }
