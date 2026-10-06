@@ -3,8 +3,10 @@
 use std::future::IntoFuture;
 
 use super::asynchronous::Async;
+use super::core::Core;
 use super::runner::{Runner, Runtime};
 use crate::codesign::Action;
+use crate::codesign::action::sealed::ToArgs;
 use crate::errors::{CodesignError, Result};
 use crate::target::{One, Shape};
 
@@ -14,9 +16,21 @@ mod marker {
     pub struct Blocking;
 }
 
-use marker::Blocking;
+pub(crate) use marker::Blocking;
 
 impl Runtime for Blocking {}
+
+impl<S: Shape> Core<S, Blocking> {
+    pub(super) fn run<O: ToArgs + Send + 'static>(self, options: O) -> Result<S::Out<O::Output>> {
+        // A runtime per call costs microseconds against the milliseconds of each `codesign`
+        // process, and leaves no global state or threads behind.
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(CodesignError::Spawn)?;
+        runtime.block_on(self.into_runtime::<Async>().run(options))
+    }
+}
 
 /// A `codesign` run that blocks the calling thread, started by [`run`](Codesign#method.run).
 ///
