@@ -8,7 +8,8 @@
 use std::future::IntoFuture;
 use std::path::PathBuf;
 
-use signers::{Codesign, Error};
+use signers::Error;
+use signers::codesign::sign;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect::{self, Signature};
@@ -22,8 +23,8 @@ async fn one_process_for_all_targets_is_the_default() {
     let after = workspace.unsigned("after");
     let batch = vec![bad, after.clone()];
 
-    let by_default = Codesign::sign(batch.clone(), "-").await.unwrap_err();
-    let on_request = Codesign::sign(batch, "-")
+    let by_default = sign(batch.clone(), "-").await.unwrap_err();
+    let on_request = sign(batch, "-")
         .per_target(true)
         .per_target(false)
         .await
@@ -45,7 +46,7 @@ async fn every_target_is_signed_with_the_same_options() {
         .map(|name| workspace.unsigned(name))
         .into();
 
-    let outputs: Vec<()> = Codesign::sign(targets.clone(), "-")
+    let outputs: Vec<()> = sign(targets.clone(), "-")
         .identifier("com.example.each")
         .per_target(true)
         .await
@@ -63,10 +64,7 @@ async fn an_array_of_targets_yields_an_array_of_the_same_length() {
     let workspace = Workspace::new();
     let targets = ["first", "second"].map(|name| workspace.unsigned(name));
 
-    let [(), ()] = Codesign::sign(targets.clone(), "-")
-        .per_target(true)
-        .await
-        .unwrap();
+    let [(), ()] = sign(targets.clone(), "-").per_target(true).await.unwrap();
 
     for target in &targets {
         inspect::assert_valid(target);
@@ -78,7 +76,7 @@ async fn a_single_target_yields_unit() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    let result: signers::Result<()> = Codesign::sign(&target, "-").await;
+    let result: signers::Result<()> = sign(&target, "-").await;
 
     assert!(matches!(result, Ok(())), "got {result:?}");
     inspect::assert_valid(&target);
@@ -91,7 +89,7 @@ async fn a_single_target_fails_with_its_plain_error() {
     let workspace = Workspace::new();
     let target = workspace.dir("not-a-bundle");
 
-    let error = Codesign::sign(&target, "-").await.unwrap_err();
+    let error = sign(&target, "-").await.unwrap_err();
 
     assert!(crate::codesign_error(error).contains("bundle format unrecognized"));
 }
@@ -112,7 +110,7 @@ async fn refused_targets_are_collected_in_input_order_and_the_rest_are_signed() 
         last.clone(),
     ];
 
-    let error = Codesign::sign(batch, "-")
+    let error = sign(batch, "-")
         .identifier("com.example.survivor")
         .per_target(true)
         .await
@@ -151,23 +149,20 @@ async fn a_single_failure_in_a_collection_is_still_a_batch() {
     let directory = workspace.dir("not-a-bundle");
     let good = workspace.unsigned("good");
 
-    let among_others = Codesign::sign(vec![good.clone(), directory.clone()], "-")
+    let among_others = sign(vec![good.clone(), directory.clone()], "-")
         .per_target(true)
         .await
         .unwrap_err();
-    let alone_in_a_list = Codesign::sign(vec![directory.clone()], "-")
+    let alone_in_a_list = sign(vec![directory.clone()], "-")
         .per_target(true)
         .await
         .unwrap_err();
-    let alone_in_an_array = Codesign::sign([directory.clone()], "-")
+    let alone_in_an_array = sign([directory.clone()], "-")
         .per_target(true)
         .await
         .unwrap_err();
     let slice: &[PathBuf] = std::slice::from_ref(&directory);
-    let alone_in_a_slice = Codesign::sign(slice, "-")
-        .per_target(true)
-        .await
-        .unwrap_err();
+    let alone_in_a_slice = sign(slice, "-").per_target(true).await.unwrap_err();
 
     for error in [
         among_others,
@@ -195,7 +190,7 @@ async fn an_array_of_targets_fails_as_a_batch_too() {
     let directory = workspace.dir("not-a-bundle");
     let already_signed = workspace.adhoc_signed("already-signed");
 
-    let error = Codesign::sign(
+    let error = sign(
         [directory.clone(), good.clone(), already_signed.clone()],
         "-",
     )
@@ -227,10 +222,7 @@ async fn a_batch_larger_than_the_process_cap_is_handled_in_full() {
     batch.extend(good.iter().cloned());
     batch.push(trailing.clone());
 
-    let error = Codesign::sign(batch, "-")
-        .per_target(true)
-        .await
-        .unwrap_err();
+    let error = sign(batch, "-").per_target(true).await.unwrap_err();
 
     let failed: Vec<PathBuf> = crate::batch_failures(error)
         .into_iter()
@@ -249,14 +241,10 @@ async fn a_per_target_batch_can_run_on_another_task() {
 
     // Spawned bare, rather than wrapped in an `async` block, so this only
     // compiles while the future stays `Send + 'static` for a collection too.
-    let outputs = tokio::spawn(
-        Codesign::sign(targets.clone(), "-")
-            .per_target(true)
-            .into_future(),
-    )
-    .await
-    .expect("the signing task panicked")
-    .expect("the signing task failed");
+    let outputs = tokio::spawn(sign(targets.clone(), "-").per_target(true).into_future())
+        .await
+        .expect("the signing task panicked")
+        .expect("the signing task failed");
 
     assert_eq!(outputs.len(), 2);
     for target in &targets {

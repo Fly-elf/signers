@@ -44,7 +44,7 @@ mod tests {
     use std::path::Path;
 
     use super::*;
-    use crate::codesign::{Display, Sign};
+    use crate::codesign::actions::{display::Options as Display, sign::Options as Sign};
 
     fn core_for<O: ToArgs, T: IntoTargets>(target: T) -> Core<T::Shape, ()> {
         Core::new::<O, T>(target)

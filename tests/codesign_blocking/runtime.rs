@@ -3,8 +3,8 @@
 
 use std::thread;
 
-use signers::blocking::Codesign;
 use signers::codesign::blocking::remove_signature;
+use signers::codesign::blocking::{sign_adhoc, verify};
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect;
@@ -21,8 +21,8 @@ fn runs_from_several_threads_at_once_and_one_after_another() {
     thread::scope(|scope| {
         for target in &targets {
             scope.spawn(move || {
-                Codesign::sign_adhoc(target).run().unwrap();
-                Codesign::verify(target).run().unwrap();
+                sign_adhoc(target).run().unwrap();
+                verify(target).run().unwrap();
                 remove_signature(target).run().unwrap();
             });
         }
@@ -36,5 +36,5 @@ fn runs_from_several_threads_at_once_and_one_after_another() {
 #[tokio::test]
 #[should_panic(expected = "from within a runtime")]
 async fn running_inside_an_async_runtime_panics() {
-    let _ = Codesign::verify("/bin/ls").run();
+    let _ = verify("/bin/ls").run();
 }
