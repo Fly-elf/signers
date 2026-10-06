@@ -2,7 +2,7 @@
 //!
 //! Only [`IntoTargets`] is public, re-exported at the crate root. The shapes appear in public
 //! signatures but can't be named from outside, so their behaviour is documented in prose on
-//! `IntoTargets`, `Codesign` and `per_target`.
+//! `IntoTargets`, the `codesign` module and `per_target`.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -103,8 +103,8 @@ impl<const N: usize> sealed::Shape for Array<N> {
 
 /// The shapes of a collection of targets, [`Many`] and [`Array`], whatever its length.
 ///
-/// Bounds [`per_target`](crate::Codesign#method.per_target), which has nothing to split on a single
-/// target.
+/// Bounds [`per_target`](crate::codesign::Sign::per_target), which has nothing to split on a
+/// single target.
 pub trait Multi: Shape {}
 
 impl Multi for Many {}
@@ -118,7 +118,7 @@ impl<const N: usize> Multi for Array<N> {}
 /// The target type also fixes what `.await`, or the blocking `.run()`, returns, one output per
 /// target in input order: the output itself for a single path, a `Vec` for a `Vec` or slice, an
 /// array of `N` for an array of `N`. Only a `Vec`, slice or array has
-/// [`per_target`](crate::Codesign#method.per_target), even with one element.
+/// [`per_target`](crate::codesign::Sign::per_target), even with one element.
 ///
 /// Every path is kept: order and duplicates too, and each path reaches `codesign` byte for byte,
 /// non-UTF-8 included. A path starting with `-` is never read as an option. `.await` refuses an
@@ -134,12 +134,12 @@ impl<const N: usize> Multi for Array<N> {}
 /// # async fn run() -> signers::Result<()> {
 /// use std::path::PathBuf;
 ///
-/// use signers::Codesign;
+/// use signers::codesign;
 ///
 /// let built = PathBuf::from("target/release/mytool");
-/// let one: () = Codesign::sign_adhoc(&built).await?;
-/// let all: Vec<()> = Codesign::sign_adhoc(vec!["liba.dylib", "libb.dylib"]).await?;
-/// let [a, b]: [(); 2] = Codesign::sign_adhoc(["liba.dylib", "libb.dylib"]).await?;
+/// let one: () = codesign::sign_adhoc(&built).await?;
+/// let all: Vec<()> = codesign::sign_adhoc(vec!["liba.dylib", "libb.dylib"]).await?;
+/// let [a, b]: [(); 2] = codesign::sign_adhoc(["liba.dylib", "libb.dylib"]).await?;
 /// # Ok(()) }
 /// ```
 ///
@@ -147,8 +147,8 @@ impl<const N: usize> Multi for Array<N> {}
 /// array by value, or use `vec![…]`:
 ///
 /// ```compile_fail,E0277
-/// # use signers::Codesign;
-/// Codesign::sign_adhoc(&["liba.dylib", "libb.dylib"]);
+/// # use signers::codesign;
+/// codesign::sign_adhoc(&["liba.dylib", "libb.dylib"]);
 /// ```
 ///
 /// Other crates can't implement it:

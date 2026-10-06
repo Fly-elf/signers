@@ -10,11 +10,10 @@ use crate::codesign::{Signature, SignatureSlot};
 use crate::errors::{CodesignError, Result};
 
 action! {
-    /// Options of the display action: the `A` in `Codesign<Display>`.
+    /// Builder of a run that reads signatures, returned by [`display`](crate::codesign::display).
     ///
-    /// [`Codesign::display`](crate::Codesign#method.display) creates it. You set its options with [the
-    /// display setters](crate::Codesign#impl-Runner%3CDisplay,+S,+R%3E). An option you never set keeps
-    /// `codesign`'s default.
+    /// Each setter maps to one `codesign` flag. A later call replaces an earlier one, `false`
+    /// leaves the flag out, and an option you never set keeps `codesign`'s default.
     ///
     /// # Examples
     ///
@@ -22,9 +21,9 @@ action! {
     ///
     /// ```no_run
     /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
+    /// use signers::codesign;
     ///
-    /// let signature = Codesign::display("MyApp.app").deep(true).await?;
+    /// let signature = codesign::display("MyApp.app").deep(true).await?;
     /// for path in &signature.nested {
     ///     println!("{path}");
     /// }
@@ -35,10 +34,9 @@ action! {
     ///
     /// ```no_run
     /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
-    /// use signers::codesign::Format;
+    /// use signers::codesign::{self, Format};
     ///
-    /// let signature = Codesign::display("/bin/ls").architecture("arm64e").await?;
+    /// let signature = codesign::display("/bin/ls").architecture("arm64e").await?;
     /// assert_eq!(signature.format, Format::MachOThin("arm64e".into()));
     /// # Ok(()) }
     /// ```

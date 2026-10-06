@@ -1,7 +1,5 @@
-//! What every `codesign` action shares: the sealed [`Action`] trait, argument rendering and
-//! the result of a successful run.
-//!
-//! It's apart from the async runner so that a blocking runner can share it.
+//! What every `codesign` action shares: the sealed traits, argument rendering and the
+//! `action!` macro that defines each action's public type.
 
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
@@ -9,7 +7,7 @@ use std::path::PathBuf;
 
 use bitflags::Flags;
 
-/// Holds [`ToArgs`](sealed::ToArgs) where other crates can't name it, which seals [`Action`].
+/// Holds the traits of the action types where other crates can't name them.
 pub(crate) mod sealed {
     use std::borrow::Cow;
     use std::ffi::OsStr;
@@ -17,6 +15,7 @@ pub(crate) mod sealed {
 
     use crate::errors::{CodesignError, Error, Result};
 
+    /// Marks the action types that can run several targets in one `codesign`; bounds `per_target`.
     pub trait SharedRun {}
 
     /// Renders an action into `codesign` arguments and reads the result of its run.
@@ -205,25 +204,25 @@ macro_rules! action {
             /// One process stops at the first target it rejects and reports that one only. Per target,
             /// every target runs, and the failures come together as [`Error::Batch`](crate::Error::Batch),
             /// in input order. At most [`available_parallelism`](std::thread::available_parallelism)
-            /// processes run at a time. The default is `false` for [`sign`](crate::Codesign#method.sign)
-            /// and [`remove_signature`](crate::Codesign#method.remove_signature), which change the targets
-            /// in order, and `true` for [`verify`](crate::Codesign#method.verify),
-            /// [`display`](crate::Codesign#method.display) and
-            /// [`validate_constraint`](crate::Codesign#method.validate_constraint), which only read them.
+            /// processes run at a time. The default is `false` for [`sign`](crate::codesign::sign), its
+            /// presets and [`remove_signature`](crate::codesign::remove_signature), which change the
+            /// targets in order, and `true` for [`verify`](crate::codesign::verify),
+            /// [`display`](crate::codesign::display) and
+            /// [`validate_constraint`](crate::codesign::validate_constraint), which only read them.
             ///
             /// Only a `Vec`, slice or array of targets has this setter, even with one element: that is
             /// the `S: Multi` bound. A single target always runs one `codesign`:
             ///
-            /// ```compile_fail,E0599
-            /// signers::Codesign::sign("a", "-").per_target(true);
+            /// ```compile_fail,E0277
+            /// signers::codesign::sign("a", "-").per_target(true);
             /// ```
             ///
-            /// [`extract_certificates`](crate::Codesign#method.extract_certificates) and
-            /// [`internal_requirements`](crate::Codesign#method.internal_requirements) have no such setter
-            /// either: they always run one `codesign` per target.
+            /// [`requirements`](crate::codesign::requirements) and
+            /// [`extract_certificates`](crate::codesign::extract_certificates) can't take it either, as
+            /// the `Self: SharedRun` bound says: they always run one `codesign` per target.
             ///
-            /// An option that writes one shared file, [`file_list`](crate::Codesign#method.file_list) or
-            /// [`detached`](crate::Codesign#method.detached), makes `.await` fail with
+            /// An option that writes one shared file, [`file_list`](crate::codesign::Sign::file_list) or
+            /// [`detached`](crate::codesign::Sign::detached), makes `.await` fail with
             /// [`Error::SharedOutputPerTarget`](crate::Error::SharedOutputPerTarget).
             ///
             /// <div class="warning">
@@ -240,10 +239,10 @@ macro_rules! action {
             ///
             /// ```no_run
             /// # async fn run() -> signers::Result<()> {
-            /// use signers::{Codesign, Error};
+            /// use signers::{Error, codesign};
             ///
             /// let libraries = vec!["liba.dylib", "libb.dylib", "libc.dylib"];
-            /// match Codesign::sign_adhoc(libraries).force(true).per_target(true).await {
+            /// match codesign::sign_adhoc(libraries).force(true).per_target(true).await {
             ///     Ok(_) => {}
             ///     Err(Error::Batch(failures)) => {
             ///         for (path, error) in &failures {
@@ -264,7 +263,8 @@ macro_rules! action {
             }
         }
 
-        /// Runs the action when awaited. See [`Codesign`](crate::Codesign) for its errors and panics.
+        /// Runs the action when awaited. Its [errors](crate::codesign#errors) and
+        /// [panics](crate::codesign#panics) are listed in [`codesign`](crate::codesign).
         impl<S> ::std::future::IntoFuture for $name<S, $crate::codesign::asynchronous::Async>
         where
             S: $crate::target::Shape,
@@ -276,9 +276,9 @@ macro_rules! action {
 
             /// Returns the future that runs the action. Nothing happens until it's polled.
             ///
-            /// Once every `codesign` run has exited 0, it resolves to one [`Output`](Action) per target,
-            /// shaped like the targets: `S::Out<A::Output>` is `A::Output` for a single path,
-            /// `Vec<A::Output>` for a `Vec` or slice, `[A::Output; N]` for an array of `N`.
+            /// Once every `codesign` run has exited 0, it resolves to the action's output for each
+            /// target, shaped like the targets: one output for a single path, a `Vec` of them for a
+            /// `Vec` or slice, an array of `N` for an array of `N`.
             fn into_future(self) -> Self::IntoFuture {
                 self.core.run(self.options)
             }
@@ -291,28 +291,28 @@ macro_rules! action {
         {
             /// Runs the action, blocking the calling thread until every `codesign` has finished.
             ///
-            /// It checks, runs and returns exactly like `.await` on
-            /// [`signers::Codesign`](crate::Codesign): the same output shape, the same errors, and the
-            /// same concurrent processes with [`per_target`](Codesign#method.per_target). It builds a
-            /// single-threaded Tokio runtime for the call and drops it before returning.
+            /// It checks, runs and returns exactly like `.await` on the async builder: the same output
+            /// shape, the same errors, and the same concurrent processes with
+            /// [`per_target`](Self::per_target). It builds a single-threaded Tokio runtime for the call
+            /// and drops it before returning.
             ///
             /// # Errors
             ///
-            /// Those listed on [`signers::Codesign`](crate::Codesign#errors). A runtime that can't be
-            /// created fails with [`CodesignError::Spawn`].
+            /// Those listed in [`codesign`](crate::codesign#errors). A runtime that can't be created
+            /// fails with [`CodesignError::Spawn`](crate::CodesignError::Spawn).
             ///
             /// # Panics
             ///
             /// Panics when called inside a Tokio runtime, such as from an `async fn` it runs. There,
-            /// `.await` [`signers::Codesign`](crate::Codesign) instead.
+            /// `.await` the builder from [`codesign`](crate::codesign) instead.
             ///
             /// # Examples
             ///
             /// ```no_run
             /// # fn main() -> signers::Result<()> {
-            /// use signers::blocking::Codesign;
+            /// use signers::codesign::blocking;
             ///
-            /// let [ls, cat] = Codesign::display(["/bin/ls", "/bin/cat"]).run()?;
+            /// let [ls, cat] = blocking::display(["/bin/ls", "/bin/cat"]).run()?;
             /// println!("{} {}", ls.identifier, cat.identifier);
             /// # Ok(()) }
             /// ```
