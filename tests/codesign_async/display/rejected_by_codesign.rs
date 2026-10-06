@@ -1,7 +1,8 @@
 //! Targets `codesign` has no signature to report for, and option values it
 //! refuses: each a plain `codesign` failure carrying its diagnostics.
 
-use signers::{Codesign, CodesignError, Error};
+use signers::codesign::display;
+use signers::{CodesignError, Error};
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect;
@@ -34,7 +35,7 @@ async fn an_unsigned_target_is_an_error() {
     ];
 
     for target in targets {
-        let stderr = exit_1(Codesign::display(&target).await.unwrap_err());
+        let stderr = exit_1(display(&target).await.unwrap_err());
 
         assert!(
             stderr.contains("code object is not signed at all"),
@@ -49,10 +50,7 @@ async fn an_architecture_the_target_lacks_is_an_error() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
 
-    let error = Codesign::display(&target)
-        .architecture("i386")
-        .await
-        .unwrap_err();
+    let error = display(&target).architecture("i386").await.unwrap_err();
 
     let stderr = exit_1(error);
     assert!(
@@ -67,10 +65,7 @@ async fn a_bundle_version_the_bundle_lacks_is_an_error() {
     let framework = workspace.framework("Kit");
     super::adhoc_sign(&framework, &[]);
 
-    let error = Codesign::display(&framework)
-        .bundle_version("Z")
-        .await
-        .unwrap_err();
+    let error = display(&framework).bundle_version("Z").await.unwrap_err();
 
     let stderr = exit_1(error);
     assert!(
@@ -88,7 +83,7 @@ async fn a_detached_signature_is_needed_to_read_it() {
     let detached = workspace.join("hello.sig");
     super::adhoc_sign(&target, &["--detached", detached.to_str().unwrap()]);
 
-    let stderr = exit_1(Codesign::display(&target).await.unwrap_err());
+    let stderr = exit_1(display(&target).await.unwrap_err());
 
     assert!(
         stderr.contains("code object is not signed at all"),
@@ -113,7 +108,7 @@ async fn a_failed_one_process_run_carries_the_empty_stdout_codesign_left() {
     ]);
     assert!(!oracle.success);
 
-    let error = Codesign::display(vec![signed, unsigned.clone()])
+    let error = display(vec![signed, unsigned.clone()])
         .per_target(false)
         .await
         .unwrap_err();

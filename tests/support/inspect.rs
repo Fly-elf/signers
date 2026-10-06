@@ -342,7 +342,7 @@ impl Signature {
     }
 }
 
-/// The kinds of constraint a signature can carry, one per `Codesign<Sign>` setter.
+/// The kinds of constraint a signature can carry, one per `Sign` setter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Constraint {
     LaunchSelf,

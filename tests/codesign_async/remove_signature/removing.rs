@@ -1,8 +1,8 @@
 //! Stripping a bare Mach-O: the happy path, batches, universal binaries, and
 //! the two states in which a successful run removes nothing at all.
 
-use signers::Codesign;
 use signers::codesign::remove_signature;
+use signers::codesign::sign;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect::{self, Signature};
@@ -46,7 +46,7 @@ async fn every_slice_of_a_universal_binary_is_stripped() {
     let Some(target) = workspace.unsigned_universal("hello-universal") else {
         skip!("this toolchain has only one architecture's SDK");
     };
-    Codesign::sign(&target, "-").await.unwrap();
+    sign(&target, "-").await.unwrap();
     for arch in ["arm64", "x86_64"] {
         assert_eq!(
             Signature::of_arch(&target, arch).signature(),
@@ -128,7 +128,7 @@ async fn spaces_and_non_ascii_in_a_path_are_passed_through_verbatim() {
 async fn awaiting_a_removal_yields_unit() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
-    Codesign::sign(&target, "-").await.unwrap();
+    sign(&target, "-").await.unwrap();
 
     let result: signers::Result<()> = remove_signature(&target).await;
 

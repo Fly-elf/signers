@@ -263,16 +263,16 @@ mod tests {
     use std::ffi::OsString;
 
     use super::*;
-    use crate::codesign::Codesign;
+    use crate::codesign::verify;
 
     fn os(strings: &[&str]) -> Vec<OsString> {
         strings.iter().map(OsString::from).collect()
     }
 
-    fn args_of<S>(builder: &Codesign<Verify, S>) -> Vec<OsString> {
+    fn args_of<S>(builder: &Verify<S>) -> Vec<OsString> {
         builder
-            .action
-            .to_args(&builder.targets)
+            .options
+            .to_args(&builder.core.targets)
             .into_iter()
             .map(Cow::into_owned)
             .collect()
@@ -287,16 +287,13 @@ mod tests {
 
     #[test]
     fn bare_action_only_verifies() {
-        assert_eq!(
-            args_of(&Codesign::verify("app")),
-            os(&["--verify", "--", "app"])
-        );
+        assert_eq!(args_of(&verify("app")), os(&["--verify", "--", "app"]));
     }
 
     /// Every option, in the order the action renders them, each exactly once.
     #[test]
     fn every_option_renders_exactly_once_in_field_order() {
-        let action = Codesign::verify("app")
+        let action = verify("app")
             .check_notarization(true)
             .detached("app.sig")
             .test_requirement("anchor apple")
@@ -333,47 +330,44 @@ mod tests {
 
     #[test]
     fn each_option_renders_alone_in_its_own_form() {
-        let cases: [(Codesign<Verify>, &[&str]); 12] = [
-            (Codesign::verify("app").deep(true), &["--deep"]),
-            (Codesign::verify("app").strict(Strict::All), &["--strict"]),
+        let cases: [(Verify, &[&str]); 12] = [
+            (verify("app").deep(true), &["--deep"]),
+            (verify("app").strict(Strict::All), &["--strict"]),
             (
-                Codesign::verify("app").ignore_resources(true),
+                verify("app").ignore_resources(true),
                 &["--ignore-resources"],
             ),
             (
-                Codesign::verify("app").architecture("x86_64"),
+                verify("app").architecture("x86_64"),
                 &["--architecture", "x86_64"],
             ),
             (
-                Codesign::verify("app").bundle_version("B"),
+                verify("app").bundle_version("B"),
                 &["--bundle-version", "B"],
             ),
             (
-                Codesign::verify("app").check_designated_requirement(true),
+                verify("app").check_designated_requirement(true),
                 &["--verbose=1"],
             ),
             (
-                Codesign::verify("app").test_requirement("anchor apple"),
+                verify("app").test_requirement("anchor apple"),
                 &["-R=anchor apple"],
             ),
             (
-                Codesign::verify("app").test_requirement_file("req.txt"),
+                verify("app").test_requirement_file("req.txt"),
                 &["-R", "req.txt"],
             ),
             (
-                Codesign::verify("app").signature_slot(SignatureSlot::First),
+                verify("app").signature_slot(SignatureSlot::First),
                 &["--signature-slot", "1"],
             ),
             (
-                Codesign::verify("app").signature_slot(SignatureSlot::Second),
+                verify("app").signature_slot(SignatureSlot::Second),
                 &["--signature-slot", "2"],
             ),
+            (verify("app").detached("sig"), &["--detached", "sig"]),
             (
-                Codesign::verify("app").detached("sig"),
-                &["--detached", "sig"],
-            ),
-            (
-                Codesign::verify("app").check_notarization(true),
+                verify("app").check_notarization(true),
                 &["--check-notarization"],
             ),
         ];
@@ -394,7 +388,7 @@ mod tests {
             (Strict::Sideband, "--strict=sideband"),
         ] {
             assert_eq!(
-                args_of(&Codesign::verify("app").strict(strict)),
+                args_of(&verify("app").strict(strict)),
                 os(&["--verify", token, "--", "app"])
             );
         }
@@ -402,7 +396,7 @@ mod tests {
 
     #[test]
     fn false_removes_the_flag_again() {
-        let action = Codesign::verify("app")
+        let action = verify("app")
             .deep(true)
             .deep(false)
             .ignore_resources(true)
@@ -416,7 +410,7 @@ mod tests {
 
     #[test]
     fn repeating_a_valued_option_keeps_the_last_value() {
-        let action = Codesign::verify("app")
+        let action = verify("app")
             .strict(Strict::All)
             .strict(Strict::Symlinks)
             .architecture("arm64")
@@ -463,7 +457,7 @@ mod tests {
             "héllo ✓",
         ] {
             assert_eq!(
-                args_of(&Codesign::verify("app").test_requirement(text)),
+                args_of(&verify("app").test_requirement(text)),
                 os(&["--verify", &format!("-R={text}"), "--", "app"]),
             );
         }
@@ -483,7 +477,7 @@ mod tests {
             "héllo ✓.txt",
         ] {
             assert_eq!(
-                args_of(&Codesign::verify("app").test_requirement_file(path)),
+                args_of(&verify("app").test_requirement_file(path)),
                 os(&["--verify", "-R", path, "--", "app"]),
                 "{path}"
             );
@@ -494,14 +488,14 @@ mod tests {
     fn a_requirement_file_path_that_is_not_utf8_is_kept_byte_for_byte() {
         use std::os::unix::ffi::OsStringExt;
         let path = OsString::from_vec(b"req\xff\xfe.txt".to_vec());
-        let args = args_of(&Codesign::verify("app").test_requirement_file(&path));
+        let args = args_of(&verify("app").test_requirement_file(&path));
         assert_eq!(args[1], OsString::from("-R"));
         assert_eq!(args[2], path);
     }
 
     #[test]
     fn requirement_text_and_requirement_file_share_one_slot_and_the_last_call_wins() {
-        let text_then_file = Codesign::verify("app")
+        let text_then_file = verify("app")
             .test_requirement("anchor apple")
             .test_requirement_file("req.txt");
         assert_eq!(
@@ -509,7 +503,7 @@ mod tests {
             os(&["--verify", "-R", "req.txt", "--", "app"])
         );
 
-        let file_then_text = Codesign::verify("app")
+        let file_then_text = verify("app")
             .test_requirement_file("req.txt")
             .test_requirement("anchor apple");
         assert_eq!(
@@ -517,7 +511,7 @@ mod tests {
             os(&["--verify", "-R=anchor apple", "--", "app"])
         );
 
-        let file_twice = Codesign::verify("app")
+        let file_twice = verify("app")
             .test_requirement_file("one.txt")
             .test_requirement_file("two.txt");
         assert_eq!(
@@ -528,8 +522,8 @@ mod tests {
 
     #[test]
     fn a_requirement_file_of_stdin_fails_validation_and_names_its_setter() {
-        let action = Codesign::verify("app").test_requirement_file("-");
-        let error = action.action.validate().unwrap_err();
+        let action = verify("app").test_requirement_file("-");
+        let error = action.options.validate().unwrap_err();
         assert!(
             matches!(error, Error::StdioPath("test_requirement_file")),
             "got {error:?}"
@@ -540,10 +534,10 @@ mod tests {
     /// is left that would read standard input.
     #[test]
     fn replacing_a_refused_requirement_file_makes_validation_pass() {
-        let action = Codesign::verify("app")
+        let action = verify("app")
             .test_requirement_file("-")
             .test_requirement("anchor apple");
-        assert!(action.action.validate().is_ok());
+        assert!(action.options.validate().is_ok());
     }
 
     /// Only the file setter reads `-` as stdin: as text it is requirement
@@ -551,31 +545,31 @@ mod tests {
     #[test]
     fn requirements_other_than_a_lone_dash_file_pass_validation() {
         assert!(
-            Codesign::verify("app")
+            verify("app")
                 .test_requirement("-")
-                .action
+                .options
                 .validate()
                 .is_ok()
         );
         for path in ["=-", "-x", "--", "./-", "-/req", " -", "- ", ""] {
-            let action = Codesign::verify("app").test_requirement_file(path);
-            assert!(action.action.validate().is_ok(), "{path:?}");
+            let action = verify("app").test_requirement_file(path);
+            assert!(action.options.validate().is_ok(), "{path:?}");
         }
-        assert!(Codesign::verify("app").action.validate().is_ok());
+        assert!(verify("app").options.validate().is_ok());
     }
 
     #[test]
     fn a_dash_in_any_other_verify_option_passes_validation() {
-        let action = Codesign::verify("app")
+        let action = verify("app")
             .detached("-")
             .architecture("-")
             .bundle_version("-");
-        assert!(action.action.validate().is_ok());
+        assert!(action.options.validate().is_ok());
     }
 
     #[test]
     fn option_values_with_spaces_stay_whole_arguments() {
-        let action = Codesign::verify("app")
+        let action = verify("app")
             .architecture("arm 64")
             .bundle_version("v 1")
             .detached("my sig.bin");
@@ -598,33 +592,30 @@ mod tests {
     #[test]
     fn targets_come_last_after_the_separator() {
         assert_eq!(
-            args_of(&Codesign::verify(vec!["-a.app", "b c.app"]).deep(true)),
+            args_of(&verify(vec!["-a.app", "b c.app"]).deep(true)),
             os(&["--verify", "--deep", "--", "-a.app", "b c.app"])
         );
         assert_eq!(
-            args_of(&Codesign::verify(["a", "b"]).strict(Strict::All)),
+            args_of(&verify(["a", "b"]).strict(Strict::All)),
             os(&["--verify", "--strict", "--", "a", "b"])
         );
     }
 
     #[test]
     fn there_is_nothing_to_validate() {
-        let action = Codesign::verify("app")
-            .test_requirement("-")
-            .detached("-")
-            .action;
+        let action = verify("app").test_requirement("-").detached("-").options;
         assert!(action.validate().is_ok());
     }
 
     #[test]
     fn no_option_is_a_shared_output() {
-        let action = Codesign::verify("app").detached("app.sig").action;
+        let action = verify("app").detached("app.sig").options;
         assert_eq!(action.shared_output(), None);
     }
 
     #[test]
     fn the_output_is_one_unit_per_target_whatever_codesign_printed() {
-        let action = Codesign::verify("app").action;
+        let action = verify("app").options;
         let targets = [PathBuf::from("a"), PathBuf::from("b"), PathBuf::from("c")];
 
         assert_eq!(
@@ -647,23 +638,23 @@ mod tests {
     /// unless the caller asks for one process.
     #[test]
     fn the_constructor_defaults_to_one_process_per_target_for_collections() {
-        assert!(Codesign::verify(vec!["a.app", "b.app"]).per_target);
-        assert!(Codesign::verify(["a.app", "b.app"]).per_target);
-        assert!(Codesign::verify(&["a.app", "b.app"][..]).per_target);
-        assert!(!Codesign::verify(vec!["a.app"]).per_target(false).per_target);
+        assert!(verify(vec!["a.app", "b.app"]).core.per_target);
+        assert!(verify(["a.app", "b.app"]).core.per_target);
+        assert!(verify(&["a.app", "b.app"][..]).core.per_target);
+        assert!(!verify(vec!["a.app"]).per_target(false).core.per_target);
     }
 
     #[test]
     fn per_target_renders_no_argument() {
-        let on = Codesign::verify(vec!["app"]).per_target(true);
-        let off = Codesign::verify(vec!["app"]).per_target(false);
+        let on = verify(vec!["app"]).per_target(true);
+        let off = verify(vec!["app"]).per_target(false);
         assert_eq!(args_of(&on), os(&["--verify", "--", "app"]));
         assert_eq!(args_of(&off), os(&["--verify", "--", "app"]));
     }
 
     #[test]
     fn exit_one_means_the_signature_did_not_verify() {
-        let action = Codesign::verify("app").action;
+        let action = verify("app").options;
         match action.failure(1, String::new(), "app: invalid signature".into()) {
             Error::Codesign(CodesignError::VerificationFailed {
                 stdout,
@@ -680,7 +671,7 @@ mod tests {
 
     #[test]
     fn exit_one_carries_the_altered_resources_printed_on_stdout() {
-        let action = Codesign::verify("app").action;
+        let action = verify("app").options;
         let stdout = "file modified: /x/app/r.txt\nfile added: /x/app/new.txt".to_string();
         match action.failure(
             1,
@@ -711,7 +702,7 @@ mod tests {
 
     #[test]
     fn exit_three_keeps_stdout_without_reading_resources() {
-        let action = Codesign::verify("app").action;
+        let action = verify("app").options;
         let error = action.failure(3, "file modified: /x".into(), "no".into());
         assert!(matches!(
             error,
@@ -801,7 +792,7 @@ mod tests {
 
     #[test]
     fn exit_three_means_the_requirement_was_not_satisfied() {
-        let action = Codesign::verify("app").action;
+        let action = verify("app").options;
         match action.failure(3, "file /x: ok".into(), "test-requirement: failed".into()) {
             Error::Codesign(CodesignError::RequirementUnsatisfied { stdout, stderr }) => {
                 assert_eq!(stdout, "file /x: ok");
@@ -813,7 +804,7 @@ mod tests {
 
     #[test]
     fn any_other_exit_code_is_the_generic_failure() {
-        let action = Codesign::verify("app").action;
+        let action = verify("app").options;
         for code in [2, 4, 64, 127, 255] {
             let error = action.failure(code, "file modified: /x".into(), "boom".into());
             assert_eq!(
@@ -826,10 +817,10 @@ mod tests {
 
     #[test]
     fn the_failure_mapping_ignores_the_options() {
-        let action = Codesign::verify("app")
+        let action = verify("app")
             .test_requirement("anchor apple")
             .deep(true)
-            .action;
+            .options;
         assert!(matches!(
             action.failure(1, String::new(), String::new()),
             Error::Codesign(CodesignError::VerificationFailed { .. })

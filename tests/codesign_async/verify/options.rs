@@ -4,7 +4,7 @@
 use std::fs;
 use std::path::Path;
 
-use signers::Codesign;
+use signers::codesign::{sign, verify};
 
 use super::{flip_byte, verification_failed};
 use crate::support::fixture::Workspace;
@@ -51,7 +51,7 @@ async fn every_slice_is_checked_by_default() {
         skip!("this toolchain can't build a universal binary");
     };
 
-    let error = Codesign::verify(&target).await.unwrap_err();
+    let error = verify(&target).await.unwrap_err();
 
     let stderr = verification_failed(error);
     assert!(stderr.contains("x86_64"), "got {stderr}");
@@ -64,14 +64,8 @@ async fn an_architecture_limits_the_check_to_its_slice() {
         skip!("this toolchain can't build a universal binary");
     };
 
-    Codesign::verify(&target)
-        .architecture("arm64")
-        .await
-        .unwrap();
-    let error = Codesign::verify(&target)
-        .architecture("x86_64")
-        .await
-        .unwrap_err();
+    verify(&target).architecture("arm64").await.unwrap();
+    let error = verify(&target).architecture("x86_64").await.unwrap_err();
     verification_failed(error);
 }
 
@@ -82,7 +76,7 @@ async fn the_last_architecture_wins() {
         skip!("this toolchain can't build a universal binary");
     };
 
-    Codesign::verify(&target)
+    verify(&target)
         .architecture("x86_64")
         .architecture("arm64")
         .await
@@ -99,10 +93,7 @@ async fn a_slice_the_binary_does_not_have_does_not_verify() {
         "arm64"
     };
 
-    let error = Codesign::verify(&target)
-        .architecture(absent)
-        .await
-        .unwrap_err();
+    let error = verify(&target).architecture(absent).await.unwrap_err();
 
     let stderr = verification_failed(error);
     assert!(
@@ -118,10 +109,7 @@ async fn all_is_not_an_architecture_name() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
 
-    let error = Codesign::verify(&target)
-        .architecture("all")
-        .await
-        .unwrap_err();
+    let error = verify(&target).architecture("all").await.unwrap_err();
 
     let stderr = verification_failed(error);
     assert!(stderr.contains("unknown architecture name"), "got {stderr}");
@@ -132,19 +120,13 @@ async fn an_unsigned_file_verifies_against_its_detached_signature() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
     let signature = workspace.join("hello.sig");
-    Codesign::sign(&target, "-")
-        .detached(&signature)
-        .await
-        .unwrap();
+    sign(&target, "-").detached(&signature).await.unwrap();
     assert!(!inspect::is_signed(&target));
     inspect::verify_detached(&signature, &target).expect("the harness's detached signature");
 
-    Codesign::verify(&target)
-        .detached(&signature)
-        .await
-        .unwrap();
+    verify(&target).detached(&signature).await.unwrap();
 
-    let without = Codesign::verify(&target).await.unwrap_err();
+    let without = verify(&target).await.unwrap_err();
     verification_failed(without);
 }
 
@@ -153,16 +135,10 @@ async fn a_detached_signature_does_not_cover_a_different_file() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
     let signature = workspace.join("hello.sig");
-    Codesign::sign(&target, "-")
-        .detached(&signature)
-        .await
-        .unwrap();
+    sign(&target, "-").detached(&signature).await.unwrap();
     let other = workspace.write("other.txt", "something else entirely\n");
 
-    let error = Codesign::verify(&other)
-        .detached(&signature)
-        .await
-        .unwrap_err();
+    let error = verify(&other).detached(&signature).await.unwrap_err();
 
     verification_failed(error);
 }
@@ -172,7 +148,7 @@ async fn a_missing_detached_signature_does_not_verify() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    let error = Codesign::verify(&target)
+    let error = verify(&target)
         .detached(workspace.join("nowhere.sig"))
         .await
         .unwrap_err();
@@ -185,12 +161,9 @@ async fn the_last_detached_signature_wins() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
     let signature = workspace.join("hello.sig");
-    Codesign::sign(&target, "-")
-        .detached(&signature)
-        .await
-        .unwrap();
+    sign(&target, "-").detached(&signature).await.unwrap();
 
-    Codesign::verify(&target)
+    verify(&target)
         .detached(workspace.join("nowhere.sig"))
         .detached(&signature)
         .await
@@ -202,15 +175,9 @@ async fn a_detached_path_with_spaces_is_one_argument() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
     let signature = workspace.join("my hello ✓.sig");
-    Codesign::sign(&target, "-")
-        .detached(&signature)
-        .await
-        .unwrap();
+    sign(&target, "-").detached(&signature).await.unwrap();
 
-    Codesign::verify(&target)
-        .detached(&signature)
-        .await
-        .unwrap();
+    verify(&target).detached(&signature).await.unwrap();
 }
 
 /// Asking for no notarization check is the same as not asking, so it works
@@ -220,7 +187,7 @@ async fn check_notarization_false_is_the_plain_check() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
 
-    Codesign::verify(&target)
+    verify(&target)
         .check_notarization(true)
         .check_notarization(false)
         .await
@@ -235,10 +202,7 @@ async fn check_notarization_is_accepted_on_a_valid_target() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
 
-    Codesign::verify(&target)
-        .check_notarization(true)
-        .await
-        .unwrap();
+    verify(&target).check_notarization(true).await.unwrap();
 }
 
 #[tokio::test]
@@ -247,10 +211,7 @@ async fn check_notarization_still_reports_a_broken_signature() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    let error = Codesign::verify(&target)
-        .check_notarization(true)
-        .await
-        .unwrap_err();
+    let error = verify(&target).check_notarization(true).await.unwrap_err();
 
     verification_failed(error);
 }

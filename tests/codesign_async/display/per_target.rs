@@ -4,8 +4,8 @@
 
 use std::path::PathBuf;
 
-use signers::Codesign;
 use signers::codesign::Signature;
+use signers::codesign::display;
 
 use crate::support::fixture::{Workspace, fixture_str};
 use crate::support::inspect;
@@ -34,7 +34,7 @@ async fn each_target_gets_its_own_signature_in_input_order() {
     targets.reverse();
 
     for per_target in [true, false] {
-        let signatures = Codesign::display(targets.clone())
+        let signatures = display(targets.clone())
             .per_target(per_target)
             .await
             .unwrap();
@@ -63,7 +63,7 @@ async fn an_array_of_targets_yields_an_array_of_signatures() {
     let workspace = Workspace::new();
     let [first, second, _] = <[PathBuf; 3]>::try_from(three_targets(&workspace)).unwrap();
 
-    let [a, b] = Codesign::display([first, second]).await.unwrap();
+    let [a, b] = display([first, second]).await.unwrap();
 
     assert_eq!(a.identifier, "com.example.first");
     assert_eq!(b.identifier, "com.example.second");
@@ -76,7 +76,7 @@ async fn entitlements_are_read_per_target_by_default() {
     let workspace = Workspace::new();
     let targets = three_targets(&workspace);
 
-    let signatures = Codesign::display(targets.clone()).await.unwrap();
+    let signatures = display(targets.clone()).await.unwrap();
 
     let expected: plist::Dictionary =
         plist::from_bytes(inspect::entitlements(&targets[1]).as_bytes()).unwrap();
@@ -90,7 +90,7 @@ async fn one_run_for_all_targets_reads_no_entitlements() {
     let workspace = Workspace::new();
     let targets = three_targets(&workspace);
 
-    let signatures = Codesign::display(targets).per_target(false).await.unwrap();
+    let signatures = display(targets).per_target(false).await.unwrap();
 
     assert!(
         signatures.iter().all(|s| s.entitlements.is_none()),
@@ -109,7 +109,7 @@ async fn unsigned_targets_are_collected_in_input_order_by_default() {
     let signed = workspace.adhoc_signed("signed");
     let second_unsigned = workspace.unsigned("second unsigned");
 
-    let error = Codesign::display(vec![
+    let error = display(vec![
         first_unsigned.clone(),
         signed,
         second_unsigned.clone(),
@@ -138,7 +138,7 @@ async fn one_run_for_all_targets_fails_as_a_whole_on_an_unsigned_target() {
     let signed = workspace.presigned("signed", &["-i", "com.example.signed"]);
     let unsigned = workspace.unsigned("unsigned");
 
-    let error = Codesign::display(vec![signed, unsigned.clone()])
+    let error = display(vec![signed, unsigned.clone()])
         .per_target(false)
         .await
         .unwrap_err();
@@ -164,7 +164,7 @@ async fn targets_of_different_kinds_are_told_apart() {
     let targets = vec![bundle, file, binary];
 
     for per_target in [true, false] {
-        let signatures = Codesign::display(targets.clone())
+        let signatures = display(targets.clone())
             .per_target(per_target)
             .await
             .unwrap();

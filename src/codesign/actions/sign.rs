@@ -377,7 +377,7 @@ mod tests {
     use std::ffi::OsString;
 
     use super::*;
-    use crate::codesign::Codesign;
+    use crate::codesign::{sign, sign_adhoc, sign_for_distribution};
 
     fn os(strings: &[&str]) -> Vec<OsString> {
         strings.iter().map(OsString::from).collect()
@@ -385,10 +385,10 @@ mod tests {
 
     /// Renders the arguments, taking ownership so assertions can compare them
     /// against plain `OsString`s.
-    fn args_of<S>(builder: &Codesign<Sign, S>) -> Vec<OsString> {
+    fn args_of<S>(builder: &Sign<S>) -> Vec<OsString> {
         builder
-            .action
-            .to_args(&builder.targets)
+            .options
+            .to_args(&builder.core.targets)
             .into_iter()
             .map(Cow::into_owned)
             .collect()
@@ -397,7 +397,7 @@ mod tests {
     #[test]
     fn bare_action_only_signs() {
         assert_eq!(
-            args_of(&Codesign::sign("app", "-")),
+            args_of(&sign("app", "-")),
             os(&["--sign", "-", "--", "app"])
         );
     }
@@ -405,7 +405,7 @@ mod tests {
     #[test]
     fn adhoc_signs_with_dash_identity() {
         assert_eq!(
-            args_of(&Codesign::sign_adhoc("app")),
+            args_of(&sign_adhoc("app")),
             os(&["--sign", "-", "--", "app"])
         );
     }
@@ -413,7 +413,7 @@ mod tests {
     #[test]
     fn for_distribution_enables_hardened_runtime_and_timestamp() {
         assert_eq!(
-            args_of(&Codesign::sign_for_distribution("app", "Developer ID")),
+            args_of(&sign_for_distribution("app", "Developer ID")),
             os(&[
                 "--sign",
                 "Developer ID",
@@ -429,7 +429,7 @@ mod tests {
     #[test]
     #[expect(deprecated, reason = "`--deep` is still rendered, deprecated or not")]
     fn scalar_setters_are_forwarded() {
-        let action = Codesign::sign("app", "Developer ID")
+        let action = sign("app", "Developer ID")
             .identifier("com.example.app")
             .entitlements("app.entitlements")
             .force(true)
@@ -465,7 +465,7 @@ mod tests {
     #[test]
     #[expect(deprecated, reason = "`--deep` is still rendered, deprecated or not")]
     fn every_option_renders_exactly_once() {
-        let action = Codesign::sign("app", "Developer ID")
+        let action = sign("app", "Developer ID")
             .identifier("com.example.app")
             .requirements("=designated => anchor apple")
             .prefix("com.example.")
@@ -563,7 +563,7 @@ mod tests {
     #[test]
     fn empty_flag_sets_render_no_argument_at_all() {
         // Not `--options ""`, which `codesign` rejects: the option is dropped.
-        let action = Codesign::sign("app", "-")
+        let action = sign("app", "-")
             .options(SigningFlags::empty())
             .preserve_metadata(PreserveMetadata::empty());
         assert_eq!(args_of(&action), os(&["--sign", "-", "--", "app"]));
@@ -571,7 +571,7 @@ mod tests {
 
     #[test]
     fn flag_sets_render_in_declaration_order() {
-        let action = Codesign::sign("app", "-")
+        let action = sign("app", "-")
             .options(SigningFlags::RUNTIME | SigningFlags::KILL)
             .preserve_metadata(PreserveMetadata::ENTITLEMENTS | PreserveMetadata::IDENTIFIER);
         assert_eq!(
@@ -590,7 +590,7 @@ mod tests {
 
     #[test]
     fn flag_sets_replace_rather_than_accumulate() {
-        let action = Codesign::sign("app", "-")
+        let action = sign("app", "-")
             .options(SigningFlags::RUNTIME)
             .options(SigningFlags::LIBRARY);
         assert_eq!(
@@ -604,7 +604,7 @@ mod tests {
     /// request followed by a target named `none`.
     #[test]
     fn timestamp_variants_each_render_as_one_argument() {
-        let rendered = |timestamp| args_of(&Codesign::sign("app", "-").timestamp(timestamp));
+        let rendered = |timestamp| args_of(&sign("app", "-").timestamp(timestamp));
         assert_eq!(
             rendered(Timestamp::Enabled),
             os(&["--sign", "-", "--timestamp", "--", "app"]),
@@ -621,7 +621,7 @@ mod tests {
 
     #[test]
     fn every_constraint_kind_is_emitted() {
-        let action = Codesign::sign("app", "-")
+        let action = sign("app", "-")
             .library_constraint("library.plist")
             .launch_constraint_self("self.plist")
             .launch_constraint_parent("parent.plist")
@@ -647,7 +647,7 @@ mod tests {
 
     #[test]
     fn repeating_a_constraint_kind_keeps_the_last_path() {
-        let action = Codesign::sign("app", "-")
+        let action = sign("app", "-")
             .launch_constraint_self("first.plist")
             .launch_constraint_self("third.plist");
         assert_eq!(
@@ -665,8 +665,8 @@ mod tests {
 
     #[test]
     fn a_file_list_of_stdout_fails_validation() {
-        let action = Codesign::sign("app", "-").file_list("-");
-        let error = action.action.validate().unwrap_err();
+        let action = sign("app", "-").file_list("-");
+        let error = action.options.validate().unwrap_err();
         assert!(
             matches!(error, crate::errors::Error::StdioPath("file_list")),
             "got {error:?}"
@@ -675,14 +675,14 @@ mod tests {
 
     #[test]
     fn a_file_list_pointing_at_a_real_path_passes_validation() {
-        let action = Codesign::sign("app", "-").file_list("signed.txt");
-        assert!(action.action.validate().is_ok());
+        let action = sign("app", "-").file_list("signed.txt");
+        assert!(action.options.validate().is_ok());
     }
 
     #[test]
     fn requirements_of_stdin_fail_validation() {
-        let action = Codesign::sign("app", "-").requirements("-");
-        let error = action.action.validate().unwrap_err();
+        let action = sign("app", "-").requirements("-");
+        let error = action.options.validate().unwrap_err();
         assert!(
             matches!(error, crate::errors::Error::StdioPath("requirements")),
             "got {error:?}"
@@ -694,15 +694,15 @@ mod tests {
     #[test]
     fn requirements_other_than_a_lone_dash_pass_validation() {
         for value in ["=-", "= -", "-x", "--", "./-", "-/a.rqset", " -", "- ", ""] {
-            let action = Codesign::sign("app", "-").requirements(value);
-            assert!(action.action.validate().is_ok(), "{value:?}");
+            let action = sign("app", "-").requirements(value);
+            assert!(action.options.validate().is_ok(), "{value:?}");
         }
     }
 
     /// `codesign` reads these `-` as a plain file name, so they are not refused.
     #[test]
     fn a_dash_in_any_other_option_passes_validation() {
-        let action = Codesign::sign("app", "-")
+        let action = sign("app", "-")
             .entitlements("-")
             .detached("-")
             .keychain("-")
@@ -712,12 +712,12 @@ mod tests {
             .library_constraint("-")
             .identifier("-")
             .prefix("-");
-        assert!(action.action.validate().is_ok());
+        assert!(action.options.validate().is_ok());
     }
 
     #[test]
     fn requirements_source_text_is_one_argument_after_the_flag() {
-        let action = Codesign::sign("app", "-").requirements("=designated => anchor apple");
+        let action = sign("app", "-").requirements("=designated => anchor apple");
         assert_eq!(
             args_of(&action),
             os(&[
@@ -733,7 +733,7 @@ mod tests {
 
     #[test]
     fn targets_come_last() {
-        let action = Codesign::sign(vec!["a.app", "b.app"], "-").force(true);
+        let action = sign(vec!["a.app", "b.app"], "-").force(true);
         assert_eq!(
             args_of(&action),
             os(&["--sign", "-", "--force", "--", "a.app", "b.app"])
@@ -742,7 +742,7 @@ mod tests {
 
     #[test]
     fn the_output_is_one_unit_per_target_whatever_codesign_printed() {
-        let action = Codesign::sign("app", "-").action;
+        let action = sign("app", "-").options;
         let targets = [PathBuf::from("a"), PathBuf::from("b"), PathBuf::from("c")];
 
         let silent: Vec<()> = action
@@ -761,39 +761,43 @@ mod tests {
     /// unless the caller asks otherwise.
     #[test]
     fn every_constructor_defaults_to_one_process_for_all_targets() {
-        assert!(!Codesign::sign("app", "-").per_target);
-        assert!(!Codesign::sign_adhoc(vec!["a.app", "b.app"]).per_target);
-        assert!(!Codesign::sign_for_distribution(["a.app", "b.app"], "Developer ID").per_target);
+        assert!(!sign("app", "-").core.per_target);
+        assert!(!sign_adhoc(vec!["a.app", "b.app"]).core.per_target);
+        assert!(
+            !sign_for_distribution(["a.app", "b.app"], "Developer ID")
+                .core
+                .per_target
+        );
     }
 
     #[test]
     fn per_target_keeps_the_last_value_and_renders_no_argument() {
-        let action = Codesign::sign(vec!["app"], "-").per_target(true);
-        assert!(action.per_target);
+        let action = sign(vec!["app"], "-").per_target(true);
+        assert!(action.core.per_target);
         assert_eq!(args_of(&action), os(&["--sign", "-", "--", "app"]));
 
         let action = action.per_target(false);
-        assert!(!action.per_target);
+        assert!(!action.core.per_target);
         assert_eq!(args_of(&action), os(&["--sign", "-", "--", "app"]));
     }
 
     #[test]
     fn only_options_writing_one_shared_file_are_reported_as_shared_output() {
-        let shared = |builder: Codesign<Sign>| builder.action.shared_output();
+        let shared = |builder: Sign| builder.options.shared_output();
 
-        assert_eq!(shared(Codesign::sign("app", "-")), None);
+        assert_eq!(shared(sign("app", "-")), None);
         assert_eq!(
-            shared(Codesign::sign("app", "-").file_list("signed.txt")),
+            shared(sign("app", "-").file_list("signed.txt")),
             Some("file_list")
         );
         assert_eq!(
-            shared(Codesign::sign("app", "-").detached("app.sig")),
+            shared(sign("app", "-").detached("app.sig")),
             Some("detached")
         );
         // The other options that take a path only read it.
         assert_eq!(
             shared(
-                Codesign::sign("app", "-")
+                sign("app", "-")
                     .entitlements("app.entitlements")
                     .keychain("build.keychain")
                     .detached_database(true)
@@ -806,14 +810,10 @@ mod tests {
     #[test]
     fn the_file_list_is_the_shared_output_named_when_both_are_set() {
         for action in [
-            Codesign::sign("app", "-")
-                .file_list("signed.txt")
-                .detached("app.sig"),
-            Codesign::sign("app", "-")
-                .detached("app.sig")
-                .file_list("signed.txt"),
+            sign("app", "-").file_list("signed.txt").detached("app.sig"),
+            sign("app", "-").detached("app.sig").file_list("signed.txt"),
         ] {
-            assert_eq!(action.action.shared_output(), Some("file_list"));
+            assert_eq!(action.options.shared_output(), Some("file_list"));
         }
     }
 
@@ -821,7 +821,7 @@ mod tests {
     /// stays the generic failure, whatever it printed on standard output.
     #[test]
     fn a_failed_run_is_reported_with_its_code_and_diagnostics() {
-        let action = Codesign::sign("app", "-").action;
+        let action = sign("app", "-").options;
         for code in [1, 2, 3] {
             match action.failure(
                 code,

@@ -5,7 +5,7 @@
 //! RUSTFLAGS='--cfg signers_test="keychain"' cargo test
 //! ```
 
-use signers::Codesign;
+use signers::codesign::display;
 use signers::codesign::{Authority, SignatureKind};
 
 use crate::support::fixture::Workspace;
@@ -27,7 +27,7 @@ async fn a_certificate_signature_names_its_signer() {
     ])
     .expect_success("sign with the throwaway identity");
 
-    let signature = Codesign::display(&target).await.unwrap();
+    let signature = display(&target).await.unwrap();
 
     let SignatureKind::Certificate { authorities, .. } = &signature.signature else {
         panic!("not a certificate signature: {:?}", signature.signature);
