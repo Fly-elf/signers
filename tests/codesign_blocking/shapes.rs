@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use signers::blocking::Codesign;
 use signers::codesign::Signature;
+use signers::codesign::blocking::remove_signature;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect;
@@ -71,7 +72,7 @@ fn a_batch_changes_every_target_both_ways() {
             .iter()
             .for_each(|target| inspect::assert_valid(target));
 
-        let [(), ()] = Codesign::remove_signature([&targets[0], &targets[2]])
+        let [(), ()] = remove_signature([&targets[0], &targets[2]])
             .per_target(per_target)
             .run()
             .unwrap();

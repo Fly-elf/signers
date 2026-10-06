@@ -31,3 +31,63 @@ impl<S, R> Core<S, R> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::*;
+    use crate::codesign::{Display, Sign};
+
+    fn core_for<O: ToArgs, T: IntoTargets>(target: T) -> Core<T::Shape, ()> {
+        Core::new::<O, T>(target)
+    }
+
+    /// `O::PER_TARGET` is true for display, yet a single target never
+    /// starts per target; the other shapes do.
+    #[test]
+    fn per_target_starts_from_the_action_unless_the_target_is_single() {
+        const { assert!(Display::PER_TARGET) };
+
+        assert!(!core_for::<Display, _>("a").per_target);
+        assert!(!core_for::<Display, _>(String::from("a")).per_target);
+        assert!(!core_for::<Display, _>(Path::new("a")).per_target);
+        assert!(!core_for::<Display, _>(PathBuf::from("a")).per_target);
+
+        assert!(core_for::<Display, _>(vec!["a"]).per_target);
+        assert!(core_for::<Display, _>(vec!["a", "b"]).per_target);
+        assert!(core_for::<Display, _>(&["a", "b"][..]).per_target);
+        assert!(core_for::<Display, _>(["a"]).per_target);
+        assert!(core_for::<Display, _>(["a", "b"]).per_target);
+    }
+
+    #[test]
+    fn per_target_stays_off_for_every_shape_when_the_action_is_not_per_target() {
+        const { assert!(!Sign::PER_TARGET) };
+
+        assert!(!core_for::<Sign, _>("a").per_target);
+        assert!(!core_for::<Sign, _>(vec!["a", "b"]).per_target);
+        assert!(!core_for::<Sign, _>(&["a", "b"][..]).per_target);
+        assert!(!core_for::<Sign, _>(["a", "b"]).per_target);
+    }
+
+    #[test]
+    fn the_targets_keep_their_order_duplicates_and_empty_entries() {
+        let core = core_for::<Display, _>(vec!["b", "", "a", "b"]);
+        assert_eq!(core.targets, ["b", "", "a", "b"].map(PathBuf::from));
+    }
+
+    #[cfg(feature = "blocking")]
+    #[test]
+    fn changing_the_runtime_keeps_targets_and_per_target() {
+        for per_target in [true, false] {
+            let mut core = core_for::<Display, _>(vec!["a", "", "a"]);
+            core.per_target = per_target;
+
+            let moved: Core<_, u8> = core.into_runtime();
+
+            assert_eq!(moved.targets, ["a", "", "a"].map(PathBuf::from));
+            assert_eq!(moved.per_target, per_target);
+        }
+    }
+}

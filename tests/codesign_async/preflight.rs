@@ -2,12 +2,12 @@
 //! once and stamped into each action's suite by [`preflight_tests!`].
 
 /// Expands to the shared pre-flight tests, driving `$constructor`: a
-/// `Codesign<()>` constructor that takes only the targets. An action that
+/// constructor that takes only the targets, such as an action's free function. An action that
 /// always runs one process per target, and so has no `per_target` setter, says
 /// so with `one_process_per_target`.
 ///
 /// ```ignore
-/// preflight_tests!(Codesign::remove_signature);
+/// preflight_tests!(signers::codesign::remove_signature);
 /// preflight_tests!(Codesign::extract_certificates, one_process_per_target);
 /// ```
 macro_rules! preflight_tests {
