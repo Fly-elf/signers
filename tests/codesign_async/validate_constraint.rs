@@ -1,4 +1,4 @@
-//! `Codesign::validate_constraint`, end to end — one submodule per test
+//! `validate_constraint`, end to end — one submodule per test
 //! category, named for what it covers.
 //!
 //! Every plist is also handed to the `codesign` CLI, and what it printed is

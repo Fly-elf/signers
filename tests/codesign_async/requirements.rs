@@ -1,4 +1,4 @@
-//! `Codesign::internal_requirements`, end to end — one submodule per test
+//! `requirements`, end to end — one submodule per test
 //! category, named for what it covers; see each submodule's own doc comment
 //! for the detail.
 //!
