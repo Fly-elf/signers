@@ -173,6 +173,198 @@ pub(crate) fn joined<F: Flags + Copy>(flags: F) -> String {
     tokens
 }
 
+// Emits an action's public type over `Core`, its private `Options`, a private `new`, one setter
+// per field of the `setters` block, `per_target`, `IntoFuture` (async) and `run` (blocking).
+// Fields in the first block get no setter. Setter forms: `Option<impl Into<T>>` takes
+// `impl Into<T>` and stores `Some`; `Option<T>` takes `T` and stores `Some`; `T` takes `T`.
+// The rule arms below must keep that order, from the most specific form to any type.
+macro_rules! action {
+    (
+        $(#[$attr:meta])*
+        $name:ident => $output:ty {
+            $($field:ident : $field_ty:ty),* $(,)?
+        }
+        setters {
+            $($setters:tt)*
+        }
+    ) => {
+        $crate::codesign::action::action!(@options [$($field: $field_ty,)*] $($setters)*);
+
+        $(#[$attr])*
+        pub struct $name<S = $crate::target::One, R = $crate::codesign::asynchronous::Async> {
+            core: $crate::codesign::core::Core<S, R>,
+            options: Options,
+        }
+
+        impl<S: $crate::target::Shape, R> $name<S, R> {
+            fn new<T: $crate::IntoTargets<Shape = S>>(target: T, options: Options) -> Self {
+                Self { core: $crate::codesign::core::Core::new::<Options, T>(target), options }
+            }
+        }
+
+        impl<S, R> $name<S, R> {
+            $crate::codesign::action::action!(@setters $($setters)*);
+
+            /// Runs one `codesign` per target, concurrently, instead of one for all of them.
+            ///
+            /// One process stops at the first target it rejects and reports that one only. Per target,
+            /// every target runs, and the failures come together as [`Error::Batch`](crate::Error::Batch),
+            /// in input order. At most [`available_parallelism`](std::thread::available_parallelism)
+            /// processes run at a time. The default is `false` for [`sign`](crate::Codesign#method.sign)
+            /// and [`remove_signature`](crate::Codesign#method.remove_signature), which change the targets
+            /// in order, and `true` for [`verify`](crate::Codesign#method.verify),
+            /// [`display`](crate::Codesign#method.display) and
+            /// [`validate_constraint`](crate::Codesign#method.validate_constraint), which only read them.
+            ///
+            /// Only a `Vec`, slice or array of targets has this setter, even with one element: that is
+            /// the `S: Multi` bound. A single target always runs one `codesign`:
+            ///
+            /// ```compile_fail,E0599
+            /// signers::Codesign::sign("a", "-").per_target(true);
+            /// ```
+            ///
+            /// [`extract_certificates`](crate::Codesign#method.extract_certificates) and
+            /// [`internal_requirements`](crate::Codesign#method.internal_requirements) have no such setter
+            /// either: they always run one `codesign` per target.
+            ///
+            /// An option that writes one shared file, [`file_list`](crate::Codesign#method.file_list) or
+            /// [`detached`](crate::Codesign#method.detached), makes `.await` fail with
+            /// [`Error::SharedOutputPerTarget`](crate::Error::SharedOutputPerTarget).
+            ///
+            /// <div class="warning">
+            ///
+            /// The runs overlap in no fixed order. A bundle in the same batch as the code nested in it
+            /// can be sealed before that code is signed, which leaves the bundle's signature invalid.
+            /// Sign the nested code in an earlier run.
+            ///
+            /// </div>
+            ///
+            /// # Examples
+            ///
+            /// Sign each library on its own, and report every one that failed:
+            ///
+            /// ```no_run
+            /// # async fn run() -> signers::Result<()> {
+            /// use signers::{Codesign, Error};
+            ///
+            /// let libraries = vec!["liba.dylib", "libb.dylib", "libc.dylib"];
+            /// match Codesign::sign_adhoc(libraries).force(true).per_target(true).await {
+            ///     Ok(_) => {}
+            ///     Err(Error::Batch(failures)) => {
+            ///         for (path, error) in &failures {
+            ///             eprintln!("{}: {error}", path.display());
+            ///         }
+            ///     }
+            ///     Err(error) => return Err(error),
+            /// }
+            /// # Ok(()) }
+            /// ```
+            pub fn per_target(mut self, per_target: bool) -> Self
+            where
+                S: $crate::target::Multi,
+                Self: $crate::codesign::action::sealed::SharedRun,
+            {
+                self.core.per_target = per_target;
+                self
+            }
+        }
+
+        /// Runs the action when awaited. See [`Codesign`](crate::Codesign) for its errors and panics.
+        impl<S: $crate::target::Shape> ::std::future::IntoFuture
+            for $name<S, $crate::codesign::asynchronous::Async>
+        {
+            type Output = $crate::Result<<S as $crate::target::Shape>::Out<$output>>;
+            type IntoFuture = ::std::pin::Pin<
+                ::std::boxed::Box<dyn ::std::future::Future<Output = Self::Output> + Send>,
+            >;
+
+            /// Returns the future that runs the action. Nothing happens until it's polled.
+            ///
+            /// Once every `codesign` run has exited 0, it resolves to one [`Output`](Action) per target,
+            /// shaped like the targets: `S::Out<A::Output>` is `A::Output` for a single path,
+            /// `Vec<A::Output>` for a `Vec` or slice, `[A::Output; N]` for an array of `N`.
+            fn into_future(self) -> Self::IntoFuture {
+                self.core.run(self.options)
+            }
+        }
+
+        #[cfg(feature = "blocking")]
+        impl<S: $crate::target::Shape> $name<S, $crate::codesign::blocking::Blocking> {
+            /// Runs the action, blocking the calling thread until every `codesign` has finished.
+            ///
+            /// It checks, runs and returns exactly like `.await` on
+            /// [`signers::Codesign`](crate::Codesign): the same output shape, the same errors, and the
+            /// same concurrent processes with [`per_target`](Codesign#method.per_target). It builds a
+            /// single-threaded Tokio runtime for the call and drops it before returning.
+            ///
+            /// # Errors
+            ///
+            /// Those listed on [`signers::Codesign`](crate::Codesign#errors). A runtime that can't be
+            /// created fails with [`CodesignError::Spawn`].
+            ///
+            /// # Panics
+            ///
+            /// Panics when called inside a Tokio runtime, such as from an `async fn` it runs. There,
+            /// `.await` [`signers::Codesign`](crate::Codesign) instead.
+            ///
+            /// # Examples
+            ///
+            /// ```no_run
+            /// # fn main() -> signers::Result<()> {
+            /// use signers::blocking::Codesign;
+            ///
+            /// let [ls, cat] = Codesign::display(["/bin/ls", "/bin/cat"]).run()?;
+            /// println!("{} {}", ls.identifier, cat.identifier);
+            /// # Ok(()) }
+            /// ```
+            pub fn run(self) -> $crate::Result<<S as $crate::target::Shape>::Out<$output>> {
+                self.core.run(self.options)
+            }
+        }
+    };
+
+    // Collects the private `Options` fields; a setter's attributes stay off its field.
+    (@options [$($acc:tt)*]) => {
+        #[derive(Debug, Clone, Default)]
+        struct Options { $($acc)* }
+    };
+    (@options [$($acc:tt)*] $(#[$m:meta])* $f:ident : Option<impl Into<$t:ty>> $(, $($rest:tt)*)?) => {
+        $crate::codesign::action::action!(@options [$($acc)* $f: Option<$t>,] $($($rest)*)?);
+    };
+    (@options [$($acc:tt)*] $(#[$m:meta])* $f:ident : $t:ty $(, $($rest:tt)*)?) => {
+        $crate::codesign::action::action!(@options [$($acc)* $f: $t,] $($($rest)*)?);
+    };
+
+    // One setter per field, named after it; attributes (docs, `#[deprecated]`) go on the setter.
+    (@setters) => {};
+    (@setters $(#[$m:meta])* $f:ident : Option<impl Into<$t:ty>> $(, $($rest:tt)*)?) => {
+        $(#[$m])*
+        pub fn $f(mut self, $f: impl Into<$t>) -> Self {
+            self.options.$f = Some($f.into());
+            self
+        }
+        $crate::codesign::action::action!(@setters $($($rest)*)?);
+    };
+    (@setters $(#[$m:meta])* $f:ident : Option<$t:ty> $(, $($rest:tt)*)?) => {
+        $(#[$m])*
+        pub fn $f(mut self, $f: $t) -> Self {
+            self.options.$f = Some($f);
+            self
+        }
+        $crate::codesign::action::action!(@setters $($($rest)*)?);
+    };
+    (@setters $(#[$m:meta])* $f:ident : $t:ty $(, $($rest:tt)*)?) => {
+        $(#[$m])*
+        pub fn $f(mut self, $f: $t) -> Self {
+            self.options.$f = $f;
+            self
+        }
+        $crate::codesign::action::action!(@setters $($($rest)*)?);
+    };
+}
+
+pub(crate) use action;
+
 #[cfg(test)]
 mod tests {
     use super::sealed::ToArgs;
