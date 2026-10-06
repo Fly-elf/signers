@@ -1,13 +1,14 @@
 //! Tests that need `TMPDIR` pointed at a directory of their own, to watch the
 //! scratch directory `extract_certificates` reads `codesign`'s files from.
 
+use signers::codesign::extract_certificates;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
 use std::future::IntoFuture;
 use std::path::{Path, PathBuf};
 
-use signers::{Codesign, Error};
+use signers::Error;
 
 use crate::support::fixture::Workspace;
 
@@ -33,13 +34,12 @@ fn nothing_is_left_behind_once_the_run_ends() {
         let _tmpdir = ScopedTmpdir::to(&tmp);
         let runtime = crate::runtime();
         let succeeded = runtime.block_on(
-            Codesign::extract_certificates(vec![PathBuf::from(PLATFORM_BINARY), adhoc])
+            extract_certificates(vec![PathBuf::from(PLATFORM_BINARY), adhoc])
                 .save_to(&out)
                 .into_future(),
         );
         let failed = runtime.block_on(
-            Codesign::extract_certificates(vec![PathBuf::from(PLATFORM_BINARY), unsigned])
-                .into_future(),
+            extract_certificates(vec![PathBuf::from(PLATFORM_BINARY), unsigned]).into_future(),
         );
         (succeeded, failed)
     };
@@ -62,7 +62,7 @@ fn nothing_is_left_behind_by_a_cancelled_run() {
     let finished_first = {
         let _tmpdir = ScopedTmpdir::to(&tmp);
         crate::runtime().block_on(async {
-            let run = Codesign::extract_certificates(vec![PLATFORM_BINARY; 64]).into_future();
+            let run = extract_certificates(vec![PLATFORM_BINARY; 64]).into_future();
             tokio::pin!(run);
             // Polled side by side until the scratch directory shows up, then
             // dropped with its runs still in flight.
@@ -94,7 +94,7 @@ fn an_unusable_temporary_directory_is_an_io_error() {
 
     let result = {
         let _tmpdir = ScopedTmpdir::to(&missing);
-        crate::runtime().block_on(Codesign::extract_certificates(PLATFORM_BINARY).into_future())
+        crate::runtime().block_on(extract_certificates(PLATFORM_BINARY).into_future())
     };
 
     match result.unwrap_err() {

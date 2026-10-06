@@ -8,7 +8,7 @@
 
 use std::path::{Path, PathBuf};
 
-use signers::Codesign;
+use signers::codesign::extract_certificates;
 
 use super::{PLATFORM_BINARY, ders, expected_pem, file_names, read};
 use crate::support::fixture::Workspace;
@@ -34,7 +34,7 @@ async fn a_certificate_signature_yields_its_own_chain() {
     let identity = Identity::new();
     sign_with(&identity, &target);
 
-    let chain = Codesign::extract_certificates(&target).await.unwrap();
+    let chain = extract_certificates(&target).await.unwrap();
 
     assert_eq!(ders(&chain), inspect::certificates(&target));
     let (subject, _) = inspect::subject_and_issuer(chain[0].der());
@@ -54,7 +54,7 @@ async fn different_chains_under_one_file_name_each_get_a_file() {
     let targets = vec![own.clone(), PathBuf::from(PLATFORM_BINARY), own.clone()];
     let out = workspace.join("out");
 
-    let chains = Codesign::extract_certificates(targets.clone())
+    let chains = extract_certificates(targets.clone())
         .save_to(&out)
         .await
         .unwrap();
@@ -87,10 +87,7 @@ async fn a_signed_bundle_is_saved_under_its_bundle_name() {
     sign_with(&identity, &bundle);
     let out = workspace.join("out");
 
-    Codesign::extract_certificates(&bundle)
-        .save_to(&out)
-        .await
-        .unwrap();
+    extract_certificates(&bundle).save_to(&out).await.unwrap();
 
     assert_eq!(file_names(&out), ["Hello.app.pem"]);
     assert_eq!(read(&out, "Hello.app.pem"), expected_pem(&bundle));

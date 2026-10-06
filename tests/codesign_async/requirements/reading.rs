@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use signers::Codesign;
+use signers::codesign::requirements;
 use signers::codesign::{Requirement, RequirementKind};
 
 use super::{lines_of, printed};
@@ -11,7 +11,7 @@ use crate::support::fixture::{Workspace, fixture_str};
 use crate::support::inspect;
 
 async fn read(path: &Path) -> Vec<Requirement> {
-    Codesign::internal_requirements(path)
+    requirements(path)
         .await
         .unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }

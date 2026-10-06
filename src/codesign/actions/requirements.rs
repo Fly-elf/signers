@@ -25,7 +25,7 @@ action! {
     /// use signers::Codesign;
     /// use signers::codesign::RequirementKind;
     ///
-    /// let requirements = Codesign::internal_requirements("MyApp.app").await?;
+    /// let requirements = requirements("MyApp.app").await?;
     /// for requirement in &requirements {
     ///     if requirement.kind == RequirementKind::Designated {
     ///         println!("{}", requirement.expression);
@@ -40,7 +40,7 @@ action! {
     /// # async fn run() -> signers::Result<()> {
     /// use signers::Codesign;
     ///
-    /// let [ls, cat] = Codesign::internal_requirements(["/bin/ls", "/bin/cat"]).await?;
+    /// let [ls, cat] = requirements(["/bin/ls", "/bin/cat"]).await?;
     /// let embedded = ls.iter().chain(&cat).filter(|requirement| !requirement.implicit).count();
     /// println!("{embedded} requirements are part of the signatures");
     /// # Ok(()) }
@@ -87,8 +87,8 @@ mod tests {
     use std::ffi::OsString;
 
     use super::*;
-    use crate::codesign::Codesign;
     use crate::codesign::RequirementKind;
+    use crate::codesign::requirements;
     use crate::errors::CodesignError;
 
     const DESIGNATED: &str = r#"designated => identifier "com.apple.ls" and anchor apple"#;
@@ -98,10 +98,14 @@ mod tests {
         strings.iter().map(OsString::from).collect()
     }
 
-    fn args_of<S>(builder: &Codesign<InternalRequirements, S>) -> Vec<OsString> {
+    fn action() -> Options {
+        requirements("a").options
+    }
+
+    fn args_of<S>(builder: &Requirements<S>) -> Vec<OsString> {
         builder
-            .action
-            .to_args(&builder.targets)
+            .options
+            .to_args(&builder.core.targets)
             .into_iter()
             .map(Cow::into_owned)
             .collect()
@@ -112,8 +116,7 @@ mod tests {
     }
 
     fn read(stdout: &str) -> Result<Vec<Requirement>> {
-        let mut outputs =
-            InternalRequirements.output(&paths(&["a"]), stdout.to_owned(), String::new())?;
+        let mut outputs = action().output(&paths(&["a"]), stdout.to_owned(), String::new())?;
         assert_eq!(outputs.len(), 1);
         Ok(outputs.remove(0))
     }
@@ -129,27 +132,24 @@ mod tests {
     fn the_arguments_read_the_requirements_and_nothing_else() {
         let expected = os(&["--display", "-r-", "--", "app"]);
 
-        assert_eq!(args_of(&Codesign::internal_requirements("app")), expected);
-        assert_eq!(
-            args_of(&Codesign::internal_requirements(vec!["app"])),
-            expected
-        );
-        assert_eq!(args_of(&Codesign::internal_requirements(["app"])), expected);
+        assert_eq!(args_of(&requirements("app")), expected);
+        assert_eq!(args_of(&requirements(vec!["app"])), expected);
+        assert_eq!(args_of(&requirements(["app"])), expected);
     }
 
     #[test]
     fn every_target_is_listed_after_the_separator() {
         assert_eq!(
-            args_of(&Codesign::internal_requirements(vec!["a", "-b"])),
+            args_of(&requirements(vec!["a", "-b"])),
             os(&["--display", "-r-", "--", "a", "-b"])
         );
     }
 
     #[test]
     fn collections_default_to_one_run_per_target() {
-        assert!(Codesign::internal_requirements(vec!["a", "b"]).per_target);
-        assert!(Codesign::internal_requirements(["a", "b"]).per_target);
-        assert!(!Codesign::internal_requirements("a").per_target);
+        assert!(requirements(vec!["a", "b"]).core.per_target);
+        assert!(requirements(["a", "b"]).core.per_target);
+        assert!(!requirements("a").core.per_target);
     }
 
     #[test]
@@ -184,7 +184,7 @@ mod tests {
 
     #[test]
     fn the_run_yields_one_list() {
-        let outputs = InternalRequirements
+        let outputs = action()
             .output(&paths(&["a"]), format!("{DESIGNATED}\n"), String::new())
             .unwrap();
 
@@ -194,7 +194,7 @@ mod tests {
 
     #[test]
     fn stderr_is_not_read() {
-        let outputs = InternalRequirements
+        let outputs = action()
             .output(
                 &paths(&["a"]),
                 format!("{DESIGNATED}\n"),
@@ -282,7 +282,7 @@ mod tests {
 
     /// `per_target` exists for actions that can share a run; this one can't,
     /// because the requirements of several targets in one stdout can't be told
-    /// apart. Resolves only while `InternalRequirements` is not `SharedRun`.
+    /// apart. Resolves only while `Requirements` is not `SharedRun`.
     #[test]
     fn the_action_cannot_share_a_run() {
         trait AmbiguousIfShared<A> {
@@ -291,12 +291,12 @@ mod tests {
         impl<T: ?Sized> AmbiguousIfShared<()> for T {}
         impl<T: ?Sized + crate::codesign::action::sealed::SharedRun> AmbiguousIfShared<u8> for T {}
 
-        <InternalRequirements as AmbiguousIfShared<_>>::check();
+        <Requirements as AmbiguousIfShared<_>>::check();
     }
 
     #[test]
     fn a_failed_run_keeps_its_exit_code_and_streams() {
-        let error = InternalRequirements.failure(1, "out".into(), "err".into());
+        let error = action().failure(1, "out".into(), "err".into());
 
         assert!(
             matches!(

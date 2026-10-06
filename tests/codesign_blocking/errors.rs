@@ -5,6 +5,7 @@ use std::fs;
 
 use signers::blocking::Codesign;
 use signers::codesign::SignatureSlot;
+use signers::codesign::blocking::{extract_certificates, validate_constraint};
 use signers::{CodesignError, Error};
 
 use crate::support::fixture::{Workspace, fixture};
@@ -65,7 +66,7 @@ fn an_unmet_requirement_is_requirement_unsatisfied() {
 
 #[test]
 fn an_invalid_constraint_is_constraint_invalid() {
-    let error = Codesign::validate_constraint(fixture("bad-constraint.plist"))
+    let error = validate_constraint(fixture("bad-constraint.plist"))
         .run()
         .unwrap_err();
 
@@ -97,7 +98,7 @@ fn a_certificate_directory_that_is_a_file_is_an_io_error() {
     let workspace = Workspace::new();
     let out = workspace.write("out", "not a directory\n");
 
-    let error = Codesign::extract_certificates("/bin/ls")
+    let error = extract_certificates("/bin/ls")
         .save_to(&out)
         .run()
         .unwrap_err();

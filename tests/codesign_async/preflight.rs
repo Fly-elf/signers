@@ -8,7 +8,7 @@
 ///
 /// ```ignore
 /// preflight_tests!(signers::codesign::remove_signature);
-/// preflight_tests!(Codesign::extract_certificates, one_process_per_target);
+/// preflight_tests!(signers::codesign::extract_certificates, one_process_per_target);
 /// ```
 macro_rules! preflight_tests {
     // Every check below is made once, before any process starts, whether the

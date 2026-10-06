@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use signers::blocking::Codesign;
 use signers::codesign::Signature;
-use signers::codesign::blocking::remove_signature;
+use signers::codesign::blocking::{extract_certificates, remove_signature, requirements};
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect;
@@ -86,9 +86,7 @@ fn a_batch_changes_every_target_both_ways() {
 /// in the shape and order of its targets.
 #[test]
 fn an_action_without_the_setter_keeps_the_shape() {
-    let [first, second] = Codesign::extract_certificates(["/bin/ls", "/bin/cat"])
-        .run()
-        .unwrap();
+    let [first, second] = extract_certificates(["/bin/ls", "/bin/cat"]).run().unwrap();
     let ders = |chain: &[signers::codesign::Certificate]| -> Vec<Vec<u8>> {
         chain.iter().map(|c| c.der().to_vec()).collect()
     };
@@ -96,9 +94,7 @@ fn an_action_without_the_setter_keeps_the_shape() {
     assert_eq!(ders(&first), inspect::certificates(Path::new("/bin/ls")));
     assert_eq!(ders(&second), inspect::certificates(Path::new("/bin/cat")));
 
-    let found = Codesign::internal_requirements(vec!["/bin/ls", "/bin/cat"])
-        .run()
-        .unwrap();
+    let found = requirements(vec!["/bin/ls", "/bin/cat"]).run().unwrap();
     assert_eq!(found.len(), 2);
     for (requirements, target) in found.iter().zip(["/bin/ls", "/bin/cat"]) {
         let [only] = &requirements[..] else {

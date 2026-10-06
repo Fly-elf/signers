@@ -20,7 +20,7 @@ action! {
     /// # async fn run() -> signers::Result<()> {
     /// use signers::Codesign;
     ///
-    /// Codesign::validate_constraint(["launch.plist", "library.plist"]).await?;
+    /// validate_constraint(["launch.plist", "library.plist"]).await?;
     /// # Ok(()) }
     /// ```
     ValidateConstraint => () {}
@@ -60,7 +60,7 @@ mod tests {
     use std::ffi::OsString;
 
     use super::*;
-    use crate::codesign::Codesign;
+    use crate::codesign::validate_constraint;
     use crate::errors::Error;
 
     const BOGUS_FAILED: &str = "Constraint validation failed";
@@ -70,10 +70,14 @@ mod tests {
         names.iter().map(PathBuf::from).collect()
     }
 
-    fn args_of<S>(builder: &Codesign<ValidateConstraint, S>) -> Vec<OsString> {
+    fn action() -> Options {
+        validate_constraint("a.plist").options
+    }
+
+    fn args_of<S>(builder: &ValidateConstraint<S>) -> Vec<OsString> {
         builder
-            .action
-            .to_args(&builder.targets)
+            .options
+            .to_args(&builder.core.targets)
             .into_iter()
             .map(Cow::into_owned)
             .collect()
@@ -91,7 +95,7 @@ mod tests {
     #[test]
     fn the_action_only_validates_the_plists() {
         assert_eq!(
-            args_of(&Codesign::validate_constraint("c.plist")),
+            args_of(&validate_constraint("c.plist")),
             ["--validate-constraint", "--", "c.plist"].map(OsString::from)
         );
     }
@@ -99,9 +103,7 @@ mod tests {
     #[test]
     fn every_plist_is_passed_in_order() {
         assert_eq!(
-            args_of(&Codesign::validate_constraint([
-                "a.plist", "b.plist", "-c.plist"
-            ])),
+            args_of(&validate_constraint(["a.plist", "b.plist", "-c.plist"])),
             [
                 "--validate-constraint",
                 "--",
@@ -115,7 +117,7 @@ mod tests {
 
     #[test]
     fn the_bogus_failed_line_alone_is_a_success() {
-        let outputs = ValidateConstraint
+        let outputs = action()
             .output(&paths(&["a"]), String::new(), BOGUS_FAILED.to_owned())
             .unwrap();
 
@@ -124,7 +126,7 @@ mod tests {
 
     #[test]
     fn an_empty_stderr_is_a_success() {
-        let outputs = ValidateConstraint
+        let outputs = action()
             .output(&paths(&["a", "b", "c"]), String::new(), String::new())
             .unwrap();
 
@@ -135,11 +137,8 @@ mod tests {
     fn an_error_line_is_a_rejection_that_keeps_both_streams() {
         let stderr = format!("{ERROR_REPORT}\n{BOGUS_FAILED}");
 
-        let (stdout, kept) = invalid(ValidateConstraint.output(
-            &paths(&["a"]),
-            "some output".to_owned(),
-            stderr.clone(),
-        ));
+        let (stdout, kept) =
+            invalid(action().output(&paths(&["a"]), "some output".to_owned(), stderr.clone()));
 
         assert_eq!(stdout, "some output");
         assert_eq!(kept, stderr);
@@ -149,12 +148,12 @@ mod tests {
     fn an_error_line_after_other_lines_is_still_a_rejection() {
         let stderr = format!("{BOGUS_FAILED}\nwarning: something\n{ERROR_REPORT}");
 
-        invalid(ValidateConstraint.output(&paths(&["a", "b"]), String::new(), stderr));
+        invalid(action().output(&paths(&["a", "b"]), String::new(), stderr));
     }
 
     #[test]
     fn an_error_line_without_the_bogus_line_is_a_rejection() {
-        invalid(ValidateConstraint.output(
+        invalid(action().output(
             &paths(&["a"]),
             String::new(),
             "error: bad constraint".to_owned(),
@@ -165,7 +164,7 @@ mod tests {
     fn error_text_inside_a_line_is_not_a_rejection() {
         let stderr = format!("{BOGUS_FAILED}\nwarning: not an error: really");
 
-        let outputs = ValidateConstraint
+        let outputs = action()
             .output(&paths(&["a"]), String::new(), stderr)
             .unwrap();
 
@@ -175,7 +174,7 @@ mod tests {
     #[test]
     fn exit_code_one_is_a_plain_failure_with_both_streams() {
         for code in [1, 2] {
-            match ValidateConstraint.failure(
+            match action().failure(
                 code,
                 "out".to_owned(),
                 "Error reading constraint from x.plist".to_owned(),
