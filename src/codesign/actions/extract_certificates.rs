@@ -17,11 +17,11 @@ use crate::codesign::action::sealed::ToArgs;
 use crate::errors::{Error, Result};
 
 action! {
-    /// Options of the certificate-extraction action: the `A` in `Codesign<ExtractCertificates>`.
+    /// Builder of a run that reads certificate chains, returned by
+    /// [`extract_certificates`](crate::codesign::extract_certificates).
     ///
-    /// [`Codesign::extract_certificates`](crate::Codesign#method.extract_certificates) creates it. Its
-    /// one option, [`save_to`](crate::Codesign#method.save_to), also writes each chain to a PEM file.
-    /// `.await` yields the chain of each target as a `Vec` of [`Certificate`], leaf first.
+    /// Its one option, [`save_to`](Self::save_to), also writes each chain to a PEM file. `.await`
+    /// yields the chain of each target as a `Vec` of [`Certificate`], leaf first.
     ///
     /// # Examples
     ///
@@ -29,9 +29,9 @@ action! {
     ///
     /// ```no_run
     /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
+    /// use signers::codesign;
     ///
-    /// let chain = Codesign::extract_certificates("MyApp.app").await?;
+    /// let chain = codesign::extract_certificates("MyApp.app").await?;
     /// match chain.first() {
     ///     Some(leaf) => println!("signed with a certificate of {} bytes", leaf.der().len()),
     ///     None => println!("signed ad hoc"),
@@ -43,9 +43,9 @@ action! {
     ///
     /// ```no_run
     /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
+    /// use signers::codesign;
     ///
-    /// let [a, b] = Codesign::extract_certificates(["A.app", "B.app"])
+    /// let [a, b] = codesign::extract_certificates(["A.app", "B.app"])
     ///     .save_to("certs")
     ///     .await?;
     /// // `certs/A.app.pem` and `certs/B.app.pem` now hold what `a` and `b` hold.
