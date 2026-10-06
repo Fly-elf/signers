@@ -3,8 +3,8 @@
 
 use std::fs;
 
-use signers::blocking::Codesign;
 use signers::codesign::SignatureSlot;
+use signers::codesign::blocking::{display, sign_adhoc, verify};
 use signers::codesign::blocking::{extract_certificates, validate_constraint};
 use signers::{CodesignError, Error};
 
@@ -17,7 +17,7 @@ fn a_refused_target_is_a_failed_run_with_codesigns_diagnostics() {
     let target = workspace.adhoc_signed("hello");
     let before = fs::read(&target).unwrap();
 
-    let error = Codesign::sign_adhoc(&target).run().unwrap_err();
+    let error = sign_adhoc(&target).run().unwrap_err();
 
     match error {
         Error::Codesign(CodesignError::Failed { code, stderr, .. }) => {
@@ -34,7 +34,7 @@ fn an_unsigned_target_fails_verification() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    let error = Codesign::verify(&target).run().unwrap_err();
+    let error = verify(&target).run().unwrap_err();
 
     match error {
         Error::Codesign(CodesignError::VerificationFailed { stderr, .. }) => {
@@ -49,7 +49,7 @@ fn an_unmet_requirement_is_requirement_unsatisfied() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
 
-    let error = Codesign::verify(&target)
+    let error = verify(&target)
         .test_requirement("anchor apple")
         .run()
         .unwrap_err();
@@ -80,7 +80,7 @@ fn an_invalid_constraint_is_constraint_invalid() {
 
 #[test]
 fn an_empty_signature_slot_is_no_signature() {
-    let error = Codesign::display("/bin/ls")
+    let error = display("/bin/ls")
         .signature_slot(SignatureSlot::Second)
         .run()
         .unwrap_err();

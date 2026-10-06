@@ -638,11 +638,35 @@ mod tests {
 
     use super::*;
     use crate::codesign::action::sealed::{SharedRun, ToArgs};
-    use crate::codesign::runner;
     use crate::target::IntoTargets;
 
-    fn new<T: IntoTargets>(target: T, probe: Probe) -> Codesign<Probe, T::Shape> {
-        runner::new(target, probe)
+    /// The run of a stand-in action, built on `Core` as the real actions are.
+    struct Run<S> {
+        core: Core<S, Async>,
+        probe: Probe,
+    }
+
+    impl<S: Shape> Run<S> {
+        fn per_target(mut self, per_target: bool) -> Self {
+            self.core.per_target = per_target;
+            self
+        }
+    }
+
+    impl<S: Shape> IntoFuture for Run<S> {
+        type Output = Result<S::Out<String>>;
+        type IntoFuture = RunFuture<S::Out<String>>;
+
+        fn into_future(self) -> Self::IntoFuture {
+            self.core.run(self.probe)
+        }
+    }
+
+    fn new<T: IntoTargets>(target: T, probe: Probe) -> Run<T::Shape> {
+        Run {
+            core: Core::new::<Probe, T>(target),
+            probe,
+        }
     }
 
     /// Displays its targets, yielding the `Executable=<path>` line `codesign`
@@ -770,7 +794,7 @@ mod tests {
         let batch = vec![PathBuf::from(SIGNED[0]), unsigned[0].clone()];
 
         let builder = new(batch, Probe::default());
-        assert!(builder.per_target);
+        assert!(builder.core.per_target);
 
         // One process per target without being asked: the failure is collected.
         let error = builder.await.unwrap_err();
