@@ -5,6 +5,7 @@ use bitflags::bitflags;
 /// Without it, `codesign` uses the slot the system prefers. The second slot exists only if the
 /// code carries two signatures. Pass it to [`verify`](crate::codesign::verify).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SignatureSlot {
     /// The first signature (`1`).
     First,
@@ -46,6 +47,7 @@ impl SignatureSlot {
 /// # Ok(()) }
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Timestamp {
     /// Apple's timestamp server (`--timestamp`).
     Enabled,
@@ -153,6 +155,7 @@ bitflags! {
 ///
 /// `codesign` takes one value here, so one is enough, and the last one set wins.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Strict {
     /// Every strict check there is, now and in later macOS versions (`--strict`).
     ///
