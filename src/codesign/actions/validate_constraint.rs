@@ -8,19 +8,19 @@ use crate::codesign::action::sealed::{SharedRun, ToArgs};
 use crate::errors::CodesignError;
 
 action! {
-    /// The action of [`Codesign::validate_constraint`](crate::Codesign#method.validate_constraint): the
-    /// `A` in `Codesign<ValidateConstraint>`.
+    /// Builder of a constraint check, returned by
+    /// [`validate_constraint`](crate::codesign::validate_constraint).
     ///
     /// It has no options, so there are no setters to chain;
-    /// [`per_target`](crate::Codesign#method.per_target) is the only one, for several plists.
+    /// [`per_target`](Self::per_target) is the only one, for several plists.
     ///
     /// # Examples
     ///
     /// ```no_run
     /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
+    /// use signers::codesign;
     ///
-    /// validate_constraint(["launch.plist", "library.plist"]).await?;
+    /// codesign::validate_constraint(["launch.plist", "library.plist"]).await?;
     /// # Ok(()) }
     /// ```
     ValidateConstraint => () {}

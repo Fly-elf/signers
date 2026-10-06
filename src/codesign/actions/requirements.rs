@@ -9,12 +9,12 @@ use crate::codesign::action::sealed::ToArgs;
 use crate::errors::Result;
 
 action! {
-    /// The action that reads requirements: the `A` in `Codesign<InternalRequirements>`.
+    /// Builder of a run that reads requirements, returned by
+    /// [`requirements`](crate::codesign::requirements).
     ///
-    /// [`internal_requirements`](crate::Codesign#method.internal_requirements) creates it. It has no
-    /// options. `.await` yields the requirements of each target as a `Vec` of [`Requirement`], in the
-    /// order `codesign` keeps them, which is not the order given to
-    /// [`requirements`](crate::Codesign#method.requirements) when signing.
+    /// It has no options. `.await` yields the requirements of each target as a `Vec` of
+    /// [`Requirement`], in the order `codesign` keeps them, which is not the order given to
+    /// [`Sign::requirements`](crate::codesign::Sign::requirements) when signing.
     ///
     /// # Examples
     ///
@@ -22,10 +22,9 @@ action! {
     ///
     /// ```no_run
     /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
-    /// use signers::codesign::RequirementKind;
+    /// use signers::codesign::{self, RequirementKind};
     ///
-    /// let requirements = requirements("MyApp.app").await?;
+    /// let requirements = codesign::requirements("MyApp.app").await?;
     /// for requirement in &requirements {
     ///     if requirement.kind == RequirementKind::Designated {
     ///         println!("{}", requirement.expression);
@@ -38,9 +37,9 @@ action! {
     ///
     /// ```no_run
     /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
+    /// use signers::codesign;
     ///
-    /// let [ls, cat] = requirements(["/bin/ls", "/bin/cat"]).await?;
+    /// let [ls, cat] = codesign::requirements(["/bin/ls", "/bin/cat"]).await?;
     /// let embedded = ls.iter().chain(&cat).filter(|requirement| !requirement.implicit).count();
     /// println!("{embedded} requirements are part of the signatures");
     /// # Ok(()) }
