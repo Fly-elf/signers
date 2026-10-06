@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use crate::codesign::action::Action;
 use crate::codesign::action::sealed::SharedRun;
-use crate::codesign::{Display, Sign, Verify};
+use crate::codesign::{Display, Verify};
 use crate::target::{self, IntoTargets, Multi, One};
 
 pub trait Runtime {}
@@ -47,88 +47,6 @@ pub(super) fn new<A: Action, T: IntoTargets, R: Runtime>(
 
 /// Constructors, one per action.
 impl<R: Runtime> Runner<(), One, R> {
-    /// Signs `target` with the identity that `identity` names (`--sign`).
-    ///
-    /// `identity` is `-` for an ad hoc signature (see
-    /// [`sign_adhoc`](crate::Codesign#method.sign_adhoc)). Otherwise it selects a certificate, with
-    /// its private key, from the keychain search list:
-    ///
-    /// - the name of an identity preference;
-    /// - part of the certificate's common name, matching only one certificate (an exact match
-    ///   wins), case-sensitive;
-    /// - the certificate's SHA-1 hash, as 40 hex digits.
-    ///
-    /// Signing an already signed target fails with "is already signed" unless you set
-    /// [`force`](crate::Codesign#method.force). A signature added by the linker doesn't need
-    /// `force`.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
-    ///
-    /// Codesign::sign("MyApp.app", "Apple Development: Jane Doe (A1B2C3D4E5)")
-    ///     .force(true)
-    ///     .await?;
-    /// # Ok(()) }
-    /// ```
-    pub fn sign<T: IntoTargets>(
-        target: T,
-        identity: impl Into<String>,
-    ) -> Runner<Sign, T::Shape, R> {
-        new(target, Sign::new(identity))
-    }
-
-    /// Signs `target` ad hoc, with no certificate (`--sign -`).
-    ///
-    /// An ad hoc signature names no signer. That suits local use, including re-signing patched
-    /// binaries, but not distribution. It never gets a timestamp.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
-    ///
-    /// // The patch broke the old signature; `force` replaces it.
-    /// Codesign::sign_adhoc("patched.dylib").force(true).await?;
-    /// # Ok(()) }
-    /// ```
-    pub fn sign_adhoc<T: IntoTargets>(target: T) -> Runner<Sign, T::Shape, R> {
-        new(target, Sign::adhoc())
-    }
-
-    /// Signs `target` for notarization: hardened runtime and timestamp
-    /// (`--options runtime --timestamp`).
-    ///
-    /// This is [`sign`](crate::Codesign#method.sign) with `.options(SigningFlags::RUNTIME)` and
-    /// `.timestamp(Timestamp::Enabled)` already set. Later setters override both.
-    /// [`options`](crate::Codesign#method.options) replaces the whole set, so keep `RUNTIME` in it.
-    ///
-    /// `.await` fetches the timestamp from Apple's server, so without network access the signing
-    /// fails.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
-    /// use signers::codesign::SigningFlags;
-    ///
-    /// Codesign::sign_for_distribution("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
-    ///     .entitlements("MyApp.entitlements")
-    ///     .options(SigningFlags::RUNTIME | SigningFlags::LIBRARY)
-    ///     .await?;
-    /// # Ok(()) }
-    /// ```
-    pub fn sign_for_distribution<T: IntoTargets>(
-        target: T,
-        identity: impl Into<String>,
-    ) -> Runner<Sign, T::Shape, R> {
-        new(target, Sign::for_distribution(identity))
-    }
-
     /// Checks the signature of `target` (`--verify`), changing nothing.
     ///
     /// `.await` yields `()` per target when every one verifies. Without options it checks that
