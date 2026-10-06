@@ -20,8 +20,14 @@ pub(crate) use marker::Blocking;
 
 impl Runtime for Blocking {}
 
-impl<S: Shape> Core<S, Blocking> {
-    pub(super) fn run<O: ToArgs + Send + 'static>(self, options: O) -> Result<S::Out<O::Output>> {
+impl<S> Core<S, Blocking>
+where
+    S: Shape,
+{
+    pub(super) fn run<O>(self, options: O) -> Result<S::Out<O::Output>>
+    where
+        O: ToArgs + Send + 'static,
+    {
         // A runtime per call costs microseconds against the milliseconds of each `codesign`
         // process, and leaves no global state or threads behind.
         let runtime = tokio::runtime::Builder::new_current_thread()
@@ -100,5 +106,5 @@ impl<A: Action + Send + 'static, S: Shape> Runner<A, S, Blocking> {
 pub type RemoveSignature<S = One> = super::RemoveSignature<S, Blocking>;
 
 pub fn remove_signature<T: IntoTargets>(target: T) -> RemoveSignature<T::Shape> {
-    super::RemoveSignature::remove_signature(target)
+    super::RemoveSignature::new(target, Default::default())
 }

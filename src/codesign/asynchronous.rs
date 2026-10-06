@@ -22,11 +22,14 @@ impl Runtime for Async {}
 
 type RunFuture<T> = Pin<Box<dyn Future<Output = Result<T>> + Send>>;
 
-impl<S: Shape> Core<S, Async> {
-    pub(super) fn run<O: ToArgs + Send + 'static>(
-        self,
-        options: O,
-    ) -> RunFuture<S::Out<O::Output>> {
+impl<S> Core<S, Async>
+where
+    S: Shape,
+{
+    pub(super) fn run<O>(self, options: O) -> RunFuture<S::Out<O::Output>>
+    where
+        O: ToArgs + Send + 'static,
+    {
         Box::pin(async move {
             execute(&options, &self.targets, self.per_target)
                 .await
@@ -162,7 +165,7 @@ impl<A: Action + Send + 'static, S: Shape> IntoFuture for Runner<A, S, Async> {
 /// # Ok(()) }
 /// ```
 pub fn remove_signature<T: IntoTargets>(target: T) -> RemoveSignature<T::Shape> {
-    RemoveSignature::remove_signature(target)
+    RemoveSignature::new(target, Default::default())
 }
 
 /// Checks the options and targets, then runs `codesign` once over all targets or once per target.
