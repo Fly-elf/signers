@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 use signers::Error;
 use signers::blocking::Codesign;
+use signers::codesign::blocking::remove_signature;
 
 use crate::support::fixture::Workspace;
 
@@ -59,7 +60,7 @@ fn a_missing_target_is_reported_by_every_action() {
         Codesign::sign_for_distribution(&missing, "-")
             .run()
             .unwrap_err(),
-        Codesign::remove_signature(&missing).run().unwrap_err(),
+        remove_signature(&missing).run().unwrap_err(),
         Codesign::verify(&missing).run().unwrap_err(),
         Codesign::display(&missing).run().unwrap_err(),
         Codesign::internal_requirements(&missing).run().unwrap_err(),

@@ -4,6 +4,7 @@
 use std::fs;
 
 use signers::codesign::Strict;
+use signers::codesign::remove_signature;
 use signers::{Codesign, CodesignError, Error};
 
 use super::{break_signature, requirement_unsatisfied, verification_failed};
@@ -81,7 +82,7 @@ async fn an_unsigned_binary_does_not_verify() {
 async fn a_binary_stripped_of_its_signature_does_not_verify() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
-    Codesign::remove_signature(&target).await.unwrap();
+    remove_signature(&target).await.unwrap();
 
     let error = Codesign::verify(&target).await.unwrap_err();
 
