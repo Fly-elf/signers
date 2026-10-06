@@ -18,11 +18,10 @@ mod types;
 
 pub use action::Action;
 pub use actions::{
-    Display, ExtractCertificates, InternalRequirements, RemoveSignature, Sign, ValidateConstraint,
-    Verify,
+    Display, ExtractCertificates, RemoveSignature, Requirements, Sign, ValidateConstraint, Verify,
 };
 #[cfg(feature = "async")]
-pub use asynchronous::{Codesign, remove_signature, validate_constraint};
+pub use asynchronous::{Codesign, remove_signature, requirements, validate_constraint};
 pub use runner::Runner;
 pub use types::{
     Authority, CdHash, Certificate, CmsDigest, CodeDirectory, CodeHashes, Constraints,

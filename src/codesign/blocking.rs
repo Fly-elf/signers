@@ -114,3 +114,9 @@ pub type ValidateConstraint<S = One> = super::ValidateConstraint<S, Blocking>;
 pub fn validate_constraint<T: IntoTargets>(plist: T) -> ValidateConstraint<T::Shape> {
     super::ValidateConstraint::new(plist, Default::default())
 }
+
+pub type Requirements<S = One> = super::Requirements<S, Blocking>;
+
+pub fn requirements<T: IntoTargets>(target: T) -> Requirements<T::Shape> {
+    super::Requirements::new(target, Default::default())
+}
