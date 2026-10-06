@@ -2,6 +2,7 @@
 
 use std::future::IntoFuture;
 
+use super::actions::sign;
 use super::asynchronous::Async;
 use super::core::Core;
 use super::runner::{Runner, Runtime};
@@ -125,4 +126,21 @@ pub type ExtractCertificates<S = One> = super::ExtractCertificates<S, Blocking>;
 
 pub fn extract_certificates<T: IntoTargets>(target: T) -> ExtractCertificates<T::Shape> {
     super::ExtractCertificates::new(target, Default::default())
+}
+
+pub type Sign<S = One> = super::Sign<S, Blocking>;
+
+pub fn sign<T: IntoTargets>(target: T, identity: impl Into<String>) -> Sign<T::Shape> {
+    super::Sign::new(target, sign::Options::new(identity))
+}
+
+pub fn sign_adhoc<T: IntoTargets>(target: T) -> Sign<T::Shape> {
+    super::Sign::new(target, sign::Options::adhoc())
+}
+
+pub fn sign_for_distribution<T: IntoTargets>(
+    target: T,
+    identity: impl Into<String>,
+) -> Sign<T::Shape> {
+    super::Sign::new(target, sign::Options::for_distribution(identity))
 }
