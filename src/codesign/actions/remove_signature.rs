@@ -3,50 +3,45 @@ use std::ffi::OsStr;
 use std::path::PathBuf;
 
 use crate::codesign::action::PushArgs;
+use crate::codesign::action::action;
 use crate::codesign::action::sealed::{SharedRun, ToArgs};
-use crate::codesign::runner::{Runner, Runtime};
-use crate::target::Shape;
+use crate::target::{IntoTargets, Shape};
 
-/// Options of the signature-removal action: the `A` in `Codesign<RemoveSignature>`.
-///
-/// [`Codesign::remove_signature`](crate::Codesign#method.remove_signature) creates it. Its only
-/// option is [`bundle_version`](crate::Codesign#impl-Runner%3CRemoveSignature,+S,+R%3E). With this
-/// operation, `codesign` ignores `--deep` and `--architecture`, still removes the signature under
-/// `--dryrun`, and crashes on `--file-list`. So those options aren't offered.
-///
-/// # Examples
-///
-/// Remove the signature from one version of a framework, and leave the other versions signed:
-///
-/// ```no_run
-/// # async fn run() -> signers::Result<()> {
-/// use signers::Codesign;
-///
-/// Codesign::remove_signature("Engine.framework")
-///     .bundle_version("A")
-///     .await?;
-/// # Ok(()) }
-/// ```
-#[derive(Debug, Clone, Default)]
-pub struct RemoveSignature {
-    bundle_version: Option<String>,
-}
-
-/// Options for [`remove_signature`](crate::Codesign#method.remove_signature).
-impl<S: Shape, R: Runtime> Runner<RemoveSignature, S, R> {
-    /// Removes the signature from this version of a versioned bundle only (`--bundle-version`).
+action! {
+    /// Options of the signature-removal action: the `A` in `Codesign<RemoveSignature>`.
     ///
-    /// `version` names a directory under the bundle's `Versions`. Without this option,
-    /// `codesign` uses the version that `Current` points to.
-    pub fn bundle_version(mut self, version: impl Into<String>) -> Self {
-        self.action.bundle_version = Some(version.into());
-        self
+    /// [`Codesign::remove_signature`](crate::Codesign#method.remove_signature) creates it. Its only
+    /// option is [`bundle_version`](crate::Codesign#impl-Runner%3CRemoveSignature,+S,+R%3E). With this
+    /// operation, `codesign` ignores `--deep` and `--architecture`, still removes the signature under
+    /// `--dryrun`, and crashes on `--file-list`. So those options aren't offered.
+    ///
+    /// # Examples
+    ///
+    /// Remove the signature from one version of a framework, and leave the other versions signed:
+    ///
+    /// ```no_run
+    /// # async fn run() -> signers::Result<()> {
+    /// use signers::Codesign;
+    ///
+    /// Codesign::remove_signature("Engine.framework")
+    ///     .bundle_version("A")
+    ///     .await?;
+    /// # Ok(()) }
+    /// ```
+    #[derive(Debug, Clone)]
+    RemoveSignature => () {}
+    setters {
+        /// Removes the signature from this version of a versioned bundle only (`--bundle-version`).
+        ///
+        /// `version` names a directory under the bundle's `Versions`. Without this option,
+        /// `codesign` uses the version that `Current` points to.
+        bundle_version: Option<impl Into<String>>,
     }
 }
 
-impl SharedRun for RemoveSignature {}
+impl<S, R> SharedRun for RemoveSignature<S, R> {}
 
-impl ToArgs for RemoveSignature {
+impl ToArgs for Options {
     type Output = ();
     const PER_TARGET: bool = false;
 
@@ -72,6 +67,15 @@ impl ToArgs for RemoveSignature {
         _stderr: String,
     ) -> crate::errors::Result<Vec<()>> {
         Ok(vec![(); targets.len()])
+    }
+}
+
+// Crate-internal constructor, one per free fn and named after it; generic over the runtime, so the
+// async and the blocking fn share it.
+impl<S: Shape, R> RemoveSignature<S, R> {
+    #[expect(clippy::self_named_constructors)]
+    pub(crate) fn remove_signature<T: IntoTargets<Shape = S>>(target: T) -> Self {
+        Self::new(target, Options::default())
     }
 }
 

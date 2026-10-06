@@ -8,7 +8,7 @@ use super::runner::{Runner, Runtime};
 use crate::codesign::Action;
 use crate::codesign::action::sealed::ToArgs;
 use crate::errors::{CodesignError, Result};
-use crate::target::{One, Shape};
+use crate::target::{IntoTargets, One, Shape};
 
 // Private so the marker stays unnameable: a `pub(crate)` type in the public alias is a privacy error.
 mod marker {
@@ -95,4 +95,10 @@ impl<A: Action + Send + 'static, S: Shape> Runner<A, S, Blocking> {
             .map_err(CodesignError::Spawn)?;
         runtime.block_on(self.with_runtime::<Async>().into_future())
     }
+}
+
+pub type RemoveSignature<S = One> = super::RemoveSignature<S, Blocking>;
+
+pub fn remove_signature<T: IntoTargets>(target: T) -> RemoveSignature<T::Shape> {
+    super::RemoveSignature::remove_signature(target)
 }
