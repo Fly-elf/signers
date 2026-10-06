@@ -12,6 +12,7 @@ mod actions;
 mod asynchronous;
 #[cfg(feature = "blocking")]
 pub mod blocking;
+mod core;
 mod runner;
 mod types;
 

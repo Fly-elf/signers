@@ -7,9 +7,11 @@ use std::process::Stdio;
 
 use futures_util::StreamExt;
 
+use super::core::Core;
 use super::runner::{Runner, Runtime};
 use crate::codesign::Action;
 use crate::codesign::action;
+use crate::codesign::action::sealed::ToArgs;
 use crate::errors::{CodesignError, Error, Result};
 use crate::target::{One, Shape};
 
@@ -17,6 +19,21 @@ use crate::target::{One, Shape};
 pub struct Async;
 
 impl Runtime for Async {}
+
+type RunFuture<T> = Pin<Box<dyn Future<Output = Result<T>> + Send>>;
+
+impl<S: Shape> Core<S, Async> {
+    pub(super) fn run<O: ToArgs + Send + 'static>(
+        self,
+        options: O,
+    ) -> RunFuture<S::Out<O::Output>> {
+        Box::pin(async move {
+            execute(&options, &self.targets, self.per_target)
+                .await
+                .map(S::wrap)
+        })
+    }
+}
 
 /// A `codesign` run: an action and its targets, started by `.await`.
 ///
