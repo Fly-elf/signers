@@ -1,7 +1,7 @@
 //! One plist at a time: which constraints are accepted, which are rejected
 //! and what the rejection says.
 
-use signers::Codesign;
+use signers::codesign::validate_constraint;
 
 use super::{cli_rejection, constraint_invalid};
 use crate::support::fixture::{Workspace, fixture};
@@ -36,7 +36,7 @@ async fn a_valid_constraint_yields_unit() {
         let plist = fixture(name);
         assert_eq!(cli_rejection(&plist), None, "{name}: harness assumption");
 
-        let (): () = Codesign::validate_constraint(&plist)
+        let (): () = validate_constraint(&plist)
             .await
             .unwrap_or_else(|e| panic!("{name} was rejected: {e}"));
     }
@@ -51,7 +51,7 @@ async fn an_invalid_constraint_is_rejected_although_codesign_exits_zero() {
             "{name}: harness assumption"
         );
 
-        let stderr = constraint_invalid(Codesign::validate_constraint(&plist).await.unwrap_err());
+        let stderr = constraint_invalid(validate_constraint(&plist).await.unwrap_err());
 
         assert!(stderr.contains("error:"), "{name}: {stderr}");
         assert!(stderr.contains(reason), "{name}: {stderr}");
@@ -63,14 +63,14 @@ async fn the_rejection_carries_what_codesign_printed() {
     let plist = fixture("bad-constraint.plist");
     let printed = cli_rejection(&plist).expect("harness assumption");
 
-    let stderr = constraint_invalid(Codesign::validate_constraint(&plist).await.unwrap_err());
+    let stderr = constraint_invalid(validate_constraint(&plist).await.unwrap_err());
 
     assert_eq!(stderr, printed.trim());
 }
 
 #[tokio::test]
 async fn the_rejection_message_names_the_reason() {
-    let error = Codesign::validate_constraint(fixture("bad-constraint.plist"))
+    let error = validate_constraint(fixture("bad-constraint.plist"))
         .await
         .unwrap_err();
 
@@ -84,13 +84,9 @@ async fn the_rejection_message_names_the_reason() {
 async fn a_valid_constraint_is_accepted_through_every_target_type() {
     let plist = fixture("constraint-team.plist");
 
-    Codesign::validate_constraint(plist.clone()).await.unwrap();
-    Codesign::validate_constraint(plist.as_path())
-        .await
-        .unwrap();
-    Codesign::validate_constraint(plist.to_str().unwrap())
-        .await
-        .unwrap();
+    validate_constraint(plist.clone()).await.unwrap();
+    validate_constraint(plist.as_path()).await.unwrap();
+    validate_constraint(plist.to_str().unwrap()).await.unwrap();
 }
 
 #[tokio::test]
@@ -106,8 +102,8 @@ async fn the_plist_is_left_untouched() {
     );
     let before = [&valid, &invalid].map(|path| std::fs::read(path).unwrap());
 
-    Codesign::validate_constraint(&valid).await.unwrap();
-    Codesign::validate_constraint(&invalid).await.unwrap_err();
+    validate_constraint(&valid).await.unwrap();
+    validate_constraint(&invalid).await.unwrap_err();
 
     assert_eq!(std::fs::read(&valid).unwrap(), before[0]);
     assert_eq!(std::fs::read(&invalid).unwrap(), before[1]);
@@ -133,9 +129,9 @@ async fn awkward_plist_paths_are_validated_all_the_same() {
         let ok = workspace.write(format!("ok/{name}"), &valid);
         let bad = workspace.write(format!("bad/{name}"), &invalid);
 
-        Codesign::validate_constraint(&ok)
+        validate_constraint(&ok)
             .await
             .unwrap_or_else(|e| panic!("{name}: {e}"));
-        constraint_invalid(Codesign::validate_constraint(&bad).await.unwrap_err());
+        constraint_invalid(validate_constraint(&bad).await.unwrap_err());
     }
 }
