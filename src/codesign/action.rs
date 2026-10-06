@@ -190,14 +190,21 @@ macro_rules! action {
     ) => {
         $crate::codesign::action::action!(@options [$($field: $field_ty,)*] $($setters)*);
 
+        #[derive(Debug, Clone)]
         $(#[$attr])*
         pub struct $name<S = $crate::target::One, R = $crate::codesign::asynchronous::Async> {
             core: $crate::codesign::core::Core<S, R>,
             options: Options,
         }
 
-        impl<S: $crate::target::Shape, R> $name<S, R> {
-            fn new<T: $crate::IntoTargets<Shape = S>>(target: T, options: Options) -> Self {
+        impl<S, R> $name<S, R>
+        where
+            S: $crate::target::Shape,
+        {
+            pub(crate) fn new<T>(target: T, options: Options) -> Self
+            where
+                T: $crate::IntoTargets<Shape = S>,
+            {
                 Self { core: $crate::codesign::core::Core::new::<Options, T>(target), options }
             }
         }
@@ -270,8 +277,9 @@ macro_rules! action {
         }
 
         /// Runs the action when awaited. See [`Codesign`](crate::Codesign) for its errors and panics.
-        impl<S: $crate::target::Shape> ::std::future::IntoFuture
-            for $name<S, $crate::codesign::asynchronous::Async>
+        impl<S> ::std::future::IntoFuture for $name<S, $crate::codesign::asynchronous::Async>
+        where
+            S: $crate::target::Shape,
         {
             type Output = $crate::Result<<S as $crate::target::Shape>::Out<$output>>;
             type IntoFuture = ::std::pin::Pin<
@@ -289,7 +297,10 @@ macro_rules! action {
         }
 
         #[cfg(feature = "blocking")]
-        impl<S: $crate::target::Shape> $name<S, $crate::codesign::blocking::Blocking> {
+        impl<S> $name<S, $crate::codesign::blocking::Blocking>
+        where
+            S: $crate::target::Shape,
+        {
             /// Runs the action, blocking the calling thread until every `codesign` has finished.
             ///
             /// It checks, runs and returns exactly like `.await` on
@@ -326,7 +337,7 @@ macro_rules! action {
     // Collects the private `Options` fields; a setter's attributes stay off its field.
     (@options [$($acc:tt)*]) => {
         #[derive(Debug, Clone, Default)]
-        struct Options { $($acc)* }
+        pub(crate) struct Options { $($acc)* }
     };
     (@options [$($acc:tt)*] $(#[$m:meta])* $f:ident : Option<impl Into<$t:ty>> $(, $($rest:tt)*)?) => {
         $crate::codesign::action::action!(@options [$($acc)* $f: Option<$t>,] $($($rest)*)?);

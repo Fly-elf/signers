@@ -11,8 +11,15 @@ pub struct Core<S, R> {
     marker: PhantomData<fn() -> (S, R)>,
 }
 
-impl<S: Shape, R> Core<S, R> {
-    pub(super) fn new<O: ToArgs, T: IntoTargets<Shape = S>>(target: T) -> Self {
+impl<S, R> Core<S, R>
+where
+    S: Shape,
+{
+    pub(super) fn new<O, T>(target: T) -> Self
+    where
+        O: ToArgs,
+        T: IntoTargets<Shape = S>,
+    {
         Self {
             targets: target.into_targets(),
             per_target: O::PER_TARGET && !<S as target::sealed::Shape>::SINGLE,

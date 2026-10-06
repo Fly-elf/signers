@@ -5,7 +5,6 @@ use std::path::PathBuf;
 use crate::codesign::action::PushArgs;
 use crate::codesign::action::action;
 use crate::codesign::action::sealed::{SharedRun, ToArgs};
-use crate::target::{IntoTargets, Shape};
 
 action! {
     /// Options of the signature-removal action: the `A` in `Codesign<RemoveSignature>`.
@@ -28,7 +27,6 @@ action! {
     ///     .await?;
     /// # Ok(()) }
     /// ```
-    #[derive(Debug, Clone)]
     RemoveSignature => () {}
     setters {
         /// Removes the signature from this version of a versioned bundle only (`--bundle-version`).
@@ -67,15 +65,6 @@ impl ToArgs for Options {
         _stderr: String,
     ) -> crate::errors::Result<Vec<()>> {
         Ok(vec![(); targets.len()])
-    }
-}
-
-// Crate-internal constructor, one per free fn and named after it; generic over the runtime, so the
-// async and the blocking fn share it.
-impl<S: Shape, R> RemoveSignature<S, R> {
-    #[expect(clippy::self_named_constructors)]
-    pub(crate) fn remove_signature<T: IntoTargets<Shape = S>>(target: T) -> Self {
-        Self::new(target, Options::default())
     }
 }
 
