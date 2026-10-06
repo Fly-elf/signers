@@ -9,11 +9,11 @@ use futures_util::StreamExt;
 
 use super::core::Core;
 use super::runner::{Runner, Runtime};
-use crate::codesign::Action;
 use crate::codesign::action;
 use crate::codesign::action::sealed::ToArgs;
+use crate::codesign::{Action, RemoveSignature};
 use crate::errors::{CodesignError, Error, Result};
-use crate::target::{One, Shape};
+use crate::target::{IntoTargets, One, Shape};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Async;
@@ -140,6 +140,29 @@ impl<A: Action + Send + 'static, S: Shape> IntoFuture for Runner<A, S, Async> {
                 .map(S::wrap)
         })
     }
+}
+
+/// Removes the signature from `target` (`--remove-signature`).
+///
+/// On a bundle, `codesign` removes the main executable's signature and the resource seal. It
+/// leaves nested code signed and an empty `_CodeSignature` directory behind. It accepts
+/// unsigned targets, and files that aren't code, without changing them.
+///
+/// You don't need to remove a signature before re-signing:
+/// [`sign`](crate::Codesign#method.sign) with [`force`](crate::Codesign#method.force) replaces
+/// it in one step.
+///
+/// # Examples
+///
+/// ```no_run
+/// # async fn run() -> signers::Result<()> {
+/// use signers::Codesign;
+///
+/// Codesign::remove_signature(vec!["mytool", "libfoo.dylib"]).await?;
+/// # Ok(()) }
+/// ```
+pub fn remove_signature<T: IntoTargets>(target: T) -> RemoveSignature<T::Shape> {
+    RemoveSignature::remove_signature(target)
 }
 
 /// Checks the options and targets, then runs `codesign` once over all targets or once per target.
