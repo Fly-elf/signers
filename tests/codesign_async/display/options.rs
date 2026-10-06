@@ -2,7 +2,7 @@
 //! detached signature. Each is checked against the report the CLI prints when
 //! handed the same flag.
 
-use signers::Codesign;
+use signers::codesign::display;
 use signers::codesign::{Format, Location};
 
 use crate::support::fixture::Workspace;
@@ -17,7 +17,7 @@ async fn the_architecture_picks_one_slice_of_a_universal_binary() {
     super::adhoc_sign(&target, &[]);
 
     for arch in ["x86_64", "arm64"] {
-        let signature = Codesign::display(&target)
+        let signature = display(&target)
             .architecture(arch)
             .await
             .unwrap_or_else(|e| panic!("{arch}: {e}"));
@@ -46,11 +46,8 @@ async fn the_bundle_version_picks_one_version_of_a_framework() {
         );
     }
 
-    let current = Codesign::display(&framework).await.unwrap();
-    let chosen = Codesign::display(&framework)
-        .bundle_version("B")
-        .await
-        .unwrap();
+    let current = display(&framework).await.unwrap();
+    let chosen = display(&framework).bundle_version("B").await.unwrap();
 
     assert_eq!(current.identifier, "com.example.Kit.A");
     assert_eq!(chosen.identifier, "com.example.Kit.B");
@@ -75,13 +72,9 @@ async fn deep_lists_the_nested_code_and_only_then() {
     workspace.framework_in(&frameworks, "Other");
     super::adhoc_sign(&app, &["--deep"]);
 
-    let shallow = Codesign::display(&app).await.unwrap();
-    let deep = Codesign::display(&app).deep(true).await.unwrap();
-    let undone = Codesign::display(&app)
-        .deep(true)
-        .deep(false)
-        .await
-        .unwrap();
+    let shallow = display(&app).await.unwrap();
+    let deep = display(&app).deep(true).await.unwrap();
+    let undone = display(&app).deep(true).deep(false).await.unwrap();
 
     let printed: Vec<String> = super::report(&app, &["--deep"])
         .lines()
@@ -106,10 +99,7 @@ async fn a_detached_signature_is_read_for_its_target() {
     );
     assert!(!inspect::is_signed(&target), "the signature was embedded");
 
-    let signature = Codesign::display(&target)
-        .detached(&detached)
-        .await
-        .unwrap();
+    let signature = display(&target).detached(&detached).await.unwrap();
 
     assert_eq!(signature.identifier, "com.example.detached");
     assert_eq!(

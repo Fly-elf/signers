@@ -1,8 +1,8 @@
 //! `preserve_metadata`: which parts of an old signature carry over into a
 //! forced re-sign.
 
-use signers::Codesign;
 use signers::codesign::PreserveMetadata;
+use signers::codesign::sign;
 
 use crate::support::fixture::{Workspace, fixture_str};
 use crate::support::inspect::{self, Signature};
@@ -14,7 +14,7 @@ async fn every_preserve_metadata_token_is_accepted() {
     let workspace = Workspace::new();
     let target = workspace.presigned("hello", &["-i", "com.example.original"]);
 
-    Codesign::sign(&target, "-")
+    sign(&target, "-")
         .force(true)
         .preserve_metadata(PreserveMetadata::all())
         .await
@@ -36,14 +36,14 @@ async fn preserved_metadata_survives_a_re_sign() {
     let preserved = workspace.presigned("preserved", &presign);
     let discarded = workspace.presigned("discarded", &presign);
 
-    Codesign::sign(&preserved, "-")
+    sign(&preserved, "-")
         .force(true)
         .preserve_metadata(PreserveMetadata::IDENTIFIER | PreserveMetadata::ENTITLEMENTS)
         .await
         .unwrap();
 
     // Control: the same re-sign without the option keeps neither.
-    Codesign::sign(&discarded, "-").force(true).await.unwrap();
+    sign(&discarded, "-").force(true).await.unwrap();
 
     assert_eq!(
         Signature::of(&preserved).identifier(),

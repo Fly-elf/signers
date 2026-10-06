@@ -3,8 +3,8 @@
 
 use std::path::Path;
 
-use signers::blocking::Codesign;
 use signers::codesign::RequirementKind;
+use signers::codesign::blocking::{display, sign, sign_adhoc, verify};
 use signers::codesign::blocking::{
     extract_certificates, remove_signature, requirements, validate_constraint,
 };
@@ -17,7 +17,7 @@ fn sign_signs_the_target() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    let () = Codesign::sign(&target, "-").run().unwrap();
+    let () = sign(&target, "-").run().unwrap();
 
     inspect::assert_valid(&target);
 }
@@ -28,7 +28,7 @@ fn sign_adhoc_re_signs_with_the_options_set() {
     let workspace = Workspace::new();
     let target = workspace.presigned("hello", &["-i", "com.example.original"]);
 
-    let () = Codesign::sign_adhoc(&target)
+    let () = sign_adhoc(&target)
         .force(true)
         .identifier("com.example.blocking")
         .run()
@@ -56,7 +56,7 @@ fn verify_accepts_a_valid_signature() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
 
-    let () = Codesign::verify(&target).run().unwrap();
+    let () = verify(&target).run().unwrap();
 
     inspect::assert_valid(&target);
 }
@@ -66,7 +66,7 @@ fn display_reports_what_codesign_reports() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
 
-    let signature = Codesign::display(&target).run().unwrap();
+    let signature = display(&target).run().unwrap();
 
     let oracle = inspect::Signature::of(&target);
     assert_eq!(signature.raw(), oracle.raw());

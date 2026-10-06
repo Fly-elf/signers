@@ -3,7 +3,7 @@
 
 use std::fs;
 
-use signers::Codesign;
+use signers::codesign::sign;
 
 use crate::support::fixture::{Workspace, output_of};
 use crate::support::inspect::{self, Signature};
@@ -13,7 +13,7 @@ async fn an_app_bundle_is_signed_from_its_info_plist() {
     let workspace = Workspace::new();
     let bundle = workspace.app_bundle("Hello");
 
-    Codesign::sign(&bundle, "-").await.unwrap();
+    sign(&bundle, "-").await.unwrap();
 
     inspect::assert_valid(&bundle);
     let signature = Signature::of(&bundle);
@@ -44,7 +44,7 @@ async fn a_signed_bundle_seals_its_resources() {
     let workspace = Workspace::new();
     let bundle = workspace.app_bundle("Sealed");
 
-    Codesign::sign(&bundle, "-").await.unwrap();
+    sign(&bundle, "-").await.unwrap();
     inspect::assert_valid(&bundle);
 
     fs::write(bundle.join("Contents/smuggled.txt"), "added after signing").unwrap();
@@ -64,7 +64,7 @@ async fn deep_signing_is_still_wired_up() {
     let workspace = Workspace::new();
     let bundle = workspace.app_bundle("Deep");
 
-    Codesign::sign(&bundle, "-")
+    sign(&bundle, "-")
         .deep(true)
         .identifier("com.example.deep")
         .await
@@ -79,7 +79,7 @@ async fn a_bundle_version_selects_which_version_to_sign() {
     let workspace = Workspace::new();
     let bundle = workspace.framework("Hello");
 
-    Codesign::sign(&bundle, "-")
+    sign(&bundle, "-")
         .bundle_version("A")
         .identifier("com.example.versioned")
         .await
