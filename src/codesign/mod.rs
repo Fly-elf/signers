@@ -22,7 +22,7 @@ pub use actions::{
     Verify,
 };
 #[cfg(feature = "async")]
-pub use asynchronous::{Codesign, remove_signature};
+pub use asynchronous::{Codesign, remove_signature, validate_constraint};
 pub use runner::Runner;
 pub use types::{
     Authority, CdHash, Certificate, CmsDigest, CodeDirectory, CodeHashes, Constraints,
