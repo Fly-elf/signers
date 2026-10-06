@@ -56,29 +56,5 @@ pub mod codesign;
 pub mod errors;
 mod target;
 
-#[cfg(feature = "async")]
-pub use codesign::Codesign;
-/// The blocking API: the same actions, run with `.run()` on the calling thread.
-///
-/// Each `.run()` starts a single-threaded Tokio runtime of its own and drops it before
-/// returning, so the caller needs no runtime. Inside one it panics: async code uses
-/// [`signers::Codesign`](crate::Codesign) instead.
-///
-/// # Examples
-///
-/// ```no_run
-/// # fn main() -> signers::Result<()> {
-/// use signers::blocking::Codesign;
-///
-/// Codesign::sign_adhoc(vec!["mytool", "libfoo.dylib"]).force(true).run()?;
-/// let signature = Codesign::display("mytool").run()?;
-/// println!("{}", signature.identifier);
-/// # Ok(()) }
-/// ```
-#[cfg(feature = "blocking")]
-pub mod blocking {
-    pub use crate::codesign::blocking::Codesign;
-}
-
 pub use errors::{CodesignError, Error, Result};
 pub use target::IntoTargets;
