@@ -11,7 +11,7 @@ use super::core::Core;
 use super::runner::{Runner, Runtime};
 use crate::codesign::action;
 use crate::codesign::action::sealed::ToArgs;
-use crate::codesign::{Action, RemoveSignature, ValidateConstraint};
+use crate::codesign::{Action, RemoveSignature, Requirements, ValidateConstraint};
 use crate::errors::{CodesignError, Error, Result};
 use crate::target::{IntoTargets, One, Shape};
 
@@ -219,6 +219,49 @@ pub fn remove_signature<T: IntoTargets>(target: T) -> RemoveSignature<T::Shape> 
 /// ```
 pub fn validate_constraint<T: IntoTargets>(plist: T) -> ValidateConstraint<T::Shape> {
     ValidateConstraint::new(plist, Default::default())
+}
+
+/// Reads the requirements of the signature of `target` (`--display -r-`).
+///
+/// `.await` yields one `Vec` of [`Requirement`](crate::codesign::Requirement) per target, in
+/// the order `codesign` keeps the requirements, which is not the order given to
+/// [`requirements`](crate::Codesign#method.requirements) when signing. A requirement the
+/// signature doesn't embed, but the system supplies, is marked
+/// [`implicit`](crate::codesign::Requirement#structfield.implicit). The `Vec` is empty when
+/// `codesign` prints none. [`display`](crate::Codesign#method.display) reports only how many
+/// requirements there are, in
+/// [`Signature::internal_requirements`](crate::codesign::Signature#structfield.internal_requirements).
+///
+/// Given several targets, each is read on its own, concurrently, and every one that failed is
+/// reported together as [`Error::Batch`](crate::Error::Batch). `codesign` prints the
+/// requirements of all targets together, with nothing to tell which target a line belongs to,
+/// so this action always runs one per target and has no
+/// [`per_target`](crate::Codesign#method.per_target) setter:
+///
+/// ```compile_fail,E0599
+/// signers::Codesign::internal_requirements(vec!["a"]).per_target(false);
+/// ```
+///
+/// # Errors
+///
+/// An unsigned target fails with [`CodesignError::Failed`](crate::CodesignError::Failed), exit
+/// code 1. A line that can't be read as a requirement fails with
+/// [`CodesignError::UnexpectedOutput`](crate::CodesignError::UnexpectedOutput). The checks made
+/// before `codesign` starts are on [`Codesign`](crate::Codesign#errors).
+///
+/// # Examples
+///
+/// ```no_run
+/// # async fn run() -> signers::Result<()> {
+/// use signers::Codesign;
+///
+/// for requirement in Codesign::internal_requirements("MyApp.app").await? {
+///     println!("{:?}: {}", requirement.kind, requirement.expression);
+/// }
+/// # Ok(()) }
+/// ```
+pub fn requirements<T: IntoTargets>(target: T) -> Requirements<T::Shape> {
+    Requirements::new(target, Default::default())
 }
 
 /// Checks the options and targets, then runs `codesign` once over all targets or once per target.
