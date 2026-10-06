@@ -3,7 +3,8 @@
 
 use std::ffi::OsStr;
 
-use signers::Codesign;
+use signers::codesign::remove_signature;
+use signers::codesign::sign;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect;
@@ -12,10 +13,10 @@ use crate::support::inspect;
 async fn an_app_bundle_loses_its_signature() {
     let workspace = Workspace::new();
     let bundle = workspace.app_bundle("Hello");
-    Codesign::sign(&bundle, "-").await.unwrap();
+    sign(&bundle, "-").await.unwrap();
     inspect::assert_valid(&bundle);
 
-    Codesign::remove_signature(&bundle).await.unwrap();
+    remove_signature(&bundle).await.unwrap();
 
     assert!(!inspect::is_signed(&bundle));
     // A bundle's signature lives in its main executable, so that is where the
@@ -30,11 +31,11 @@ async fn an_app_bundle_loses_its_signature() {
 async fn the_code_signature_directory_is_left_behind_empty() {
     let workspace = Workspace::new();
     let bundle = workspace.app_bundle("Leftovers");
-    Codesign::sign(&bundle, "-").await.unwrap();
+    sign(&bundle, "-").await.unwrap();
     let signature_dir = bundle.join("Contents/_CodeSignature");
     assert!(signature_dir.join("CodeResources").is_file());
 
-    Codesign::remove_signature(&bundle).await.unwrap();
+    remove_signature(&bundle).await.unwrap();
 
     assert!(signature_dir.is_dir(), "the directory itself was removed");
     assert!(
@@ -51,10 +52,10 @@ async fn nested_code_keeps_its_signature() {
     let workspace = Workspace::new();
     let bundle = workspace.app_bundle("Host");
     let nested = workspace.framework_in(&bundle.join("Contents/Frameworks"), "Nested");
-    Codesign::sign(&nested, "-").await.unwrap();
-    Codesign::sign(&bundle, "-").await.unwrap();
+    sign(&nested, "-").await.unwrap();
+    sign(&bundle, "-").await.unwrap();
 
-    Codesign::remove_signature(&bundle).await.unwrap();
+    remove_signature(&bundle).await.unwrap();
 
     assert!(!inspect::is_signed(&bundle));
     assert!(
@@ -67,10 +68,10 @@ async fn nested_code_keeps_its_signature() {
 async fn a_framework_loses_its_signature() {
     let workspace = Workspace::new();
     let bundle = workspace.framework("Hello");
-    Codesign::sign(&bundle, "-").await.unwrap();
+    sign(&bundle, "-").await.unwrap();
     inspect::assert_valid(&bundle);
 
-    Codesign::remove_signature(&bundle).await.unwrap();
+    remove_signature(&bundle).await.unwrap();
 
     assert!(!inspect::is_signed(&bundle));
 }
@@ -90,10 +91,7 @@ async fn a_bundle_version_selects_which_version_to_strip() {
         .expect_success("pre-sign a framework version");
     }
 
-    Codesign::remove_signature(&bundle)
-        .bundle_version("B")
-        .await
-        .unwrap();
+    remove_signature(&bundle).bundle_version("B").await.unwrap();
 
     assert!(!inspect::is_signed_version(&bundle, "B"));
     assert!(
@@ -119,7 +117,7 @@ async fn no_bundle_version_strips_the_current_one() {
         .expect_success("pre-sign a framework version");
     }
 
-    Codesign::remove_signature(&bundle).await.unwrap();
+    remove_signature(&bundle).await.unwrap();
 
     assert!(!inspect::is_signed_version(&bundle, "A"));
     assert!(inspect::is_signed_version(&bundle, "B"));

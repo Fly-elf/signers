@@ -1,4 +1,4 @@
-//! `Codesign::remove_signature`, end to end — one submodule per test category,
+//! `remove_signature`, end to end — one submodule per test category,
 //! named for what it covers; see each submodule's own doc comment for the
 //! detail.
 //!

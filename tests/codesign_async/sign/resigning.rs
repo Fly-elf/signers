@@ -3,7 +3,7 @@
 //! determine whether it's needed. Each test checks both the outcome and that
 //! the *other* signature was left alone.
 
-use signers::Codesign;
+use signers::codesign::sign;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect::{self, Signature};
@@ -15,7 +15,7 @@ async fn re_signing_without_force_fails_and_changes_nothing() {
     let target = workspace.presigned("hello", &["-i", "com.example.original"]);
     let before = Signature::of(&target).cd_hash().to_owned();
 
-    let error = Codesign::sign(&target, "-")
+    let error = sign(&target, "-")
         .identifier("com.example.replacement")
         .await
         .unwrap_err();
@@ -36,7 +36,7 @@ async fn force_replaces_an_existing_signature() {
     let target = workspace.presigned("hello", &["-i", "com.example.original"]);
     let before = Signature::of(&target).cd_hash().to_owned();
 
-    Codesign::sign(&target, "-")
+    sign(&target, "-")
         .force(true)
         .identifier("com.example.replacement")
         .await
@@ -61,7 +61,7 @@ async fn a_linker_signature_is_replaced_without_force() {
             .contains(&"linker-signed")
     );
 
-    Codesign::sign(&target, "-")
+    sign(&target, "-")
         .identifier("com.example.relinked")
         .await
         .unwrap();
@@ -79,7 +79,7 @@ async fn force_on_an_unsigned_target_is_harmless() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    Codesign::sign(&target, "-").force(true).await.unwrap();
+    sign(&target, "-").force(true).await.unwrap();
 
     inspect::assert_valid(&target);
 }

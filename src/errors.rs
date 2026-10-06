@@ -12,16 +12,15 @@ pub type Result<T> = std::result::Result<T, Error>;
 ///
 /// Every variant except [`Codesign`](Error::Codesign), [`Batch`](Error::Batch) and
 /// [`Io`](Error::Io) comes from a check made before `codesign` starts, so no target has been
-/// touched. The order of the checks
-/// is on [`Codesign`](crate::Codesign#errors).
+/// touched. The order of the checks is listed in [`codesign`](crate::codesign#errors).
 ///
 /// # Examples
 ///
 /// ```no_run
 /// # async fn run() {
-/// use signers::{Codesign, CodesignError, Error};
+/// use signers::{CodesignError, Error, codesign};
 ///
-/// match Codesign::sign_adhoc("mytool").force(true).await {
+/// match codesign::sign_adhoc("mytool").force(true).await {
 ///     Ok(()) => {}
 ///     Err(Error::TargetNotFound(path)) => eprintln!("no such file: {}", path.display()),
 ///     Err(Error::Codesign(CodesignError::Failed { stderr, .. })) => eprintln!("{stderr}"),
@@ -57,10 +56,10 @@ pub enum Error {
     /// A file or directory couldn't be read, created or written.
     ///
     /// `path` is the one involved.
-    /// [`extract_certificates`](crate::Codesign#method.extract_certificates) raises it, for the
+    /// [`extract_certificates`](crate::codesign::extract_certificates) raises it, for the
     /// system's temporary directory, for the files it reads back and for the ones
-    /// [`save_to`](crate::Codesign#method.save_to) writes. It never changes a target. Raised while
-    /// a target is read, it is collected in [`Batch`](Error::Batch).
+    /// [`save_to`](crate::codesign::ExtractCertificates::save_to) writes. It never changes a
+    /// target. Raised while a target is read, it is collected in [`Batch`](Error::Batch).
     #[error("I/O error on {path}: {source}")]
     Io {
         path: PathBuf,
@@ -77,19 +76,19 @@ pub enum Error {
     StdioPath(&'static str),
 
     /// An option that writes one shared file was combined with
-    /// [`per_target(true)`](crate::Codesign#method.per_target).
+    /// [`per_target(true)`](crate::codesign::Sign::per_target).
     ///
     /// It holds the setter's name, `"file_list"` or `"detached"`. One process per target would
     /// make every process write that same file.
     #[error("{0} writes one shared file and can't be combined with per_target(true)")]
     SharedOutputPerTarget(&'static str),
 
-    /// These targets failed in a [`per_target(true)`](crate::Codesign#method.per_target) run, each
+    /// These targets failed in a [`per_target(true)`](crate::codesign::Sign::per_target) run, each
     /// with its own error, in input order.
     ///
     /// Every target ran, so the ones not listed succeeded; their outputs are dropped. One failing
     /// target is enough to get this variant rather than its plain error. See
-    /// [`per_target`](crate::Codesign#method.per_target) for an example.
+    /// [`per_target`](crate::codesign::Sign::per_target) for an example.
     #[error("{} target(s) failed: {}", .0.len(), failures(.0))]
     Batch(Vec<(PathBuf, Error)>),
 
@@ -130,7 +129,7 @@ pub enum CodesignError {
     /// trimmed. Only `stderr` is part of the message.
     ///
     /// When one `codesign` runs over several targets, the targets before the rejected one have
-    /// already changed. See [`Codesign`](crate::Codesign#errors).
+    /// already changed. See [`codesign`](crate::codesign#errors).
     #[error("`codesign` exited with code {code}: {}", diagnostics(.stderr))]
     Failed {
         code: i32,
@@ -156,19 +155,19 @@ pub enum CodesignError {
     #[error("`codesign` produced output this crate can't read: {detail}")]
     UnexpectedOutput { detail: String },
 
-    /// [`verify`](crate::Codesign#method.verify) found the target's signature wanting.
+    /// [`verify`](crate::codesign::verify) found the target's signature wanting.
     ///
     /// The signature is invalid or modified, the target is unsigned, or the requirement text of
-    /// [`test_requirement`](crate::Codesign#method.test_requirement) doesn't compile. `stderr`
+    /// [`test_requirement`](crate::codesign::Verify::test_requirement) doesn't compile. `stderr`
     /// holds the diagnostics `codesign` printed on standard error and `stdout` what it printed on
     /// standard output, both trimmed. Only `stderr` is part of the message.
     ///
     /// `resources` names the sealed resources that were altered, in the order `codesign` printed
     /// them, which can differ from run to run. It is filled only with
-    /// [`check_designated_requirement`](crate::Codesign#method.check_designated_requirement), and
-    /// stays empty when the damage is to nested code (see [`deep`](crate::Codesign#method.deep)) or
-    /// when nothing was altered. The message lists them after the diagnostics, as
-    /// `(modified: /path; added: /path)`.
+    /// [`check_designated_requirement`](crate::codesign::Verify::check_designated_requirement), and
+    /// stays empty when the damage is to nested code (see
+    /// [`deep`](crate::codesign::Verify::deep)) or when nothing was altered. The message lists them
+    /// after the diagnostics, as `(modified: /path; added: /path)`.
     #[error("verification failed: {}{}", diagnostics(.stderr), changes(.resources))]
     VerificationFailed {
         stdout: String,
@@ -176,18 +175,18 @@ pub enum CodesignError {
         resources: Vec<ResourceChange>,
     },
 
-    /// [`verify`](crate::Codesign#method.verify) found a valid signature on code that doesn't meet
+    /// [`verify`](crate::codesign::verify) found a valid signature on code that doesn't meet
     /// the requirement it was given.
     ///
     /// That requirement is the text of
-    /// [`test_requirement`](crate::Codesign#method.test_requirement) or, with
-    /// [`check_designated_requirement`](crate::Codesign#method.check_designated_requirement), the
+    /// [`test_requirement`](crate::codesign::Verify::test_requirement) or, with
+    /// [`check_designated_requirement`](crate::codesign::Verify::check_designated_requirement), the
     /// code's own. `stderr` holds the diagnostics `codesign` printed on standard error and `stdout`
     /// what it printed on standard output, both trimmed. Only `stderr` is part of the message.
     #[error("validly signed, but the requirement isn't satisfied: {}", diagnostics(.stderr))]
     RequirementUnsatisfied { stdout: String, stderr: String },
 
-    /// [`validate_constraint`](crate::Codesign#method.validate_constraint) found a constraint that
+    /// [`validate_constraint`](crate::codesign::validate_constraint) found a constraint that
     /// isn't valid.
     ///
     /// The plist has an unknown key or is empty. `stderr` holds the diagnostics `codesign`
@@ -200,8 +199,8 @@ pub enum CodesignError {
     #[error("invalid constraint: {}", diagnostics(.stderr))]
     ConstraintInvalid { stdout: String, stderr: String },
 
-    /// [`display`](crate::Codesign#method.display) found no signature in the
-    /// [`signature_slot`](crate::Codesign#method.signature_slot) it was asked for.
+    /// [`display`](crate::codesign::display) found no signature in the
+    /// [`signature_slot`](crate::codesign::Display::signature_slot) it was asked for.
     ///
     /// Code with one signature has nothing in the second slot. `codesign` exits 0 for it, and
     /// reports `no signature` in place of the signature, so this crate fails instead of returning
@@ -213,7 +212,7 @@ pub enum CodesignError {
     NoSignature { stdout: String, stderr: String },
 }
 
-/// A sealed resource that [`verify`](crate::Codesign#method.verify) found altered.
+/// A sealed resource that [`verify`](crate::codesign::verify) found altered.
 ///
 /// It is found in [`CodesignError::VerificationFailed`].
 ///
@@ -222,9 +221,9 @@ pub enum CodesignError {
 /// ```no_run
 /// # async fn run() -> signers::Result<()> {
 /// use signers::errors::Change;
-/// use signers::{Codesign, CodesignError, Error};
+/// use signers::{CodesignError, Error, codesign};
 ///
-/// let result = Codesign::verify("MyApp.app").check_designated_requirement(true).await;
+/// let result = codesign::verify("MyApp.app").check_designated_requirement(true).await;
 /// if let Err(Error::Codesign(CodesignError::VerificationFailed { resources, .. })) = result {
 ///     for resource in resources.iter().filter(|r| r.change == Change::Modified) {
 ///         println!("tampered: {}", resource.path.display());

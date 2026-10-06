@@ -4,7 +4,7 @@
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 
-use signers::Codesign;
+use signers::codesign::sign;
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect::{self, Signature};
@@ -15,7 +15,7 @@ async fn a_plain_file_is_signed_as_a_generic_target() {
     let workspace = Workspace::new();
     let target = workspace.write("notes.txt", "not a Mach-O file\n");
 
-    Codesign::sign(&target, "-").await.unwrap();
+    sign(&target, "-").await.unwrap();
 
     assert_eq!(Signature::of(&target).format(), "generic");
     inspect::assert_valid(&target);
@@ -26,7 +26,7 @@ async fn a_plain_directory_is_rejected() {
     let workspace = Workspace::new();
     let target = workspace.dir("not-a-bundle");
 
-    let error = Codesign::sign(&target, "-").await.unwrap_err();
+    let error = sign(&target, "-").await.unwrap_err();
 
     assert!(crate::codesign_error(error).contains("bundle format unrecognized"));
 }
@@ -36,9 +36,7 @@ async fn an_unknown_identity_is_reported_verbatim() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    let error = Codesign::sign(&target, "No Such Identity 12345")
-        .await
-        .unwrap_err();
+    let error = sign(&target, "No Such Identity 12345").await.unwrap_err();
 
     let stderr = crate::codesign_error(error);
     assert!(stderr.contains("no identity found"), "got {stderr}");
@@ -55,7 +53,7 @@ async fn a_failure_inside_codesign_is_surfaced_with_its_diagnostics() {
     let target = workspace.unsigned("locked/hello");
     fs::set_permissions(&locked, fs::Permissions::from_mode(0o555)).unwrap();
 
-    let result = Codesign::sign(&target, "-").await;
+    let result = sign(&target, "-").await;
 
     fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
     let stderr = crate::codesign_error(result.unwrap_err());
@@ -75,7 +73,7 @@ async fn a_detached_database_signature_needs_root() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    let error = Codesign::sign(&target, "-")
+    let error = sign(&target, "-")
         .detached_database(true)
         .await
         .unwrap_err();

@@ -28,7 +28,7 @@ impl Identity {
     ///
     /// ```ignore
     /// let identity = Identity::new();
-    /// Codesign::sign(&target, identity.name()).keychain(identity.keychain()).await?;
+    /// sign(&target, identity.name()).keychain(identity.keychain()).await?;
     /// ```
     pub fn new() -> Self {
         static NEXT: AtomicUsize = AtomicUsize::new(0);

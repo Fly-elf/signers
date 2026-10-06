@@ -3,8 +3,9 @@
 
 use std::path::{Path, PathBuf};
 
-use signers::blocking::Codesign;
 use signers::codesign::Signature;
+use signers::codesign::blocking::{display, sign_adhoc};
+use signers::codesign::blocking::{extract_certificates, remove_signature, requirements};
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect;
@@ -24,7 +25,7 @@ fn oracle() -> Vec<String> {
 
 #[test]
 fn one_path_yields_one_output() {
-    let signature: Signature = Codesign::display(TARGETS[1]).run().unwrap();
+    let signature: Signature = display(TARGETS[1]).run().unwrap();
 
     assert_eq!(signature.raw(), oracle()[1]);
 }
@@ -34,18 +35,13 @@ fn a_collection_yields_one_output_per_target_in_order_both_ways() {
     let expected = oracle();
 
     for per_target in [true, false] {
-        let from_vec: Vec<Signature> = Codesign::display(TARGETS.to_vec())
+        let from_vec: Vec<Signature> = display(TARGETS.to_vec())
             .per_target(per_target)
             .run()
             .unwrap();
-        let from_slice: Vec<Signature> = Codesign::display(&TARGETS[..])
-            .per_target(per_target)
-            .run()
-            .unwrap();
-        let from_array: [Signature; 3] = Codesign::display(TARGETS)
-            .per_target(per_target)
-            .run()
-            .unwrap();
+        let from_slice: Vec<Signature> =
+            display(&TARGETS[..]).per_target(per_target).run().unwrap();
+        let from_array: [Signature; 3] = display(TARGETS).per_target(per_target).run().unwrap();
 
         assert_eq!(reports(&from_vec), expected, "per_target({per_target})");
         assert_eq!(reports(&from_slice), expected, "per_target({per_target})");
@@ -62,7 +58,7 @@ fn a_batch_changes_every_target_both_ways() {
             .map(|name| workspace.unsigned(name))
             .collect();
 
-        let outputs: Vec<()> = Codesign::sign_adhoc(targets.clone())
+        let outputs: Vec<()> = sign_adhoc(targets.clone())
             .per_target(per_target)
             .run()
             .unwrap();
@@ -71,7 +67,7 @@ fn a_batch_changes_every_target_both_ways() {
             .iter()
             .for_each(|target| inspect::assert_valid(target));
 
-        let [(), ()] = Codesign::remove_signature([&targets[0], &targets[2]])
+        let [(), ()] = remove_signature([&targets[0], &targets[2]])
             .per_target(per_target)
             .run()
             .unwrap();
@@ -85,9 +81,7 @@ fn a_batch_changes_every_target_both_ways() {
 /// in the shape and order of its targets.
 #[test]
 fn an_action_without_the_setter_keeps_the_shape() {
-    let [first, second] = Codesign::extract_certificates(["/bin/ls", "/bin/cat"])
-        .run()
-        .unwrap();
+    let [first, second] = extract_certificates(["/bin/ls", "/bin/cat"]).run().unwrap();
     let ders = |chain: &[signers::codesign::Certificate]| -> Vec<Vec<u8>> {
         chain.iter().map(|c| c.der().to_vec()).collect()
     };
@@ -95,9 +89,7 @@ fn an_action_without_the_setter_keeps_the_shape() {
     assert_eq!(ders(&first), inspect::certificates(Path::new("/bin/ls")));
     assert_eq!(ders(&second), inspect::certificates(Path::new("/bin/cat")));
 
-    let found = Codesign::internal_requirements(vec!["/bin/ls", "/bin/cat"])
-        .run()
-        .unwrap();
+    let found = requirements(vec!["/bin/ls", "/bin/cat"]).run().unwrap();
     assert_eq!(found.len(), 2);
     for (requirements, target) in found.iter().zip(["/bin/ls", "/bin/cat"]) {
         let [only] = &requirements[..] else {

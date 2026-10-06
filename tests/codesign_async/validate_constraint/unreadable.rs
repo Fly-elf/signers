@@ -2,7 +2,7 @@
 //! unlike for a constraint it merely rejects, so the failure stays a plain
 //! `codesign` failure.
 
-use signers::Codesign;
+use signers::codesign::validate_constraint;
 
 use super::unreadable;
 use crate::support::fixture::{Workspace, fixture};
@@ -23,7 +23,7 @@ async fn a_file_that_is_not_a_dict_plist_fails_with_exit_one() {
         let cli = inspect::codesign(&["--validate-constraint".as_ref(), plist.as_ref()]);
         assert!(!cli.success, "{what}: harness assumption");
 
-        let (code, stderr) = unreadable(Codesign::validate_constraint(&plist).await.unwrap_err());
+        let (code, stderr) = unreadable(validate_constraint(&plist).await.unwrap_err());
 
         assert_eq!(code, 1, "{what}");
         assert!(

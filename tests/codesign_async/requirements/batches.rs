@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use signers::Codesign;
+use signers::codesign::requirements;
 
 use super::{lines_of, printed};
 use crate::support::fixture::Workspace;
@@ -25,9 +25,7 @@ async fn each_target_gets_its_own_requirements_in_input_order() {
     let mut targets = three_targets(&workspace);
     targets.reverse();
 
-    let found = Codesign::internal_requirements(targets.clone())
-        .await
-        .unwrap();
+    let found = requirements(targets.clone()).await.unwrap();
 
     assert_eq!(found.len(), 3);
     for (requirements, target) in found.iter().zip(&targets) {
@@ -45,7 +43,7 @@ async fn an_array_of_targets_yields_an_array_of_lists() {
     let workspace = Workspace::new();
     let targets = three_targets(&workspace);
 
-    let [first, second] = Codesign::internal_requirements([targets[0].clone(), targets[1].clone()])
+    let [first, second] = requirements([targets[0].clone(), targets[1].clone()])
         .await
         .unwrap();
 
@@ -55,9 +53,7 @@ async fn an_array_of_targets_yields_an_array_of_lists() {
 
 #[tokio::test]
 async fn a_single_target_given_as_a_collection_yields_a_one_item_list() {
-    let found = Codesign::internal_requirements(vec!["/bin/ls"])
-        .await
-        .unwrap();
+    let found = requirements(vec!["/bin/ls"]).await.unwrap();
 
     assert_eq!(found.len(), 1);
     assert_eq!(
@@ -68,9 +64,7 @@ async fn a_single_target_given_as_a_collection_yields_a_one_item_list() {
 
 #[tokio::test]
 async fn the_same_target_twice_is_read_twice() {
-    let found = Codesign::internal_requirements(vec!["/bin/ls", "/bin/ls"])
-        .await
-        .unwrap();
+    let found = requirements(vec!["/bin/ls", "/bin/ls"]).await.unwrap();
 
     assert_eq!(found.len(), 2);
     assert_eq!(found[0], found[1]);
@@ -84,7 +78,7 @@ async fn unsigned_targets_are_collected_in_input_order() {
     let signed = workspace.adhoc_signed("signed");
     let second_unsigned = workspace.unsigned("second unsigned");
 
-    let error = Codesign::internal_requirements(vec![
+    let error = requirements(vec![
         first_unsigned.clone(),
         signed,
         second_unsigned.clone(),
@@ -110,7 +104,7 @@ async fn an_unsigned_single_target_fails_with_codesigns_diagnostics() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    let error = Codesign::internal_requirements(&target).await.unwrap_err();
+    let error = requirements(&target).await.unwrap_err();
 
     match error {
         signers::Error::Codesign(signers::CodesignError::Failed { code, stderr, .. }) => {

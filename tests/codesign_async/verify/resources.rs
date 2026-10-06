@@ -7,8 +7,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use signers::codesign::verify;
 use signers::errors::{Change, ResourceChange};
-use signers::{Codesign, CodesignError, Error};
+use signers::{CodesignError, Error};
 
 use super::{break_signature, verification_failed_with_resources};
 use crate::support::fixture::Workspace;
@@ -62,7 +63,7 @@ fn listed_by_codesign(app: &Path) -> Vec<(Change, PathBuf)> {
 }
 
 async fn resources_of(app: &Path) -> Vec<(Change, PathBuf)> {
-    let error = Codesign::verify(app)
+    let error = verify(app)
         .check_designated_requirement(true)
         .await
         .unwrap_err();
@@ -156,9 +157,9 @@ async fn without_the_option_no_resource_is_listed() {
     let app = sealed_app(&workspace, "Hello");
     fs::write(resources_dir(&app).join("a.txt"), "tampered\n").unwrap();
 
-    let plain = Codesign::verify(&app).await.unwrap_err();
+    let plain = verify(&app).await.unwrap_err();
     let (plain_stderr, plain_resources) = verification_failed_with_resources(plain);
-    let checked = Codesign::verify(&app)
+    let checked = verify(&app)
         .check_designated_requirement(true)
         .await
         .unwrap_err();
@@ -168,7 +169,7 @@ async fn without_the_option_no_resource_is_listed() {
     assert_eq!(checked_resources.len(), 1);
     assert_eq!(plain_stderr, checked_stderr);
 
-    let off = Codesign::verify(&app)
+    let off = verify(&app)
         .check_designated_requirement(true)
         .check_designated_requirement(false)
         .await
@@ -184,7 +185,7 @@ async fn a_broken_signature_lists_no_resource() {
     let target = workspace.adhoc_signed("hello");
     break_signature(&target);
 
-    let error = Codesign::verify(&target)
+    let error = verify(&target)
         .check_designated_requirement(true)
         .await
         .unwrap_err();
@@ -197,7 +198,7 @@ async fn an_unsigned_target_lists_no_resource() {
     let workspace = Workspace::new();
     let app = workspace.app_bundle("Hello");
 
-    let error = Codesign::verify(&app)
+    let error = verify(&app)
         .check_designated_requirement(true)
         .await
         .unwrap_err();
@@ -210,7 +211,7 @@ async fn a_valid_bundle_verifies_with_the_check_and_lists_nothing() {
     let workspace = Workspace::new();
     let app = sealed_app(&workspace, "Hello");
 
-    Codesign::verify(&app)
+    verify(&app)
         .check_designated_requirement(true)
         .await
         .unwrap();
@@ -255,7 +256,7 @@ async fn tampered_nested_code_is_named_by_the_diagnostics_not_the_list() {
         .expect_success("pre-sign the bundle");
     super::flip_byte(&nested, 0x2000);
 
-    let error = Codesign::verify(&app)
+    let error = verify(&app)
         .deep(true)
         .check_designated_requirement(true)
         .await
@@ -279,7 +280,7 @@ async fn each_target_of_a_batch_lists_its_own_resources() {
     fs::write(&first_file, "tampered\n").unwrap();
     fs::remove_file(&second_file).unwrap();
 
-    let error = Codesign::verify(vec![first.clone(), valid, second.clone()])
+    let error = verify(vec![first.clone(), valid, second.clone()])
         .check_designated_requirement(true)
         .await
         .unwrap_err();
@@ -321,7 +322,7 @@ async fn one_process_lists_what_codesign_printed() {
         ]);
         run.stdout.lines().count()
     };
-    let error = Codesign::verify(vec![first, second])
+    let error = verify(vec![first, second])
         .per_target(false)
         .check_designated_requirement(true)
         .await
@@ -342,11 +343,11 @@ async fn the_error_keeps_what_codesign_printed_on_stdout() {
     let verbose = inspect::codesign(&["--verify".as_ref(), "--verbose=1".as_ref(), app.as_ref()]);
     let plain = inspect::codesign(&["--verify".as_ref(), app.as_ref()]);
 
-    let checked = Codesign::verify(&app)
+    let checked = verify(&app)
         .check_designated_requirement(true)
         .await
         .unwrap_err();
-    let unchecked = Codesign::verify(&app).await.unwrap_err();
+    let unchecked = verify(&app).await.unwrap_err();
 
     let (
         Error::Codesign(CodesignError::VerificationFailed { stdout, stderr, .. }),

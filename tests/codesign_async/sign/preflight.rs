@@ -2,23 +2,21 @@
 //! action shares, and option values this crate cannot honour (`file_list("-")`,
 //! `requirements("-")`).
 
-use signers::{Codesign, Error};
+use signers::Error;
+use signers::codesign::{sign, sign_adhoc};
 
 use crate::preflight::preflight_tests;
 use crate::support::fixture::Workspace;
 use crate::support::inspect;
 
-preflight_tests!(Codesign::sign_adhoc);
+preflight_tests!(sign_adhoc);
 
 #[tokio::test]
 async fn a_file_list_of_standard_output_is_rejected() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    let error = Codesign::sign(&target, "-")
-        .file_list("-")
-        .await
-        .unwrap_err();
+    let error = sign(&target, "-").file_list("-").await.unwrap_err();
 
     assert!(
         matches!(error, Error::StdioPath("file_list")),
@@ -37,10 +35,7 @@ async fn requirements_read_from_standard_input_are_rejected() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    let error = Codesign::sign(&target, "-")
-        .requirements("-")
-        .await
-        .unwrap_err();
+    let error = sign(&target, "-").requirements("-").await.unwrap_err();
 
     assert!(
         matches!(error, Error::StdioPath("requirements")),
@@ -58,7 +53,7 @@ async fn a_refused_stdio_path_fails_the_whole_run_in_every_mode() {
     let targets = vec![workspace.unsigned("first"), workspace.unsigned("second")];
 
     for per_target in [false, true] {
-        let error = Codesign::sign(targets.clone(), "-")
+        let error = sign(targets.clone(), "-")
             .requirements("-")
             .per_target(per_target)
             .await
@@ -67,7 +62,7 @@ async fn a_refused_stdio_path_fails_the_whole_run_in_every_mode() {
             matches!(error, Error::StdioPath("requirements")),
             "per_target({per_target}): got {error:?}"
         );
-        let error = Codesign::sign(targets.clone(), "-")
+        let error = sign(targets.clone(), "-")
             .file_list("-")
             .per_target(per_target)
             .await;
@@ -94,14 +89,14 @@ async fn requirements_that_only_look_like_a_dash_are_accepted() {
     let target = workspace.unsigned("hello");
     let file = workspace.write("-reqs.txt", "designated => identifier \"-\"\n");
 
-    Codesign::sign(&target, "-")
+    sign(&target, "-")
         .requirements(file.to_str().unwrap())
         .await
         .unwrap();
     assert!(inspect::is_signed(&target));
 
     let target = workspace.unsigned("second");
-    Codesign::sign(&target, "-")
+    sign(&target, "-")
         .requirements("=designated => identifier \"-\"")
         .await
         .unwrap();
@@ -115,10 +110,7 @@ async fn a_dash_entitlements_path_reaches_codesign_as_a_file_name() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    let error = Codesign::sign(&target, "-")
-        .entitlements("-")
-        .await
-        .unwrap_err();
+    let error = sign(&target, "-").entitlements("-").await.unwrap_err();
 
     match error {
         Error::Codesign(signers::CodesignError::Failed { stderr, .. }) => {
@@ -139,12 +131,12 @@ async fn an_option_writing_one_shared_file_cannot_run_per_target() {
     let targets = vec![workspace.unsigned("first"), workspace.unsigned("second")];
     let shared = workspace.join("shared.out");
 
-    let with_file_list = Codesign::sign(targets.clone(), "-")
+    let with_file_list = sign(targets.clone(), "-")
         .file_list(&shared)
         .per_target(true)
         .await
         .unwrap_err();
-    let with_detached = Codesign::sign(targets.clone(), "-")
+    let with_detached = sign(targets.clone(), "-")
         .detached(&shared)
         .per_target(true)
         .await
@@ -179,11 +171,8 @@ async fn a_shared_file_is_not_refused_for_a_single_target() {
     let list = workspace.join("signed.txt");
     let signature = workspace.join("detached.sig");
 
-    Codesign::sign(&listed, "-").file_list(&list).await.unwrap();
-    Codesign::sign(&detached, "-")
-        .detached(&signature)
-        .await
-        .unwrap();
+    sign(&listed, "-").file_list(&list).await.unwrap();
+    sign(&detached, "-").detached(&signature).await.unwrap();
 
     let entries = std::fs::read_to_string(&list).unwrap();
     assert_eq!(
@@ -204,12 +193,12 @@ async fn a_shared_file_is_refused_per_target_for_a_one_element_collection() {
     let target = workspace.unsigned("hello");
     let list = workspace.join("signed.txt");
 
-    let from_a_list = Codesign::sign(vec![&target], "-")
+    let from_a_list = sign(vec![&target], "-")
         .file_list(&list)
         .per_target(true)
         .await
         .unwrap_err();
-    let from_an_array = Codesign::sign([&target], "-")
+    let from_an_array = sign([&target], "-")
         .detached(&list)
         .per_target(true)
         .await
@@ -233,7 +222,7 @@ async fn a_shared_file_is_accepted_once_per_target_is_switched_back_off() {
     let targets = vec![workspace.unsigned("first"), workspace.unsigned("second")];
     let list = workspace.join("signed.txt");
 
-    Codesign::sign(targets.clone(), "-")
+    sign(targets.clone(), "-")
         .per_target(true)
         .file_list(&list)
         .per_target(false)
@@ -257,7 +246,7 @@ async fn the_checks_made_before_running_come_in_a_fixed_order() {
     let list = workspace.join("signed.txt");
     let no_targets = Vec::<std::path::PathBuf>::new;
 
-    let invalid_option_and_shared_output = Codesign::sign_adhoc(vec![workspace.join("hello")])
+    let invalid_option_and_shared_output = sign_adhoc(vec![workspace.join("hello")])
         .detached(&list)
         .file_list("-")
         .per_target(true)
@@ -271,16 +260,13 @@ async fn the_checks_made_before_running_come_in_a_fixed_order() {
         "got {invalid_option_and_shared_output:?}"
     );
 
-    let invalid_option_and_no_targets = Codesign::sign_adhoc(no_targets())
-        .file_list("-")
-        .await
-        .unwrap_err();
+    let invalid_option_and_no_targets = sign_adhoc(no_targets()).file_list("-").await.unwrap_err();
     assert!(
         matches!(invalid_option_and_no_targets, Error::StdioPath("file_list")),
         "got {invalid_option_and_no_targets:?}"
     );
 
-    let shared_output_and_no_targets = Codesign::sign_adhoc(no_targets())
+    let shared_output_and_no_targets = sign_adhoc(no_targets())
         .file_list(&list)
         .per_target(true)
         .await
@@ -294,7 +280,7 @@ async fn the_checks_made_before_running_come_in_a_fixed_order() {
     );
 
     let shared_output_and_bad_targets =
-        Codesign::sign_adhoc(vec![std::path::PathBuf::new(), missing.clone()])
+        sign_adhoc(vec![std::path::PathBuf::new(), missing.clone()])
             .detached(&list)
             .per_target(true)
             .await
