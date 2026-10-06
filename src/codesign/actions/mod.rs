@@ -1,10 +1,10 @@
-mod display;
-mod extract_certificates;
-mod internal_requirements;
-mod remove_signature;
-mod sign;
-mod validate_constraint;
-mod verify;
+pub(super) mod display;
+pub(super) mod extract_certificates;
+pub(super) mod internal_requirements;
+pub(super) mod remove_signature;
+pub(super) mod sign;
+pub(super) mod validate_constraint;
+pub(super) mod verify;
 
 pub use display::Display;
 pub use extract_certificates::ExtractCertificates;

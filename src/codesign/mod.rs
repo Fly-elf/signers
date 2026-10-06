@@ -12,6 +12,7 @@ mod actions;
 mod asynchronous;
 #[cfg(feature = "blocking")]
 pub mod blocking;
+mod core;
 mod runner;
 mod types;
 
@@ -21,7 +22,7 @@ pub use actions::{
     Verify,
 };
 #[cfg(feature = "async")]
-pub use asynchronous::Codesign;
+pub use asynchronous::{Codesign, remove_signature};
 pub use runner::Runner;
 pub use types::{
     Authority, CdHash, Certificate, CmsDigest, CodeDirectory, CodeHashes, Constraints,

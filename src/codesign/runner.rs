@@ -4,8 +4,7 @@ use std::path::PathBuf;
 use crate::codesign::action::Action;
 use crate::codesign::action::sealed::SharedRun;
 use crate::codesign::{
-    Display, ExtractCertificates, InternalRequirements, RemoveSignature, Sign, ValidateConstraint,
-    Verify,
+    Display, ExtractCertificates, InternalRequirements, Sign, ValidateConstraint, Verify,
 };
 use crate::target::{self, IntoTargets, Multi, One};
 
@@ -130,29 +129,6 @@ impl<R: Runtime> Runner<(), One, R> {
         identity: impl Into<String>,
     ) -> Runner<Sign, T::Shape, R> {
         new(target, Sign::for_distribution(identity))
-    }
-
-    /// Removes the signature from `target` (`--remove-signature`).
-    ///
-    /// On a bundle, `codesign` removes the main executable's signature and the resource seal. It
-    /// leaves nested code signed and an empty `_CodeSignature` directory behind. It accepts
-    /// unsigned targets, and files that aren't code, without changing them.
-    ///
-    /// You don't need to remove a signature before re-signing:
-    /// [`sign`](crate::Codesign#method.sign) with [`force`](crate::Codesign#method.force) replaces
-    /// it in one step.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
-    ///
-    /// Codesign::remove_signature(vec!["mytool", "libfoo.dylib"]).await?;
-    /// # Ok(()) }
-    /// ```
-    pub fn remove_signature<T: IntoTargets>(target: T) -> Runner<RemoveSignature, T::Shape, R> {
-        new(target, RemoveSignature::default())
     }
 
     /// Checks the signature of `target` (`--verify`), changing nothing.
