@@ -150,3 +150,9 @@ pub type Verify<S = One> = super::Verify<S, Blocking>;
 pub fn verify<T: IntoTargets>(target: T) -> Verify<T::Shape> {
     super::Verify::new(target, Default::default())
 }
+
+pub type Display<S = One> = super::Display<S, Blocking>;
+
+pub fn display<T: IntoTargets>(target: T) -> Display<T::Shape> {
+    super::Display::new(target, Default::default())
+}
