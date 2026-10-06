@@ -21,7 +21,9 @@ pub use actions::{
     Display, ExtractCertificates, RemoveSignature, Requirements, Sign, ValidateConstraint, Verify,
 };
 #[cfg(feature = "async")]
-pub use asynchronous::{Codesign, remove_signature, requirements, validate_constraint};
+pub use asynchronous::{
+    Codesign, extract_certificates, remove_signature, requirements, validate_constraint,
+};
 pub use runner::Runner;
 pub use types::{
     Authority, CdHash, Certificate, CmsDigest, CodeDirectory, CodeHashes, Constraints,
