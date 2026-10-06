@@ -3,9 +3,7 @@ use std::path::PathBuf;
 
 use crate::codesign::action::Action;
 use crate::codesign::action::sealed::SharedRun;
-use crate::codesign::{
-    Display, ExtractCertificates, InternalRequirements, Sign, ValidateConstraint, Verify,
-};
+use crate::codesign::{Display, ExtractCertificates, InternalRequirements, Sign, Verify};
 use crate::target::{self, IntoTargets, Multi, One};
 
 pub trait Runtime {}
@@ -249,61 +247,6 @@ impl<R: Runtime> Runner<(), One, R> {
     /// ```
     pub fn display<T: IntoTargets>(target: T) -> Runner<Display, T::Shape, R> {
         new(target, Display::default())
-    }
-
-    /// Checks that each plist is a valid launch or library constraint (`--validate-constraint`).
-    ///
-    /// A constraint plist holds the bare constraint dictionary, such as
-    /// `{ "team-identifier": "A1B2C3D4E5" }`. It is not the `ccat`/`comp`/`reqs` wrapper that
-    /// [`display`](crate::Codesign#method.display) reports, which is rejected. `.await` yields `()`
-    /// per plist.
-    ///
-    /// Given several plists, each is checked on its own by default, so one `.await` reports every
-    /// plist that failed, as [`Error::Batch`](crate::Error::Batch).
-    /// [`per_target(false)`](crate::Codesign#method.per_target) runs one `codesign` instead. Then
-    /// the first plist `codesign` can't read stops the run, and the plists after it go unchecked.
-    /// The rejections of the plists before it can't be told apart: the whole run fails with one
-    /// [`CodesignError::ConstraintInvalid`](crate::CodesignError::ConstraintInvalid).
-    ///
-    /// # Errors
-    ///
-    /// A constraint with an unknown key or an empty one fails with
-    /// [`CodesignError::ConstraintInvalid`](crate::CodesignError::ConstraintInvalid). A plist that
-    /// is missing, or isn't a dictionary, fails with
-    /// [`CodesignError::Failed`](crate::CodesignError::Failed), exit code 1. The checks made before
-    /// `codesign` starts are on [`Codesign`](crate::Codesign#errors).
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
-    ///
-    /// Codesign::validate_constraint("launch-constraint.plist").await?;
-    /// # Ok(()) }
-    /// ```
-    ///
-    /// Check several plists and list the invalid ones:
-    ///
-    /// ```no_run
-    /// # async fn run() -> signers::Result<()> {
-    /// use signers::{Codesign, Error};
-    ///
-    /// match Codesign::validate_constraint(vec!["launch.plist", "library.plist"]).await {
-    ///     Ok(_) => {}
-    ///     Err(Error::Batch(failures)) => {
-    ///         for (path, error) in &failures {
-    ///             eprintln!("{}: {error}", path.display());
-    ///         }
-    ///     }
-    ///     Err(error) => return Err(error),
-    /// }
-    /// # Ok(()) }
-    /// ```
-    pub fn validate_constraint<T: IntoTargets>(
-        plist: T,
-    ) -> Runner<ValidateConstraint, T::Shape, R> {
-        new(plist, ValidateConstraint)
     }
 
     /// Reads the certificate chain that signed `target`, leaf first (`--extract-certificates`).

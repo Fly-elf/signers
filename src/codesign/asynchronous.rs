@@ -11,7 +11,7 @@ use super::core::Core;
 use super::runner::{Runner, Runtime};
 use crate::codesign::action;
 use crate::codesign::action::sealed::ToArgs;
-use crate::codesign::{Action, RemoveSignature};
+use crate::codesign::{Action, RemoveSignature, ValidateConstraint};
 use crate::errors::{CodesignError, Error, Result};
 use crate::target::{IntoTargets, One, Shape};
 
@@ -166,6 +166,59 @@ impl<A: Action + Send + 'static, S: Shape> IntoFuture for Runner<A, S, Async> {
 /// ```
 pub fn remove_signature<T: IntoTargets>(target: T) -> RemoveSignature<T::Shape> {
     RemoveSignature::new(target, Default::default())
+}
+
+/// Checks that each plist is a valid launch or library constraint (`--validate-constraint`).
+///
+/// A constraint plist holds the bare constraint dictionary, such as
+/// `{ "team-identifier": "A1B2C3D4E5" }`. It is not the `ccat`/`comp`/`reqs` wrapper that
+/// [`display`](crate::Codesign#method.display) reports, which is rejected. `.await` yields `()`
+/// per plist.
+///
+/// Given several plists, each is checked on its own by default, so one `.await` reports every
+/// plist that failed, as [`Error::Batch`](crate::Error::Batch).
+/// [`per_target(false)`](crate::Codesign#method.per_target) runs one `codesign` instead. Then
+/// the first plist `codesign` can't read stops the run, and the plists after it go unchecked.
+/// The rejections of the plists before it can't be told apart: the whole run fails with one
+/// [`CodesignError::ConstraintInvalid`](crate::CodesignError::ConstraintInvalid).
+///
+/// # Errors
+///
+/// A constraint with an unknown key or an empty one fails with
+/// [`CodesignError::ConstraintInvalid`](crate::CodesignError::ConstraintInvalid). A plist that
+/// is missing, or isn't a dictionary, fails with
+/// [`CodesignError::Failed`](crate::CodesignError::Failed), exit code 1. The checks made before
+/// `codesign` starts are on [`Codesign`](crate::Codesign#errors).
+///
+/// # Examples
+///
+/// ```no_run
+/// # async fn run() -> signers::Result<()> {
+/// use signers::Codesign;
+///
+/// Codesign::validate_constraint("launch-constraint.plist").await?;
+/// # Ok(()) }
+/// ```
+///
+/// Check several plists and list the invalid ones:
+///
+/// ```no_run
+/// # async fn run() -> signers::Result<()> {
+/// use signers::{Codesign, Error};
+///
+/// match Codesign::validate_constraint(vec!["launch.plist", "library.plist"]).await {
+///     Ok(_) => {}
+///     Err(Error::Batch(failures)) => {
+///         for (path, error) in &failures {
+///             eprintln!("{}: {error}", path.display());
+///         }
+///     }
+///     Err(error) => return Err(error),
+/// }
+/// # Ok(()) }
+/// ```
+pub fn validate_constraint<T: IntoTargets>(plist: T) -> ValidateConstraint<T::Shape> {
+    ValidateConstraint::new(plist, Default::default())
 }
 
 /// Checks the options and targets, then runs `codesign` once over all targets or once per target.

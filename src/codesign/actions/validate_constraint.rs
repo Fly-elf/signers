@@ -3,30 +3,33 @@ use std::ffi::OsStr;
 use std::path::PathBuf;
 
 use crate::codesign::action::PushArgs;
+use crate::codesign::action::action;
 use crate::codesign::action::sealed::{SharedRun, ToArgs};
 use crate::errors::CodesignError;
 
-/// The action of [`Codesign::validate_constraint`](crate::Codesign#method.validate_constraint): the
-/// `A` in `Codesign<ValidateConstraint>`.
-///
-/// It has no options, so there are no setters to chain;
-/// [`per_target`](crate::Codesign#method.per_target) is the only one, for several plists.
-///
-/// # Examples
-///
-/// ```no_run
-/// # async fn run() -> signers::Result<()> {
-/// use signers::Codesign;
-///
-/// Codesign::validate_constraint(["launch.plist", "library.plist"]).await?;
-/// # Ok(()) }
-/// ```
-#[derive(Debug, Clone, Default)]
-pub struct ValidateConstraint;
+action! {
+    /// The action of [`Codesign::validate_constraint`](crate::Codesign#method.validate_constraint): the
+    /// `A` in `Codesign<ValidateConstraint>`.
+    ///
+    /// It has no options, so there are no setters to chain;
+    /// [`per_target`](crate::Codesign#method.per_target) is the only one, for several plists.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn run() -> signers::Result<()> {
+    /// use signers::Codesign;
+    ///
+    /// Codesign::validate_constraint(["launch.plist", "library.plist"]).await?;
+    /// # Ok(()) }
+    /// ```
+    ValidateConstraint => () {}
+    setters {}
+}
 
-impl SharedRun for ValidateConstraint {}
+impl<S, R> SharedRun for ValidateConstraint<S, R> {}
 
-impl ToArgs for ValidateConstraint {
+impl ToArgs for Options {
     type Output = ();
     const PER_TARGET: bool = true;
 

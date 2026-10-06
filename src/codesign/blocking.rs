@@ -108,3 +108,9 @@ pub type RemoveSignature<S = One> = super::RemoveSignature<S, Blocking>;
 pub fn remove_signature<T: IntoTargets>(target: T) -> RemoveSignature<T::Shape> {
     super::RemoveSignature::new(target, Default::default())
 }
+
+pub type ValidateConstraint<S = One> = super::ValidateConstraint<S, Blocking>;
+
+pub fn validate_constraint<T: IntoTargets>(plist: T) -> ValidateConstraint<T::Shape> {
+    super::ValidateConstraint::new(plist, Default::default())
+}
