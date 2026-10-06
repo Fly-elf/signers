@@ -12,49 +12,69 @@ use tempfile::TempDir;
 
 use crate::codesign::Certificate;
 use crate::codesign::action::PushArgs;
+use crate::codesign::action::action;
 use crate::codesign::action::sealed::ToArgs;
-use crate::codesign::runner::{Runner, Runtime};
 use crate::errors::{Error, Result};
-use crate::target::Shape;
 
-/// Options of the certificate-extraction action: the `A` in `Codesign<ExtractCertificates>`.
-///
-/// [`Codesign::extract_certificates`](crate::Codesign#method.extract_certificates) creates it. Its
-/// one option, [`save_to`](crate::Codesign#method.save_to), also writes each chain to a PEM file.
-/// `.await` yields the chain of each target as a `Vec` of [`Certificate`], leaf first.
-///
-/// # Examples
-///
-/// Read the chain of a signed binary, and tell an ad hoc signature, which has none:
-///
-/// ```no_run
-/// # async fn run() -> signers::Result<()> {
-/// use signers::Codesign;
-///
-/// let chain = Codesign::extract_certificates("MyApp.app").await?;
-/// match chain.first() {
-///     Some(leaf) => println!("signed with a certificate of {} bytes", leaf.der().len()),
-///     None => println!("signed ad hoc"),
-/// }
-/// # Ok(()) }
-/// ```
-///
-/// Save the chains of two apps as PEM files in `certs/`:
-///
-/// ```no_run
-/// # async fn run() -> signers::Result<()> {
-/// use signers::Codesign;
-///
-/// let [a, b] = Codesign::extract_certificates(["A.app", "B.app"])
-///     .save_to("certs")
-///     .await?;
-/// // `certs/A.app.pem` and `certs/B.app.pem` now hold what `a` and `b` hold.
-/// # Ok(()) }
-/// ```
-#[derive(Debug, Default)]
-pub struct ExtractCertificates {
-    save_to: Option<PathBuf>,
-    run: Mutex<RunState>,
+action! {
+    /// Options of the certificate-extraction action: the `A` in `Codesign<ExtractCertificates>`.
+    ///
+    /// [`Codesign::extract_certificates`](crate::Codesign#method.extract_certificates) creates it. Its
+    /// one option, [`save_to`](crate::Codesign#method.save_to), also writes each chain to a PEM file.
+    /// `.await` yields the chain of each target as a `Vec` of [`Certificate`], leaf first.
+    ///
+    /// # Examples
+    ///
+    /// Read the chain of a signed binary, and tell an ad hoc signature, which has none:
+    ///
+    /// ```no_run
+    /// # async fn run() -> signers::Result<()> {
+    /// use signers::Codesign;
+    ///
+    /// let chain = Codesign::extract_certificates("MyApp.app").await?;
+    /// match chain.first() {
+    ///     Some(leaf) => println!("signed with a certificate of {} bytes", leaf.der().len()),
+    ///     None => println!("signed ad hoc"),
+    /// }
+    /// # Ok(()) }
+    /// ```
+    ///
+    /// Save the chains of two apps as PEM files in `certs/`:
+    ///
+    /// ```no_run
+    /// # async fn run() -> signers::Result<()> {
+    /// use signers::Codesign;
+    ///
+    /// let [a, b] = Codesign::extract_certificates(["A.app", "B.app"])
+    ///     .save_to("certs")
+    ///     .await?;
+    /// // `certs/A.app.pem` and `certs/B.app.pem` now hold what `a` and `b` hold.
+    /// # Ok(()) }
+    /// ```
+    ExtractCertificates => Vec<Certificate> {
+        run: RunCell,
+    }
+    setters {
+        /// Also writes each target's chain as a PEM file in `dir`.
+        ///
+        /// The file is named after the target, `MyApp.app` into `MyApp.app.pem`, and holds the chain
+        /// leaf first, so `openssl` reads it as it is. A name already taken, by an earlier target of
+        /// the same run or by a file that was there before, gets a number instead:
+        /// `MyApp.app2.pem`, `MyApp.app3.pem`. A file is never overwritten. Targets that share a name
+        /// are numbered in no fixed order, because they run concurrently.
+        ///
+        /// A target with an ad hoc signature has no certificates and gets no file. `dir` is created,
+        /// with its parents, only when at least one file is to be written: if every target is ad hoc,
+        /// it is left alone. The files of the targets that were read stay when another target of the
+        /// same run fails.
+        ///
+        /// A `dir` or a file that can't be written fails with [`Error::Io`].
+        ///
+        /// A later call replaces an earlier one.
+        ///
+        /// [`Error::Io`]: crate::Error::Io
+        save_to: Option<impl Into<PathBuf>>,
+    }
 }
 
 #[derive(Debug, Default)]
@@ -66,48 +86,23 @@ struct RunState {
     prefixes: HashMap<usize, OsString>,
 }
 
-impl Clone for ExtractCertificates {
+#[derive(Debug, Default)]
+struct RunCell(Mutex<RunState>);
+
+impl Clone for RunCell {
+    // A clone hasn't run yet: it starts with no run state.
     fn clone(&self) -> Self {
-        Self {
-            save_to: self.save_to.clone(),
-            run: Mutex::default(),
-        }
+        Self::default()
     }
 }
 
-impl ExtractCertificates {
+impl Options {
     fn state(&self) -> MutexGuard<'_, RunState> {
-        self.run.lock().unwrap_or_else(PoisonError::into_inner)
+        self.run.0.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
-/// Options for [`extract_certificates`](crate::Codesign#method.extract_certificates).
-impl<S: Shape, R: Runtime> Runner<ExtractCertificates, S, R> {
-    /// Also writes each target's chain as a PEM file in `dir`.
-    ///
-    /// The file is named after the target, `MyApp.app` into `MyApp.app.pem`, and holds the chain
-    /// leaf first, so `openssl` reads it as it is. A name already taken, by an earlier target of
-    /// the same run or by a file that was there before, gets a number instead:
-    /// `MyApp.app2.pem`, `MyApp.app3.pem`. A file is never overwritten. Targets that share a name
-    /// are numbered in no fixed order, because they run concurrently.
-    ///
-    /// A target with an ad hoc signature has no certificates and gets no file. `dir` is created,
-    /// with its parents, only when at least one file is to be written: if every target is ad hoc,
-    /// it is left alone. The files of the targets that were read stay when another target of the
-    /// same run fails.
-    ///
-    /// A `dir` or a file that can't be written fails with [`Error::Io`].
-    ///
-    /// A later call replaces an earlier one.
-    ///
-    /// [`Error::Io`]: crate::Error::Io
-    pub fn save_to(mut self, dir: impl Into<PathBuf>) -> Self {
-        self.action.save_to = Some(dir.into());
-        self
-    }
-}
-
-impl ToArgs for ExtractCertificates {
+impl ToArgs for Options {
     type Output = Vec<Certificate>;
     const PER_TARGET: bool = true;
 

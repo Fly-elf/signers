@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use crate::codesign::action::Action;
 use crate::codesign::action::sealed::SharedRun;
-use crate::codesign::{Display, ExtractCertificates, Sign, Verify};
+use crate::codesign::{Display, Sign, Verify};
 use crate::target::{self, IntoTargets, Multi, One};
 
 pub trait Runtime {}
@@ -247,46 +247,6 @@ impl<R: Runtime> Runner<(), One, R> {
     /// ```
     pub fn display<T: IntoTargets>(target: T) -> Runner<Display, T::Shape, R> {
         new(target, Display::default())
-    }
-
-    /// Reads the certificate chain that signed `target`, leaf first (`--extract-certificates`).
-    ///
-    /// `.await` yields one `Vec` of [`Certificate`](crate::codesign::Certificate) per target, the
-    /// signing certificate first and the root last. A target signed ad hoc has none, so its `Vec`
-    /// is empty. [`save_to`](crate::Codesign#method.save_to) also writes the chains to PEM files.
-    ///
-    /// Given several targets, each is read on its own, concurrently, and every one that failed is
-    /// reported together as [`Error::Batch`](crate::Error::Batch). One `codesign` over several
-    /// targets would write every chain to the same files, so this action always runs one per target
-    /// and has no [`per_target`](crate::Codesign#method.per_target) setter:
-    ///
-    /// ```compile_fail,E0599
-    /// signers::Codesign::extract_certificates(vec!["a"]).per_target(false);
-    /// ```
-    ///
-    /// # Errors
-    ///
-    /// An unsigned target fails with [`CodesignError::Failed`](crate::CodesignError::Failed), exit
-    /// code 1. A file that can't be read or written fails with [`Error::Io`](crate::Error::Io),
-    /// also when the system's temporary directory can't be used. The checks made before `codesign`
-    /// starts are on [`Codesign`](crate::Codesign#errors).
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # async fn run() -> signers::Result<()> {
-    /// use signers::Codesign;
-    ///
-    /// let chains = Codesign::extract_certificates(vec!["A.app", "B.app"]).await?;
-    /// for chain in &chains {
-    ///     println!("{} certificates", chain.len());
-    /// }
-    /// # Ok(()) }
-    /// ```
-    pub fn extract_certificates<T: IntoTargets>(
-        target: T,
-    ) -> Runner<ExtractCertificates, T::Shape, R> {
-        new(target, ExtractCertificates::default())
     }
 }
 
