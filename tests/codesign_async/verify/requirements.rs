@@ -5,7 +5,8 @@
 use std::path::PathBuf;
 
 use signers::codesign::Strict;
-use signers::{Codesign, CodesignError, Error};
+use signers::codesign::{sign, verify};
+use signers::{CodesignError, Error};
 
 use super::{requirement_unsatisfied, verification_failed};
 use crate::support::fixture::Workspace;
@@ -14,7 +15,7 @@ use crate::support::fixture::Workspace;
 /// fixture can't satisfy and `/bin/ls` always does.
 #[tokio::test]
 async fn a_binary_that_satisfies_the_requirement_verifies() {
-    Codesign::verify("/bin/ls")
+    verify("/bin/ls")
         .test_requirement("anchor apple")
         .await
         .unwrap();
@@ -25,7 +26,7 @@ async fn a_binary_that_misses_the_requirement_is_an_unsatisfied_requirement() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
 
-    let error = Codesign::verify(&target)
+    let error = verify(&target)
         .test_requirement("anchor apple")
         .await
         .unwrap_err();
@@ -41,17 +42,17 @@ async fn a_binary_that_misses_the_requirement_is_an_unsatisfied_requirement() {
 async fn the_requirement_can_name_the_identifier_the_binary_was_signed_with() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
-    Codesign::sign(&target, "-")
+    sign(&target, "-")
         .identifier("com.example.required")
         .await
         .unwrap();
 
-    Codesign::verify(&target)
+    verify(&target)
         .test_requirement("identifier \"com.example.required\"")
         .await
         .unwrap();
 
-    let error = Codesign::verify(&target)
+    let error = verify(&target)
         .test_requirement("identifier \"com.example.other\"")
         .await
         .unwrap_err();
@@ -64,17 +65,17 @@ async fn the_requirement_can_name_the_identifier_the_binary_was_signed_with() {
 async fn a_compound_requirement_with_quotes_and_spaces_is_evaluated_whole() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
-    Codesign::sign(&target, "-")
+    sign(&target, "-")
         .identifier("com.example.compound")
         .await
         .unwrap();
 
-    Codesign::verify(&target)
+    verify(&target)
         .test_requirement("identifier \"com.example.compound\" or anchor apple")
         .await
         .unwrap();
 
-    let error = Codesign::verify(&target)
+    let error = verify(&target)
         .test_requirement("identifier \"com.example.compound\" and anchor apple")
         .await
         .unwrap_err();
@@ -86,7 +87,7 @@ async fn a_requirement_that_does_not_compile_is_a_verification_failure() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
 
-    let error = Codesign::verify(&target)
+    let error = verify(&target)
         .test_requirement("this is not a requirement ((")
         .await
         .unwrap_err();
@@ -102,10 +103,7 @@ async fn a_lone_dash_is_requirement_text_not_stdin() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
 
-    let error = Codesign::verify(&target)
-        .test_requirement("-")
-        .await
-        .unwrap_err();
+    let error = verify(&target).test_requirement("-").await.unwrap_err();
 
     let stderr = verification_failed(error);
     assert!(stderr.contains("Requirement syntax error"), "got {stderr}");
@@ -116,7 +114,7 @@ async fn a_requirement_is_not_checked_when_the_signature_itself_is_broken() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    let error = Codesign::verify(&target)
+    let error = verify(&target)
         .test_requirement("anchor apple")
         .await
         .unwrap_err();
@@ -129,13 +127,13 @@ async fn the_last_requirement_wins() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
 
-    Codesign::verify(&target)
+    verify(&target)
         .test_requirement("anchor apple")
         .test_requirement("!anchor apple")
         .await
         .unwrap();
 
-    let error = Codesign::verify("/bin/ls")
+    let error = verify("/bin/ls")
         .test_requirement("!anchor apple")
         .test_requirement("anchor apple")
         .test_requirement("!anchor apple")
@@ -151,7 +149,7 @@ async fn a_satisfied_requirement_does_not_excuse_a_broken_signature() {
     let target = workspace.adhoc_signed("hello");
     super::break_signature(&target);
 
-    let error = Codesign::verify(&target)
+    let error = verify(&target)
         .deep(true)
         .strict(Strict::All)
         .test_requirement("!anchor apple")
@@ -175,7 +173,7 @@ async fn an_unsatisfied_requirement_keeps_what_codesign_printed_on_stdout() {
     ]);
     assert!(!oracle.success);
 
-    let error = Codesign::verify(&target)
+    let error = verify(&target)
         .test_requirement("anchor apple")
         .await
         .unwrap_err();
@@ -197,16 +195,16 @@ async fn a_requirement_file_decides_like_requirement_text() {
     let apple = workspace.write("apple.txt", "anchor apple\n");
     let not_apple = workspace.write("not-apple.txt", "!anchor apple\n");
 
-    Codesign::verify("/bin/ls")
+    verify("/bin/ls")
         .test_requirement_file(&apple)
         .await
         .unwrap();
-    Codesign::verify(&adhoc)
+    verify(&adhoc)
         .test_requirement_file(&not_apple)
         .await
         .unwrap();
 
-    let error = Codesign::verify(&adhoc)
+    let error = verify(&adhoc)
         .test_requirement_file(&apple)
         .await
         .unwrap_err();
@@ -215,7 +213,7 @@ async fn a_requirement_file_decides_like_requirement_text() {
         stderr.contains("failed to satisfy specified code requirement"),
         "got {stderr}"
     );
-    let error = Codesign::verify("/bin/ls")
+    let error = verify("/bin/ls")
         .test_requirement_file(&not_apple)
         .await
         .unwrap_err();
@@ -240,7 +238,7 @@ async fn a_requirement_file_agrees_with_the_real_codesign() {
         oracle.stderr
     );
 
-    let error = Codesign::verify(&target)
+    let error = verify(&target)
         .test_requirement_file(&requirement)
         .await
         .unwrap_err();
@@ -253,7 +251,7 @@ async fn a_requirement_file_path_with_spaces_is_one_argument() {
     let workspace = Workspace::new();
     let requirement = workspace.write("my requirement.txt", "anchor apple\n");
 
-    Codesign::verify("/bin/ls")
+    verify("/bin/ls")
         .test_requirement_file(&requirement)
         .await
         .unwrap();
@@ -267,7 +265,7 @@ async fn a_requirement_file_that_does_not_compile_is_a_verification_failure() {
     let empty = workspace.write("empty.txt", "");
 
     for requirement in [garbage, empty] {
-        let error = Codesign::verify(&target)
+        let error = verify(&target)
             .test_requirement_file(&requirement)
             .await
             .unwrap_err();
@@ -282,7 +280,7 @@ async fn a_requirement_file_that_does_not_exist_is_a_verification_failure() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
 
-    let error = Codesign::verify(&target)
+    let error = verify(&target)
         .test_requirement_file(workspace.join("missing.txt"))
         .await
         .unwrap_err();
@@ -297,7 +295,7 @@ async fn a_requirement_file_is_not_checked_when_the_signature_itself_is_broken()
     let target = workspace.unsigned("hello");
     let requirement = workspace.write("req.txt", "anchor apple\n");
 
-    let error = Codesign::verify(&target)
+    let error = verify(&target)
         .test_requirement_file(&requirement)
         .await
         .unwrap_err();
@@ -313,24 +311,24 @@ async fn the_last_requirement_wins_between_text_and_file() {
     let apple = workspace.write("apple.txt", "anchor apple\n");
     let not_apple = workspace.write("not-apple.txt", "!anchor apple\n");
 
-    Codesign::verify(&target)
+    verify(&target)
         .test_requirement_file(&apple)
         .test_requirement("!anchor apple")
         .await
         .unwrap();
-    Codesign::verify(&target)
+    verify(&target)
         .test_requirement("anchor apple")
         .test_requirement_file(&not_apple)
         .await
         .unwrap();
 
-    let error = Codesign::verify(&target)
+    let error = verify(&target)
         .test_requirement("!anchor apple")
         .test_requirement_file(&apple)
         .await
         .unwrap_err();
     requirement_unsatisfied(error);
-    let error = Codesign::verify(&target)
+    let error = verify(&target)
         .test_requirement_file(&not_apple)
         .test_requirement("anchor apple")
         .await
@@ -344,7 +342,7 @@ async fn a_requirement_file_of_standard_input_is_rejected_before_anything_runs()
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
 
-    let error = Codesign::verify(&target)
+    let error = verify(&target)
         .test_requirement_file("-")
         .await
         .unwrap_err();
@@ -354,7 +352,7 @@ async fn a_requirement_file_of_standard_input_is_rejected_before_anything_runs()
     );
 
     for per_target in [false, true] {
-        let error = Codesign::verify(vec![target.clone(), target.clone()])
+        let error = verify(vec![target.clone(), target.clone()])
             .test_requirement_file("-")
             .per_target(per_target)
             .await
@@ -372,7 +370,7 @@ async fn a_requirement_file_replaced_by_text_is_no_longer_refused() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
 
-    Codesign::verify(&target)
+    verify(&target)
         .test_requirement_file("-")
         .test_requirement("!anchor apple")
         .await
@@ -386,7 +384,7 @@ async fn a_requirement_file_applies_to_every_target_of_a_batch() {
     let adhoc = workspace.adhoc_signed("hello");
     let apple = workspace.write("apple.txt", "anchor apple\n");
 
-    let error = Codesign::verify(vec![PathBuf::from("/bin/ls"), adhoc.clone()])
+    let error = verify(vec![PathBuf::from("/bin/ls"), adhoc.clone()])
         .test_requirement_file(&apple)
         .await
         .unwrap_err();

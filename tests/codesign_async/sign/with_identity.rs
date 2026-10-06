@@ -11,8 +11,8 @@
 //! RUSTFLAGS='--cfg signers_test="keychain" --cfg signers_test="network"' cargo test
 //! ```
 
-use signers::Codesign;
 use signers::codesign::{SigningFlags, Timestamp};
+use signers::codesign::{sign, sign_for_distribution};
 
 use crate::support::fixture::Workspace;
 use crate::support::identity::Identity;
@@ -25,7 +25,7 @@ async fn a_certificate_signature_names_its_signer() {
     let target = workspace.unsigned("hello");
     let identity = Identity::new();
 
-    Codesign::sign(&target, identity.name())
+    sign(&target, identity.name())
         .keychain(identity.keychain())
         .await
         .unwrap();
@@ -46,8 +46,8 @@ async fn the_identity_is_looked_up_in_the_given_keychain() {
     let found = workspace.unsigned("found");
     let identity = Identity::new();
 
-    let error = Codesign::sign(&unfound, identity.name()).await.unwrap_err();
-    Codesign::sign(&found, identity.name())
+    let error = sign(&unfound, identity.name()).await.unwrap_err();
+    sign(&found, identity.name())
         .keychain(identity.keychain())
         .await
         .unwrap();
@@ -67,7 +67,7 @@ async fn timestamping_can_be_turned_on() {
     let target = workspace.unsigned("hello");
     let identity = Identity::new();
 
-    Codesign::sign(&target, identity.name())
+    sign(&target, identity.name())
         .keychain(identity.keychain())
         .timestamp(Timestamp::Enabled)
         .await
@@ -86,7 +86,7 @@ async fn a_timestamp_server_url_is_used() {
     let target = workspace.unsigned("hello");
     let identity = Identity::new();
 
-    Codesign::sign(&target, identity.name())
+    sign(&target, identity.name())
         .keychain(identity.keychain())
         .timestamp(Timestamp::ServerUrl(
             "http://timestamp.apple.com/ts01".into(),
@@ -107,7 +107,7 @@ async fn the_distribution_preset_is_timestamped() {
     let target = workspace.unsigned("hello");
     let identity = Identity::new();
 
-    Codesign::sign_for_distribution(&target, identity.name())
+    sign_for_distribution(&target, identity.name())
         .keychain(identity.keychain())
         .await
         .unwrap();

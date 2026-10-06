@@ -4,7 +4,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use signers::Codesign;
+use signers::codesign::display;
 use signers::codesign::{
     Authority, Constraints, Format, HashType, InfoPlist, Location, OsVersion, Signature,
     SignatureKind,
@@ -44,7 +44,7 @@ async fn an_ad_hoc_binary_is_read_back_as_codesign_prints_it() {
     let workspace = Workspace::new();
     let target = workspace.presigned("hello", &["-i", "com.example.hello"]);
 
-    let signature = Codesign::display(&target).await.unwrap();
+    let signature = display(&target).await.unwrap();
 
     assert_agrees_with_codesign(&signature, &target);
     let oracle = inspect::Signature::of(&target);
@@ -96,7 +96,7 @@ async fn a_linker_signed_binary_is_read_back() {
     let workspace = Workspace::new();
     let target = workspace.linker_signed("hello");
 
-    let signature = Codesign::display(&target).await.unwrap();
+    let signature = display(&target).await.unwrap();
 
     assert_agrees_with_codesign(&signature, &target);
     assert_eq!(signature.signature, SignatureKind::AdHoc);
@@ -108,7 +108,7 @@ async fn reading_a_signature_leaves_the_target_untouched() {
     let target = workspace.adhoc_signed("hello");
     let before = fs::read(&target).unwrap();
 
-    Codesign::display(&target).await.unwrap();
+    display(&target).await.unwrap();
 
     assert_eq!(fs::read(&target).unwrap(), before);
 }
@@ -118,7 +118,7 @@ async fn the_hardened_runtime_shows_as_a_flag_and_a_runtime_version() {
     let workspace = Workspace::new();
     let target = workspace.presigned("hello", &["-o", "runtime"]);
 
-    let signature = Codesign::display(&target).await.unwrap();
+    let signature = display(&target).await.unwrap();
 
     assert_agrees_with_codesign(&signature, &target);
     let printed = inspect::Signature::of(&target)
@@ -146,7 +146,7 @@ async fn the_entitlements_are_read_back() {
     let entitlements = fixture_str("entitlements.plist");
     let target = workspace.presigned("hello", &["--entitlements", &entitlements]);
 
-    let signature = Codesign::display(&target).await.unwrap();
+    let signature = display(&target).await.unwrap();
 
     let expected: plist::Dictionary =
         plist::from_bytes(inspect::entitlements(&target).as_bytes()).unwrap();
@@ -162,7 +162,7 @@ async fn embedded_requirements_are_counted() {
         &["-r=designated => identifier \"com.example.hello\""],
     );
 
-    let signature = Codesign::display(&target).await.unwrap();
+    let signature = display(&target).await.unwrap();
 
     assert_agrees_with_codesign(&signature, &target);
     let requirements = signature
@@ -175,7 +175,7 @@ async fn embedded_requirements_are_counted() {
 async fn a_system_binary_reports_its_requirements_count_and_size() {
     let path = std::path::Path::new("/bin/ls");
 
-    let signature = Codesign::display(path).await.unwrap();
+    let signature = display(path).await.unwrap();
 
     assert_agrees_with_codesign(&signature, path);
     let found = signature.internal_requirements.expect("no count read");
@@ -190,12 +190,9 @@ async fn the_requirements_count_is_the_same_in_every_run_mode() {
         &["-r=designated => identifier \"com.example.hello\""],
     );
 
-    let single = Codesign::display(&target).await.unwrap();
-    let separate = Codesign::display(vec![target.clone()]).await.unwrap();
-    let shared = Codesign::display(vec![target])
-        .per_target(false)
-        .await
-        .unwrap();
+    let single = display(&target).await.unwrap();
+    let separate = display(vec![target.clone()]).await.unwrap();
+    let shared = display(vec![target]).per_target(false).await.unwrap();
 
     assert!(single.internal_requirements.is_some());
     assert_eq!(
@@ -229,7 +226,7 @@ async fn every_constraint_kind_is_read_back() {
             &["-i", "com.example.constrained", flag, &constraint],
         );
 
-        let signature = Codesign::display(&target)
+        let signature = display(&target)
             .await
             .unwrap_or_else(|e| panic!("{flag}: {e}"));
 
@@ -255,7 +252,7 @@ async fn entitlements_are_read_back_beside_a_launch_constraint() {
         ],
     );
 
-    let signature = Codesign::display(&target).await.unwrap();
+    let signature = display(&target).await.unwrap();
 
     let expected: plist::Dictionary =
         plist::from_bytes(inspect::entitlements(&target).as_bytes()).unwrap();
@@ -270,7 +267,7 @@ async fn a_plain_file_is_a_generic_target() {
     let target = workspace.write("notes.txt", "signed text\n");
     super::adhoc_sign(&target, &[]);
 
-    let signature = Codesign::display(&target).await.unwrap();
+    let signature = display(&target).await.unwrap();
 
     assert_eq!(signature.format, Format::Generic);
     assert_eq!(signature.page_size, None);
@@ -286,7 +283,7 @@ async fn a_universal_binary_lists_its_slices_in_printed_order() {
     };
     super::adhoc_sign(&target, &[]);
 
-    let signature = Codesign::display(&target).await.unwrap();
+    let signature = display(&target).await.unwrap();
 
     let printed = inspect::Signature::of(&target).format().to_owned();
     let archs = printed
@@ -306,7 +303,7 @@ async fn an_app_bundle_reports_its_executable_info_plist_and_resources() {
     let bundle = workspace.app_bundle("Hello");
     super::adhoc_sign(&bundle, &[]);
 
-    let signature = Codesign::display(&bundle).await.unwrap();
+    let signature = display(&bundle).await.unwrap();
 
     assert_agrees_with_codesign(&signature, &bundle);
     let Format::Bundle { app, executable } = &signature.format else {
@@ -345,7 +342,7 @@ async fn a_framework_is_a_bundle_but_not_an_app() {
     let framework = workspace.framework("Kit");
     super::adhoc_sign(&framework, &[]);
 
-    let signature = Codesign::display(&framework).await.unwrap();
+    let signature = display(&framework).await.unwrap();
 
     assert!(
         matches!(&signature.format, Format::Bundle { app: false, .. }),
@@ -359,7 +356,7 @@ async fn a_framework_is_a_bundle_but_not_an_app() {
 async fn an_apple_platform_binary_carries_its_certificate_chain() {
     let target = std::path::Path::new("/bin/ls");
 
-    let signature = Codesign::display(target).await.unwrap();
+    let signature = display(target).await.unwrap();
 
     assert_agrees_with_codesign(&signature, target);
     let oracle = inspect::Signature::of(target);
@@ -404,7 +401,7 @@ async fn awkward_file_names_are_read() {
     for name in names {
         let target = workspace.presigned(&name, &[]);
 
-        let signature = Codesign::display(&target)
+        let signature = display(&target)
             .await
             .unwrap_or_else(|e| panic!("{}: {e}", name.display()));
 
@@ -417,7 +414,7 @@ async fn a_report_line_that_has_no_field_is_still_reachable() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
 
-    let signature = Codesign::display(&target).await.unwrap();
+    let signature = display(&target).await.unwrap();
 
     assert_eq!(signature.field("Hash type"), Some("sha256 size=32"));
     assert_eq!(signature.field("No Such Key"), None);

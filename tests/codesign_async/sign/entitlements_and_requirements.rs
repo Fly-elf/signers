@@ -3,8 +3,8 @@
 
 use std::path::PathBuf;
 
-use signers::Codesign;
 use signers::codesign::Sign;
+use signers::codesign::sign;
 
 use crate::support::fixture::{Workspace, fixture};
 use crate::support::inspect::{self, Constraint, Signature};
@@ -14,7 +14,7 @@ async fn entitlements_are_embedded() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    Codesign::sign(&target, "-")
+    sign(&target, "-")
         .entitlements(fixture("entitlements.plist"))
         .await
         .unwrap();
@@ -38,11 +38,11 @@ async fn a_library_keeps_its_entitlements_only_when_forced() {
     let dropped = workspace.unsigned_dylib("dropped.dylib");
     let forced = workspace.unsigned_dylib("forced.dylib");
 
-    Codesign::sign(&dropped, "-")
+    sign(&dropped, "-")
         .entitlements(fixture("entitlements.plist"))
         .await
         .unwrap();
-    Codesign::sign(&forced, "-")
+    sign(&forced, "-")
         .entitlements(fixture("entitlements.plist"))
         .force_library_entitlements(true)
         .await
@@ -60,7 +60,7 @@ async fn the_entitlement_and_threading_switches_are_accepted_together() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    Codesign::sign(&target, "-")
+    sign(&target, "-")
         .entitlements(fixture("entitlements.plist"))
         .generate_entitlement_der(true)
         .force_library_entitlements(true)
@@ -78,7 +78,7 @@ async fn internal_requirements_are_embedded() {
     let target = workspace.unsigned("hello");
     let requirement = r#"designated => identifier "com.example.required""#;
 
-    Codesign::sign(&target, "-")
+    sign(&target, "-")
         .identifier("com.example.required")
         .requirements(format!("={requirement}"))
         .await
@@ -89,7 +89,7 @@ async fn internal_requirements_are_embedded() {
 
 #[tokio::test]
 async fn each_constraint_is_embedded_as_its_own_kind() {
-    type Setter = fn(Codesign<Sign>, PathBuf) -> Codesign<Sign>;
+    type Setter = fn(Sign, PathBuf) -> Sign;
     let cases: [(Setter, Constraint); 4] = [
         (|b, p| b.launch_constraint_self(p), Constraint::LaunchSelf),
         (
@@ -107,12 +107,9 @@ async fn each_constraint_is_embedded_as_its_own_kind() {
     for (index, (set, kind)) in cases.into_iter().enumerate() {
         let target = workspace.unsigned(format!("constrained-{index}"));
 
-        set(
-            Codesign::sign(&target, "-"),
-            fixture("launch-constraint.plist"),
-        )
-        .await
-        .unwrap_or_else(|e| panic!("`codesign` rejected {kind:?}: {e}"));
+        set(sign(&target, "-"), fixture("launch-constraint.plist"))
+            .await
+            .unwrap_or_else(|e| panic!("`codesign` rejected {kind:?}: {e}"));
 
         inspect::assert_valid(&target);
         let signature = Signature::of(&target);
@@ -134,13 +131,13 @@ async fn constraint_validity_is_only_enforced_on_request() {
     let tolerated = workspace.unsigned("tolerated");
     let rejected = workspace.unsigned("rejected");
 
-    Codesign::sign(&tolerated, "-")
+    sign(&tolerated, "-")
         .launch_constraint_self(fixture("bad-constraint.plist"))
         .await
         .unwrap();
     inspect::assert_valid(&tolerated);
 
-    let error = Codesign::sign(&rejected, "-")
+    let error = sign(&rejected, "-")
         .launch_constraint_self(fixture("bad-constraint.plist"))
         .enforce_constraint_validity(true)
         .await

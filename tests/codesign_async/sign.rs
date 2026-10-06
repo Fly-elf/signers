@@ -1,4 +1,4 @@
-//! `Codesign::sign`, end to end — one submodule per test category, named for
+//! `sign`, end to end — one submodule per test category, named for
 //! what it covers; see each submodule's own doc comment for the detail.
 //!
 //! Every test drives the public builder and then asks the `codesign` CLI what

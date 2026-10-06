@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use signers::blocking::Codesign;
+use signers::codesign::blocking::{sign_adhoc, verify};
 use signers::{CodesignError, Error};
 
 use crate::support::fixture::Workspace;
@@ -16,7 +16,7 @@ fn one_process_fails_as_a_whole_at_the_first_refused_target() {
     let refused = workspace.adhoc_signed("signed");
     let after = workspace.unsigned("after");
 
-    let error = Codesign::sign_adhoc(vec![refused, after.clone()])
+    let error = sign_adhoc(vec![refused, after.clone()])
         .per_target(false)
         .run()
         .unwrap_err();
@@ -35,7 +35,7 @@ fn per_target_runs_every_target_and_collects_the_failures() {
     let refused = workspace.adhoc_signed("signed");
     let after = workspace.unsigned("after");
 
-    let error = Codesign::sign_adhoc(vec![before.clone(), refused.clone(), after.clone()])
+    let error = sign_adhoc(vec![before.clone(), refused.clone(), after.clone()])
         .per_target(true)
         .run()
         .unwrap_err();
@@ -64,7 +64,7 @@ fn per_target_failures_come_in_input_order() {
         .map(|name| workspace.unsigned(name))
         .collect();
 
-    let error = Codesign::verify(targets.clone()).run().unwrap_err();
+    let error = verify(targets.clone()).run().unwrap_err();
 
     let Error::Batch(failures) = error else {
         panic!("expected Batch, got {error:?}");
