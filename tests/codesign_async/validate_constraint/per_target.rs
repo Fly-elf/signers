@@ -2,9 +2,10 @@
 //! judged on its own) against one for all of them, where the `error:` lines
 //! cannot be told apart.
 
+use signers::codesign::validate_constraint;
 use std::path::PathBuf;
 
-use signers::{Codesign, CodesignError, Error};
+use signers::{CodesignError, Error};
 
 use super::{constraint_invalid, unreadable};
 use crate::support::fixture::{Workspace, fixture};
@@ -29,12 +30,12 @@ async fn every_valid_plist_is_accepted() {
         fixture("constraint-and.plist"),
     ];
 
-    let default: Vec<()> = Codesign::validate_constraint(plists.clone()).await.unwrap();
-    let each: Vec<()> = Codesign::validate_constraint(plists.clone())
+    let default: Vec<()> = validate_constraint(plists.clone()).await.unwrap();
+    let each: Vec<()> = validate_constraint(plists.clone())
         .per_target(true)
         .await
         .unwrap();
-    let together: Vec<()> = Codesign::validate_constraint(plists.clone())
+    let together: Vec<()> = validate_constraint(plists.clone())
         .per_target(false)
         .await
         .unwrap();
@@ -46,10 +47,8 @@ async fn every_valid_plist_is_accepted() {
 
 #[tokio::test]
 async fn an_array_of_plists_yields_an_array_of_the_same_length() {
-    let [(), ()] = Codesign::validate_constraint([valid(), valid()])
-        .await
-        .unwrap();
-    let [(), ()] = Codesign::validate_constraint([valid(), valid()])
+    let [(), ()] = validate_constraint([valid(), valid()]).await.unwrap();
+    let [(), ()] = validate_constraint([valid(), valid()])
         .per_target(false)
         .await
         .unwrap();
@@ -59,16 +58,14 @@ async fn an_array_of_plists_yields_an_array_of_the_same_length() {
 async fn a_slice_of_plists_yields_a_vec() {
     let plists = [valid(), valid(), valid()];
 
-    let outputs: Vec<()> = Codesign::validate_constraint(&plists[..2]).await.unwrap();
+    let outputs: Vec<()> = validate_constraint(&plists[..2]).await.unwrap();
 
     assert_eq!(outputs.len(), 2);
 }
 
 #[tokio::test]
 async fn a_single_rejected_plist_fails_with_its_plain_error() {
-    let error = Codesign::validate_constraint(unknown_key())
-        .await
-        .unwrap_err();
+    let error = validate_constraint(unknown_key()).await.unwrap_err();
 
     assert!(constraint_invalid(error).contains("bogus-key-xyz"));
 }
@@ -77,7 +74,7 @@ async fn a_single_rejected_plist_fails_with_its_plain_error() {
 async fn every_rejected_plist_is_collected_in_input_order() {
     let plists = vec![valid(), unknown_key(), valid(), empty_dict()];
 
-    let error = Codesign::validate_constraint(plists).await.unwrap_err();
+    let error = validate_constraint(plists).await.unwrap_err();
 
     let Error::Batch(failures) = error else {
         panic!("expected the failures of a batch, got {error:?}");
@@ -102,12 +99,8 @@ async fn every_rejected_plist_is_collected_in_input_order() {
 
 #[tokio::test]
 async fn a_single_rejection_in_a_collection_is_still_a_batch() {
-    let in_a_list = Codesign::validate_constraint(vec![unknown_key()])
-        .await
-        .unwrap_err();
-    let in_an_array = Codesign::validate_constraint([unknown_key()])
-        .await
-        .unwrap_err();
+    let in_a_list = validate_constraint(vec![unknown_key()]).await.unwrap_err();
+    let in_an_array = validate_constraint([unknown_key()]).await.unwrap_err();
 
     for error in [in_a_list, in_an_array] {
         let Error::Batch(failures) = error else {
@@ -124,7 +117,7 @@ async fn an_unreadable_plist_and_a_rejected_one_fail_separately() {
     let garbage = workspace.write("garbage.plist", "garbage\n");
     let plists = vec![valid(), garbage.clone(), unknown_key()];
 
-    let error = Codesign::validate_constraint(plists).await.unwrap_err();
+    let error = validate_constraint(plists).await.unwrap_err();
 
     let Error::Batch(failures) = error else {
         panic!("expected the failures of a batch, got {error:?}");
@@ -144,7 +137,7 @@ async fn an_unreadable_plist_and_a_rejected_one_fail_separately() {
 async fn together_a_rejected_plist_fails_the_whole_run_as_a_plain_error() {
     let plists = vec![valid(), unknown_key(), valid()];
 
-    let error = Codesign::validate_constraint(plists)
+    let error = validate_constraint(plists)
         .per_target(false)
         .await
         .unwrap_err();
@@ -154,7 +147,7 @@ async fn together_a_rejected_plist_fails_the_whole_run_as_a_plain_error() {
 
 #[tokio::test]
 async fn together_every_rejection_shows_in_the_diagnostics() {
-    let error = Codesign::validate_constraint([unknown_key(), empty_dict()])
+    let error = validate_constraint([unknown_key(), empty_dict()])
         .per_target(false)
         .await
         .unwrap_err();
@@ -173,7 +166,7 @@ async fn together_an_unreadable_plist_fails_the_whole_run_with_exit_one() {
     let workspace = Workspace::new();
     let garbage = workspace.write("garbage.plist", "garbage\n");
 
-    let error = Codesign::validate_constraint(vec![valid(), garbage])
+    let error = validate_constraint(vec![valid(), garbage])
         .per_target(false)
         .await
         .unwrap_err();
