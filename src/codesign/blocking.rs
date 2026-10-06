@@ -9,16 +9,18 @@
 //! it needs no runtime of yours and leaves no threads behind. It panics inside a Tokio runtime:
 //! async code uses the functions of [`codesign`](super) instead.
 //!
+//! The option and output types of [`codesign`](super) are re-exported here too, so this module
+//! can stand in for it under the same name:
+//!
 //! ```no_run
 //! # fn main() -> signers::Result<()> {
-//! use signers::codesign::SigningFlags;
-//! use signers::codesign::blocking;
+//! use signers::codesign::blocking as codesign;
 //!
-//! blocking::sign_for_distribution("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
+//! codesign::sign_for_distribution("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
 //!     .entitlements("MyApp.entitlements")
-//!     .options(SigningFlags::RUNTIME | SigningFlags::LIBRARY)
+//!     .options(codesign::SigningFlags::RUNTIME | codesign::SigningFlags::LIBRARY)
 //!     .run()?;
-//! blocking::verify("MyApp.app").deep(true).run()?;
+//! codesign::verify("MyApp.app").deep(true).run()?;
 //! # Ok(()) }
 //! ```
 
@@ -36,6 +38,14 @@ mod marker {
 }
 
 pub(crate) use marker::Blocking;
+
+#[doc(no_inline)]
+pub use super::{
+    Authority, CdHash, Certificate, CmsDigest, CodeDirectory, CodeHashes, Constraints,
+    ExecutableSegment, Format, HashType, InfoPlist, Location, OsVersion, Platform,
+    PreserveMetadata, Requirement, RequirementKind, RequirementsSummary, SealedResources,
+    Signature, SignatureKind, SignatureSlot, SigningFlags, Strict, Timestamp,
+};
 
 impl<S> Core<S, Blocking>
 where
