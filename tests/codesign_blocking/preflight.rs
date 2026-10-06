@@ -6,7 +6,9 @@ use std::path::PathBuf;
 
 use signers::Error;
 use signers::blocking::Codesign;
-use signers::codesign::blocking::remove_signature;
+use signers::codesign::blocking::{
+    extract_certificates, remove_signature, requirements, validate_constraint,
+};
 
 use crate::support::fixture::Workspace;
 
@@ -63,9 +65,9 @@ fn a_missing_target_is_reported_by_every_action() {
         remove_signature(&missing).run().unwrap_err(),
         Codesign::verify(&missing).run().unwrap_err(),
         Codesign::display(&missing).run().unwrap_err(),
-        Codesign::internal_requirements(&missing).run().unwrap_err(),
-        Codesign::validate_constraint(&missing).run().unwrap_err(),
-        Codesign::extract_certificates(&missing).run().unwrap_err(),
+        requirements(&missing).run().unwrap_err(),
+        validate_constraint(&missing).run().unwrap_err(),
+        extract_certificates(&missing).run().unwrap_err(),
     ];
 
     for error in errors {
