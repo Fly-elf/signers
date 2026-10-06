@@ -3,8 +3,8 @@
 
 use std::path::{Path, PathBuf};
 
-use signers::blocking::Codesign;
 use signers::codesign::Signature;
+use signers::codesign::blocking::{display, sign_adhoc};
 use signers::codesign::blocking::{extract_certificates, remove_signature, requirements};
 
 use crate::support::fixture::Workspace;
@@ -25,7 +25,7 @@ fn oracle() -> Vec<String> {
 
 #[test]
 fn one_path_yields_one_output() {
-    let signature: Signature = Codesign::display(TARGETS[1]).run().unwrap();
+    let signature: Signature = display(TARGETS[1]).run().unwrap();
 
     assert_eq!(signature.raw(), oracle()[1]);
 }
@@ -35,18 +35,13 @@ fn a_collection_yields_one_output_per_target_in_order_both_ways() {
     let expected = oracle();
 
     for per_target in [true, false] {
-        let from_vec: Vec<Signature> = Codesign::display(TARGETS.to_vec())
+        let from_vec: Vec<Signature> = display(TARGETS.to_vec())
             .per_target(per_target)
             .run()
             .unwrap();
-        let from_slice: Vec<Signature> = Codesign::display(&TARGETS[..])
-            .per_target(per_target)
-            .run()
-            .unwrap();
-        let from_array: [Signature; 3] = Codesign::display(TARGETS)
-            .per_target(per_target)
-            .run()
-            .unwrap();
+        let from_slice: Vec<Signature> =
+            display(&TARGETS[..]).per_target(per_target).run().unwrap();
+        let from_array: [Signature; 3] = display(TARGETS).per_target(per_target).run().unwrap();
 
         assert_eq!(reports(&from_vec), expected, "per_target({per_target})");
         assert_eq!(reports(&from_slice), expected, "per_target({per_target})");
@@ -63,7 +58,7 @@ fn a_batch_changes_every_target_both_ways() {
             .map(|name| workspace.unsigned(name))
             .collect();
 
-        let outputs: Vec<()> = Codesign::sign_adhoc(targets.clone())
+        let outputs: Vec<()> = sign_adhoc(targets.clone())
             .per_target(per_target)
             .run()
             .unwrap();

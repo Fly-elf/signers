@@ -5,8 +5,8 @@
 use std::fs;
 use std::path::Path;
 
-use signers::Codesign;
 use signers::codesign::Timestamp;
+use signers::codesign::sign;
 
 use crate::support::fixture::{Workspace, set_xattr};
 use crate::support::inspect::{self, Signature};
@@ -18,9 +18,9 @@ async fn the_page_size_sets_the_signing_granularity() {
     let fine = workspace.unsigned("fine");
     let single = workspace.unsigned("single");
 
-    Codesign::sign(&default, "-").await.unwrap();
-    Codesign::sign(&fine, "-").page_size(4096).await.unwrap();
-    Codesign::sign(&single, "-").page_size(0).await.unwrap();
+    sign(&default, "-").await.unwrap();
+    sign(&fine, "-").page_size(4096).await.unwrap();
+    sign(&single, "-").page_size(0).await.unwrap();
 
     assert_eq!(Signature::of(&default).page_size(), Some(16384));
     assert_eq!(Signature::of(&fine).page_size(), Some(4096));
@@ -40,7 +40,7 @@ async fn timestamping_can_be_turned_off() {
 
     // Renders as `--timestamp=none`: the space-separated form is not accepted
     // for an option whose value is optional.
-    Codesign::sign(&target, "-")
+    sign(&target, "-")
         .timestamp(Timestamp::Disabled)
         .await
         .unwrap();
@@ -56,7 +56,7 @@ async fn a_timestamp_server_is_passed_as_a_single_argument() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    Codesign::sign(&target, "-")
+    sign(&target, "-")
         .timestamp(Timestamp::ServerUrl("http://127.0.0.1:9".into()))
         .await
         .unwrap();
@@ -69,7 +69,7 @@ async fn a_dry_run_signs_nothing() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    Codesign::sign(&target, "-").dry_run(true).await.unwrap();
+    sign(&target, "-").dry_run(true).await.unwrap();
 
     assert!(!inspect::is_signed(&target), "a dry run wrote a signature");
 }
@@ -80,7 +80,7 @@ async fn a_dry_run_writes_no_detached_signature_either() {
     let target = workspace.unsigned("hello");
     let detached = workspace.join("hello.sig");
 
-    Codesign::sign(&target, "-")
+    sign(&target, "-")
         .dry_run(true)
         .detached(&detached)
         .await
@@ -96,10 +96,7 @@ async fn a_detached_signature_leaves_the_target_untouched() {
     let target = workspace.unsigned("hello");
     let detached = workspace.join("hello.sig");
 
-    Codesign::sign(&target, "-")
-        .detached(&detached)
-        .await
-        .unwrap();
+    sign(&target, "-").detached(&detached).await.unwrap();
 
     assert!(
         !inspect::is_signed(&target),
@@ -115,7 +112,7 @@ async fn the_file_list_records_what_was_signed() {
     let target = workspace.unsigned("hello");
     let list = workspace.join("signed.txt");
 
-    Codesign::sign(&target, "-").file_list(&list).await.unwrap();
+    sign(&target, "-").file_list(&list).await.unwrap();
 
     // `codesign` writes resolved paths, and a macOS temporary directory sits
     // under a symlink (`/var` -> `/private/var`).
@@ -137,8 +134,8 @@ async fn disallowed_xattrs_are_stripped_only_on_request() {
         set_xattr(target, "com.apple.ResourceFork", "detritus");
     }
 
-    let error = Codesign::sign(&kept, "-").await.unwrap_err();
-    Codesign::sign(&stripped, "-")
+    let error = sign(&kept, "-").await.unwrap_err();
+    sign(&stripped, "-")
         .strip_disallowed_xattrs(true)
         .await
         .unwrap();
@@ -158,7 +155,7 @@ async fn a_keychain_hint_does_not_get_in_the_way() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
 
-    Codesign::sign(&target, "-")
+    sign(&target, "-")
         .keychain("/nonexistent/does-not.keychain")
         .await
         .unwrap();
