@@ -120,3 +120,9 @@ pub type Requirements<S = One> = super::Requirements<S, Blocking>;
 pub fn requirements<T: IntoTargets>(target: T) -> Requirements<T::Shape> {
     super::Requirements::new(target, Default::default())
 }
+
+pub type ExtractCertificates<S = One> = super::ExtractCertificates<S, Blocking>;
+
+pub fn extract_certificates<T: IntoTargets>(target: T) -> ExtractCertificates<T::Shape> {
+    super::ExtractCertificates::new(target, Default::default())
+}
