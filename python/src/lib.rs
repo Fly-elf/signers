@@ -9,8 +9,9 @@ mod target;
 mod _native {
     #[pymodule_export]
     use super::codesign::{
-        codesign_display, codesign_remove_signature, codesign_sign, codesign_sign_adhoc,
-        codesign_sign_for_distribution, codesign_validate_constraint, codesign_verify,
+        codesign_display, codesign_extract_certificates, codesign_remove_signature,
+        codesign_requirements, codesign_sign, codesign_sign_adhoc, codesign_sign_for_distribution,
+        codesign_validate_constraint, codesign_verify,
     };
     #[pymodule_export]
     use super::error::NativeError;

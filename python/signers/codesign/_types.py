@@ -11,6 +11,7 @@ from ._options import SigningFlags
 
 __all__ = [
     "CdHash",
+    "Certificate",
     "CertificateSignature",
     "CmsDigest",
     "CodeDirectory",
@@ -23,6 +24,8 @@ __all__ = [
     "Location",
     "OsVersion",
     "Platform",
+    "Requirement",
+    "RequirementKind",
     "RequirementsSummary",
     "SealedResources",
     "Signature",
@@ -71,6 +74,14 @@ class HashType(Enum):
     SHA384 = "SHA384"
 
 
+class RequirementKind(Enum):
+    DESIGNATED = "DESIGNATED"
+    HOST = "HOST"
+    GUEST = "GUEST"
+    LIBRARY = "LIBRARY"
+    PLUGIN = "PLUGIN"
+
+
 class Constraints(Flag, boundary=FlagBoundary.KEEP):
     LAUNCH_SELF = 1
     LAUNCH_PARENT = 1 << 1
@@ -88,6 +99,10 @@ def _platform(value: str | _Native) -> Platform | int:
 
 def _hash_type(value: str | _Native) -> HashType | str:
     return HashType[value] if isinstance(value, str) else str(value["other"])
+
+
+def _requirement_kind(value: str | _Native) -> RequirementKind | str:
+    return RequirementKind[value] if isinstance(value, str) else str(value["other"])
 
 
 @dataclass(frozen=True, slots=True)
@@ -215,6 +230,26 @@ class RequirementsSummary:
     @classmethod
     def _from_native(cls, d: _Native) -> Self:
         return cls(count=d["count"], size=d["size"])
+
+
+@dataclass(frozen=True, slots=True)
+class Requirement:
+    kind: RequirementKind | str
+    expression: str
+    implicit: bool
+
+    @classmethod
+    def _from_native(cls, d: _Native) -> Self:
+        return cls(
+            kind=_requirement_kind(d["kind"]),
+            expression=d["expression"],
+            implicit=d["implicit"],
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class Certificate:
+    der: bytes
 
 
 class _FromNative(Protocol):
