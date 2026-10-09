@@ -8,11 +8,9 @@ StrPath: TypeAlias = str | os.PathLike[str]
 
 
 def _normalize(
-    target: StrPath | Sequence[StrPath], per_target: bool | None
+    target: StrPath | Sequence[StrPath],
 ) -> tuple[str | list[str], bool]:
     if isinstance(target, (str, os.PathLike)):
-        if per_target is not None:
-            raise TypeError("per_target needs a sequence of targets")
         return os.fspath(target), True
     if not isinstance(cast(object, target), Sequence):
         raise TypeError(

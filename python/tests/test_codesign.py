@@ -32,6 +32,19 @@ def test_remove_signature_strips_every_target_of_a_sequence(
     assert not is_signed(Path(targets[1]))
 
 
+@pytest.mark.parametrize("per_target", [True, False])
+@pytest.mark.parametrize("as_path", [False, True], ids=["str", "Path"])
+def test_remove_signature_ignores_per_target_for_a_single_target(
+    workspace: Workspace, as_path: bool, per_target: bool
+) -> None:
+    target = workspace.adhoc_signed("hello")
+
+    result = codesign.remove_signature(target if as_path else str(target), per_target=per_target)
+
+    assert result is None
+    assert not is_signed(target)
+
+
 def test_remove_signature_passes_awkward_paths_through_unchanged(workspace: Workspace) -> None:
     target = workspace.adhoc_signed("-leading dash and spaces")
 
@@ -160,11 +173,7 @@ def test_codesign_rejecting_a_target_raises_codesign_failed_error(workspace: Wor
     assert "bundle format unrecognized" in str(error)
 
 
-@pytest.mark.parametrize(
-    ("target", "per_target"),
-    [(1, None), (None, None), ([1], None), ("hello", True), (Path("hello"), False)],
-    ids=["int", "None", "int element", "str with per_target", "Path with per_target"],
-)
-def test_invalid_arguments_raise_type_error(target: object, per_target: bool | None) -> None:
+@pytest.mark.parametrize("target", [1, None, [1], b"hello"], ids=["int", "None", "int element", "bytes"])
+def test_invalid_targets_raise_type_error(target: object) -> None:
     with pytest.raises(TypeError):
-        codesign.remove_signature(target, per_target=per_target)  # pyright: ignore[reportArgumentType, reportCallIssue]
+        codesign.remove_signature(target)  # pyright: ignore[reportArgumentType, reportCallIssue]
