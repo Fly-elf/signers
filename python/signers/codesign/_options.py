@@ -1,6 +1,6 @@
 from enum import Enum, Flag, FlagBoundary
 
-__all__ = ["PreserveMetadata", "SigningFlags", "Timestamp"]
+__all__ = ["PreserveMetadata", "SignatureSlot", "SigningFlags", "Strict", "Timestamp"]
 
 
 class SigningFlags(Flag, boundary=FlagBoundary.KEEP):
@@ -26,3 +26,14 @@ class PreserveMetadata(Flag):
 class Timestamp(Enum):
     ENABLED = "ENABLED"
     DISABLED = "DISABLED"
+
+
+class Strict(Enum):
+    ALL = "ALL"
+    SYMLINKS = "SYMLINKS"
+    SIDEBAND = "SIDEBAND"
+
+
+class SignatureSlot(Enum):
+    FIRST = "FIRST"
+    SECOND = "SECOND"
