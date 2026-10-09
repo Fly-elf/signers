@@ -1,0 +1,47 @@
+[build-system]
+requires = ["maturin>=1.15,<2"]
+build-backend = "maturin"
+
+[project]
+name = "signers"
+dynamic = ["version"]
+description = "Typed Python API for macOS code signing via codesign"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT OR Apache-2.0"
+keywords = ["macos", "codesign", "code-signing", "apple-codesign"]
+classifiers = [
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Repository = "https://github.com/Fly-elf/signers"
+
+[tool.maturin]
+manifest-path = "python/Cargo.toml"
+python-source = "python"
+module-name = "signers._native"
+features = ["pyo3/extension-module"]
+
+[dependency-groups]
+dev = ["maturin>=1.15,<2", "pytest", "pyright"]
+
+[tool.uv]
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "Cargo.toml" },
+    { file = "python/Cargo.toml" },
+    { file = "src/**/*.rs" },
+    { file = "python/src/**/*.rs" },
+]
+
+[tool.pyright]
+include = ["python/signers", "python/tests"]
+pythonVersion = "3.11"
+typeCheckingMode = "strict"
+
+[tool.pytest.ini_options]
+testpaths = ["python/tests"]
