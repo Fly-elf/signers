@@ -43,19 +43,11 @@ def run(awaitable: Awaitable[T]) -> T:
     return asyncio.run(main())
 
 
-def test_aio_exports_the_nine_actions_as_coroutine_functions() -> None:
+def test_aio_exports_the_nine_actions_as_coroutine_functions_with_the_sync_signatures() -> None:
     assert sorted(aio.__all__) == sorted(ACTIONS)
     for name in ACTIONS:
         assert inspect.iscoroutinefunction(getattr(aio, name)), name
-
-
-@pytest.mark.parametrize("name", ACTIONS)
-def test_aio_signature_has_the_same_parameters_as_the_sync_function(name: str) -> None:
-    sync = inspect.signature(getattr(codesign, name)).parameters
-    awaitable = inspect.signature(getattr(aio, name)).parameters
-
-    assert list(awaitable) == list(sync)
-    assert awaitable == sync
+        assert inspect.signature(getattr(aio, name)) == inspect.signature(getattr(codesign, name)), name
 
 
 def test_remove_signature_strips_a_target_and_a_sequence(workspace: Workspace) -> None:
