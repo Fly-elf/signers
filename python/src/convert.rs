@@ -193,7 +193,7 @@ fn plist_dict<'py>(py: Python<'py>, dict: &plist::Dictionary) -> PyResult<Bound<
     Ok(out)
 }
 
-pub(crate) fn signature<'py>(py: Python<'py>, s: &Signature) -> PyResult<Bound<'py, PyDict>> {
+pub(crate) fn signature<'py>(py: Python<'py>, s: &Signature) -> PyResult<Bound<'py, PyAny>> {
     let d = PyDict::new(py);
     d.set_item("executable", &s.executable)?;
     d.set_item("identifier", &s.identifier)?;
@@ -292,7 +292,7 @@ pub(crate) fn signature<'py>(py: Python<'py>, s: &Signature) -> PyResult<Bound<'
             .transpose()?,
     )?;
     d.set_item("raw", s.raw())?;
-    Ok(d)
+    Ok(d.into_any())
 }
 
 pub(crate) fn requirement<'py>(

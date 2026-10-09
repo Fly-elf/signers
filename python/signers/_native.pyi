@@ -1,3 +1,4 @@
+from collections.abc import Awaitable
 from typing import Any, TypedDict
 
 class NativeError(Exception): ...
@@ -56,6 +57,12 @@ def codesign_remove_signature(
     per_target: bool | None = None,
     bundle_version: str | None = None,
 ) -> None: ...
+def codesign_remove_signature_async(
+    target: str | list[str],
+    *,
+    per_target: bool | None = None,
+    bundle_version: str | None = None,
+) -> Awaitable[None]: ...
 def codesign_sign(
     target: str | list[str],
     identity: str,
@@ -63,12 +70,25 @@ def codesign_sign(
     *,
     per_target: bool | None = None,
 ) -> None: ...
+def codesign_sign_async(
+    target: str | list[str],
+    identity: str,
+    options: SignOptions,
+    *,
+    per_target: bool | None = None,
+) -> Awaitable[None]: ...
 def codesign_sign_adhoc(
     target: str | list[str],
     options: SignOptions,
     *,
     per_target: bool | None = None,
 ) -> None: ...
+def codesign_sign_adhoc_async(
+    target: str | list[str],
+    options: SignOptions,
+    *,
+    per_target: bool | None = None,
+) -> Awaitable[None]: ...
 def codesign_sign_for_distribution(
     target: str | list[str],
     identity: str,
@@ -76,26 +96,56 @@ def codesign_sign_for_distribution(
     *,
     per_target: bool | None = None,
 ) -> None: ...
+def codesign_sign_for_distribution_async(
+    target: str | list[str],
+    identity: str,
+    options: SignOptions,
+    *,
+    per_target: bool | None = None,
+) -> Awaitable[None]: ...
 def codesign_verify(
     target: str | list[str],
     options: VerifyOptions,
     *,
     per_target: bool | None = None,
 ) -> None: ...
+def codesign_verify_async(
+    target: str | list[str],
+    options: VerifyOptions,
+    *,
+    per_target: bool | None = None,
+) -> Awaitable[None]: ...
 def codesign_validate_constraint(
     target: str | list[str],
     *,
     per_target: bool | None = None,
 ) -> None: ...
+def codesign_validate_constraint_async(
+    target: str | list[str],
+    *,
+    per_target: bool | None = None,
+) -> Awaitable[None]: ...
 def codesign_display(
     target: str | list[str],
     options: DisplayOptions,
     *,
     per_target: bool | None = None,
 ) -> Any: ...
+def codesign_display_async(
+    target: str | list[str],
+    options: DisplayOptions,
+    *,
+    per_target: bool | None = None,
+) -> Awaitable[Any]: ...
 def codesign_requirements(target: str | list[str]) -> Any: ...
+def codesign_requirements_async(target: str | list[str]) -> Awaitable[Any]: ...
 def codesign_extract_certificates(
     target: str | list[str],
     *,
     save_to: str | None = None,
 ) -> Any: ...
+def codesign_extract_certificates_async(
+    target: str | list[str],
+    *,
+    save_to: str | None = None,
+) -> Awaitable[Any]: ...
