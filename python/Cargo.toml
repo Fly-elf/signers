@@ -11,3 +11,4 @@ crate-type = ["cdylib"]
 [dependencies]
 signers = { path = "..", features = ["blocking"] }
 pyo3 = { version = "0.29", features = ["abi3-py311"] }
+plist = "1.10"
