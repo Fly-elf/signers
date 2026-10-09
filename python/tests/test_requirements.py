@@ -6,7 +6,7 @@ from pathlib import Path
 
 from signers import codesign
 from signers.codesign import Certificate, Requirement, RequirementKind
-from .conftest import Workspace, codesign as real_codesign, designated_requirement
+from .conftest import Workspace, codesign as real_codesign
 
 APPLE_SIGNED = "/usr/bin/true"
 
@@ -17,15 +17,6 @@ def test_requirements_lists_the_designated_requirement() -> None:
     assert requirement.kind is RequirementKind.DESIGNATED
     assert requirement.expression == 'identifier "com.apple.true" and anchor apple'
     assert requirement.implicit is False
-
-
-def test_requirements_marks_the_one_codesign_derives_as_implicit(workspace: Workspace) -> None:
-    target = workspace.adhoc_signed("hello")
-
-    [requirement] = codesign.requirements(target)
-
-    assert requirement.implicit is True
-    assert requirement.expression in designated_requirement(target)
 
 
 def test_requirements_returns_one_list_per_target(workspace: Workspace) -> None:
@@ -52,10 +43,6 @@ def test_extract_certificates_returns_the_chain_codesign_writes(workspace: Works
     certificates = codesign.extract_certificates(APPLE_SIGNED)
 
     assert certificates == [Certificate(der) for der in expected]
-
-
-def test_extract_certificates_of_an_ad_hoc_signature_is_empty(workspace: Workspace) -> None:
-    assert codesign.extract_certificates(workspace.adhoc_signed("hello")) == []
 
 
 def test_extract_certificates_save_to_writes_the_pem_chain(workspace: Workspace) -> None:

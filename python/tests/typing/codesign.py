@@ -2,6 +2,7 @@
 # carries an ignore comment, which pyright reports once the call is accepted.
 # pyright: reportUnnecessaryTypeIgnoreComment=true
 
+import asyncio
 from pathlib import Path
 from typing import assert_type
 
@@ -147,3 +148,30 @@ def errors(error: Exception) -> None:
         assert_type(error.resources, tuple[signers.ResourceChange, ...])
         assert_type(error.resources[0].change, signers.Change)
         assert_type(error.resources[0].path, Path)
+
+
+async def aio_actions() -> None:
+    assert_type(await codesign.aio.remove_signature("a", bundle_version="B"), None)
+    assert_type(await codesign.aio.remove_signature(["a", Path("b")], per_target=True), None)
+    assert_type(await codesign.aio.sign("a", "-", force=True), None)
+    assert_type(await codesign.aio.sign_adhoc(["a"], per_target=True, options=SigningFlags.RUNTIME), None)
+    assert_type(await codesign.aio.sign_for_distribution(Path("a"), "-", timestamp=Timestamp.DISABLED), None)
+    assert_type(await codesign.aio.verify("a", strict=Strict.ALL), None)
+    assert_type(await codesign.aio.verify(["a"], per_target=True), None)
+    assert_type(await codesign.aio.validate_constraint(Path("a.plist")), None)
+    assert_type(await codesign.aio.display("a"), Signature)
+    assert_type(await codesign.aio.display(["a", Path("b")], deep=True), list[Signature])
+    assert_type(await codesign.aio.requirements("a"), list[Requirement])
+    assert_type(await codesign.aio.requirements(["a"]), list[list[Requirement]])
+    assert_type(await codesign.aio.extract_certificates(Path("a"), save_to="dir"), list[Certificate])
+    assert_type(await codesign.aio.extract_certificates(["a"]), list[list[Certificate]])
+
+    assert_type(await asyncio.gather(codesign.aio.display("a"), codesign.aio.requirements("a")), tuple[Signature, list[Requirement]])
+
+    codesign.aio.sign("a")  # pyright: ignore[reportCallIssue]
+    codesign.aio.sign_adhoc(1)  # pyright: ignore[reportCallIssue, reportArgumentType]
+    codesign.aio.verify("a", strict=True)  # pyright: ignore[reportCallIssue, reportArgumentType]
+    codesign.aio.display("a", force=True)  # pyright: ignore[reportCallIssue]
+    codesign.aio.requirements("a", per_target=True)  # pyright: ignore[reportCallIssue]
+    codesign.aio.extract_certificates("a", per_target=True)  # pyright: ignore[reportCallIssue]
+    codesign.aio.validate_constraint("a.plist", deep=True)  # pyright: ignore[reportCallIssue]
