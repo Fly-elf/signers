@@ -35,7 +35,8 @@ The ones that sign, remove or check return `None`, for one path and for a sequen
 alike: they succeed, or they raise.
 
 Calls block until `codesign` finishes and release the GIL meanwhile, so threads can
-run several at once.
+run several at once. In asyncio code, use `codesign.aio` instead: the same actions as
+awaitables, which let the event loop run while `codesign` does.
 
 Before starting `codesign`, an action checks, in this order:
 
