@@ -35,7 +35,8 @@ The ones that sign, remove or check return `None`, for one path and for a sequen
 alike: they succeed, or they raise.
 
 Calls block until `codesign` finishes and release the GIL meanwhile, so threads can
-run several at once.
+run several at once. In asyncio code, use `codesign.aio` instead: the same actions as
+awaitables, which let the event loop run while `codesign` does.
 
 Before starting `codesign`, an action checks, in this order:
 
@@ -67,6 +68,7 @@ The exceptions and the other public types are also available here, the same clas
 as in `signers`: `codesign.BatchError`, `codesign.SigningFlags`, `codesign.Change`...
 """
 
+from . import aio as aio
 from ._actions import (
     display,
     extract_certificates,
@@ -172,6 +174,7 @@ __all__ = [
     "Timestamp",
     "UnexpectedOutputError",
     "VerificationFailedError",
+    "aio",
     "display",
     "extract_certificates",
     "remove_signature",

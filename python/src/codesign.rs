@@ -2,14 +2,72 @@ use std::path::PathBuf;
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::PyList;
+use pyo3_async_runtimes::tokio::future_into_py;
 use signers::codesign::{
-    PreserveMetadata, SignatureSlot, SigningFlags, Strict, Timestamp, blocking,
+    self, Display, ExtractCertificates, PreserveMetadata, RemoveSignature, Sign, SignatureSlot,
+    SigningFlags, Strict, Timestamp, Verify, blocking,
 };
 
 use crate::convert;
 use crate::error;
 use crate::target::Target;
+
+// One body for the sync and the async native function of an action. `$build` runs at
+// call time either way, so a bad option raises before anything is awaited.
+macro_rules! run {
+    (
+        $mode:tt $py:ident, $target:expr, $t:ident => $build:expr
+        $(, $per_target:ident)?
+        $(; $out:ident => $one:expr, $many:expr)?
+    ) => {
+        match $target {
+            Target::One($t) => {
+                let b = $build;
+                finish!($mode $py, b $(, $out => $one)?)
+            }
+            Target::Many($t) => {
+                let b = $build;
+                $(let b = match $per_target {
+                    Some(p) => b.per_target(p),
+                    None => b,
+                };)?
+                finish!($mode $py, b $(, $out => $many)?)
+            }
+        }
+    };
+}
+
+macro_rules! finish {
+    (sync $py:ident, $b:ident) => {
+        $py.detach(|| $b.run()).map(drop).map_err(error::to_py)
+    };
+    // A `()` result would reach Python as an empty tuple; `None::<()>` reaches it as `None`.
+    (async $py:ident, $b:ident) => {
+        future_into_py($py, async move {
+            $b.await.map(|_| None::<()>).map_err(error::to_py)
+        })
+    };
+    (sync $py:ident, $b:ident, $out:ident => $convert:expr) => {{
+        let $out = $py.detach(|| $b.run()).map_err(error::to_py)?;
+        $convert
+    }};
+    (async $py:ident, $b:ident, $out:ident => $convert:expr) => {
+        future_into_py($py, async move {
+            let $out = $b.await.map_err(error::to_py)?;
+            Python::attach(|$py| $convert.map(Bound::unbind))
+        })
+    };
+}
+
+fn configure_remove<S, R>(
+    b: RemoveSignature<S, R>,
+    bundle_version: Option<String>,
+) -> RemoveSignature<S, R> {
+    match bundle_version {
+        Some(v) => b.bundle_version(v),
+        None => b,
+    }
+}
 
 #[pyfunction]
 #[pyo3(signature = (target, *, per_target = None, bundle_version = None))]
@@ -19,30 +77,20 @@ pub(crate) fn codesign_remove_signature(
     per_target: Option<bool>,
     bundle_version: Option<String>,
 ) -> PyResult<()> {
-    fn configure<S>(
-        b: blocking::RemoveSignature<S>,
-        bundle_version: Option<String>,
-    ) -> blocking::RemoveSignature<S> {
-        match bundle_version {
-            Some(v) => b.bundle_version(v),
-            None => b,
-        }
-    }
+    run!(sync py, target, t => configure_remove(blocking::remove_signature(t), bundle_version),
+        per_target)
+}
 
-    match target {
-        Target::One(path) => {
-            py.detach(|| configure(blocking::remove_signature(path), bundle_version).run())
-        }
-        Target::Many(paths) => py.detach(|| {
-            let b = configure(blocking::remove_signature(paths), bundle_version);
-            match per_target {
-                Some(p) => b.per_target(p).run(),
-                None => b.run(),
-            }
-            .map(drop)
-        }),
-    }
-    .map_err(error::to_py)
+#[pyfunction]
+#[pyo3(signature = (target, *, per_target = None, bundle_version = None))]
+pub(crate) fn codesign_remove_signature_async<'py>(
+    py: Python<'py>,
+    target: Target,
+    per_target: Option<bool>,
+    bundle_version: Option<String>,
+) -> PyResult<Bound<'py, PyAny>> {
+    run!(async py, target, t => configure_remove(codesign::remove_signature(t), bundle_version),
+        per_target)
 }
 
 #[derive(FromPyObject)]
@@ -79,7 +127,7 @@ pub(crate) struct SignArgs {
 // An unset option or a false flag leaves the setter uncalled, so the presets of
 // `sign_for_distribution` survive.
 #[allow(deprecated)]
-fn configure<S>(mut b: blocking::Sign<S>, a: SignArgs) -> blocking::Sign<S> {
+fn configure<S, R>(mut b: Sign<S, R>, a: SignArgs) -> Sign<S, R> {
     macro_rules! set {
         ($($f:ident),*) => {$(if let Some(v) = a.$f { b = b.$f(v); })*};
     }
@@ -130,23 +178,6 @@ fn configure<S>(mut b: blocking::Sign<S>, a: SignArgs) -> blocking::Sign<S> {
     b
 }
 
-macro_rules! run_with {
-    ($py:ident, $target:ident, $per_target:ident, $args:ident, $configure:ident, $t:ident => $start:expr) => {
-        match $target {
-            Target::One($t) => $py.detach(|| $configure($start, $args).run()),
-            Target::Many($t) => $py.detach(|| {
-                let b = $configure($start, $args);
-                match $per_target {
-                    Some(p) => b.per_target(p).run(),
-                    None => b.run(),
-                }
-                .map(drop)
-            }),
-        }
-        .map_err(error::to_py)
-    };
-}
-
 #[pyfunction]
 #[pyo3(signature = (target, identity, options, *, per_target = None))]
 pub(crate) fn codesign_sign(
@@ -156,7 +187,19 @@ pub(crate) fn codesign_sign(
     options: SignArgs,
     per_target: Option<bool>,
 ) -> PyResult<()> {
-    run_with!(py, target, per_target, options, configure, t => blocking::sign(t, identity))
+    run!(sync py, target, t => configure(blocking::sign(t, identity), options), per_target)
+}
+
+#[pyfunction]
+#[pyo3(signature = (target, identity, options, *, per_target = None))]
+pub(crate) fn codesign_sign_async<'py>(
+    py: Python<'py>,
+    target: Target,
+    identity: String,
+    options: SignArgs,
+    per_target: Option<bool>,
+) -> PyResult<Bound<'py, PyAny>> {
+    run!(async py, target, t => configure(codesign::sign(t, identity), options), per_target)
 }
 
 #[pyfunction]
@@ -167,7 +210,18 @@ pub(crate) fn codesign_sign_adhoc(
     options: SignArgs,
     per_target: Option<bool>,
 ) -> PyResult<()> {
-    run_with!(py, target, per_target, options, configure, t => blocking::sign_adhoc(t))
+    run!(sync py, target, t => configure(blocking::sign_adhoc(t), options), per_target)
+}
+
+#[pyfunction]
+#[pyo3(signature = (target, options, *, per_target = None))]
+pub(crate) fn codesign_sign_adhoc_async<'py>(
+    py: Python<'py>,
+    target: Target,
+    options: SignArgs,
+    per_target: Option<bool>,
+) -> PyResult<Bound<'py, PyAny>> {
+    run!(async py, target, t => configure(codesign::sign_adhoc(t), options), per_target)
 }
 
 #[pyfunction]
@@ -179,7 +233,21 @@ pub(crate) fn codesign_sign_for_distribution(
     options: SignArgs,
     per_target: Option<bool>,
 ) -> PyResult<()> {
-    run_with!(py, target, per_target, options, configure, t => blocking::sign_for_distribution(t, identity))
+    run!(sync py, target,
+        t => configure(blocking::sign_for_distribution(t, identity), options), per_target)
+}
+
+#[pyfunction]
+#[pyo3(signature = (target, identity, options, *, per_target = None))]
+pub(crate) fn codesign_sign_for_distribution_async<'py>(
+    py: Python<'py>,
+    target: Target,
+    identity: String,
+    options: SignArgs,
+    per_target: Option<bool>,
+) -> PyResult<Bound<'py, PyAny>> {
+    run!(async py, target,
+        t => configure(codesign::sign_for_distribution(t, identity), options), per_target)
 }
 
 #[derive(FromPyObject)]
@@ -198,7 +266,7 @@ pub(crate) struct VerifyArgs {
     signature_slot: Option<String>,
 }
 
-fn configure_verify<S>(mut b: blocking::Verify<S>, a: VerifyArgs) -> PyResult<blocking::Verify<S>> {
+fn configure_verify<S, R>(mut b: Verify<S, R>, a: VerifyArgs) -> PyResult<Verify<S, R>> {
     macro_rules! set {
         ($($f:ident),*) => {$(if let Some(v) = a.$f { b = b.$f(v); })*};
     }
@@ -251,21 +319,18 @@ pub(crate) fn codesign_verify(
     options: VerifyArgs,
     per_target: Option<bool>,
 ) -> PyResult<()> {
-    match target {
-        Target::One(path) => {
-            let b = configure_verify(blocking::verify(path), options)?;
-            py.detach(|| b.run())
-        }
-        Target::Many(paths) => {
-            let b = configure_verify(blocking::verify(paths), options)?;
-            py.detach(|| match per_target {
-                Some(p) => b.per_target(p).run(),
-                None => b.run(),
-            })
-            .map(drop)
-        }
-    }
-    .map_err(error::to_py)
+    run!(sync py, target, t => configure_verify(blocking::verify(t), options)?, per_target)
+}
+
+#[pyfunction]
+#[pyo3(signature = (target, options, *, per_target = None))]
+pub(crate) fn codesign_verify_async<'py>(
+    py: Python<'py>,
+    target: Target,
+    options: VerifyArgs,
+    per_target: Option<bool>,
+) -> PyResult<Bound<'py, PyAny>> {
+    run!(async py, target, t => configure_verify(codesign::verify(t), options)?, per_target)
 }
 
 #[pyfunction]
@@ -275,18 +340,17 @@ pub(crate) fn codesign_validate_constraint(
     target: Target,
     per_target: Option<bool>,
 ) -> PyResult<()> {
-    match target {
-        Target::One(path) => py.detach(|| blocking::validate_constraint(path).run()),
-        Target::Many(paths) => py.detach(|| {
-            let b = blocking::validate_constraint(paths);
-            match per_target {
-                Some(p) => b.per_target(p).run(),
-                None => b.run(),
-            }
-            .map(drop)
-        }),
-    }
-    .map_err(error::to_py)
+    run!(sync py, target, t => blocking::validate_constraint(t), per_target)
+}
+
+#[pyfunction]
+#[pyo3(signature = (target, *, per_target = None))]
+pub(crate) fn codesign_validate_constraint_async<'py>(
+    py: Python<'py>,
+    target: Target,
+    per_target: Option<bool>,
+) -> PyResult<Bound<'py, PyAny>> {
+    run!(async py, target, t => codesign::validate_constraint(t), per_target)
 }
 
 #[derive(FromPyObject)]
@@ -299,10 +363,7 @@ pub(crate) struct DisplayArgs {
     detached: Option<PathBuf>,
 }
 
-fn configure_display<S>(
-    mut b: blocking::Display<S>,
-    a: DisplayArgs,
-) -> PyResult<blocking::Display<S>> {
+fn configure_display<S, R>(mut b: Display<S, R>, a: DisplayArgs) -> PyResult<Display<S, R>> {
     if let Some(v) = a.architecture {
         b = b.architecture(v);
     }
@@ -329,27 +390,20 @@ pub(crate) fn codesign_display<'py>(
     options: DisplayArgs,
     per_target: Option<bool>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    match target {
-        Target::One(path) => {
-            let b = configure_display(blocking::display(path), options)?;
-            let signature = py.detach(|| b.run()).map_err(error::to_py)?;
-            Ok(convert::signature(py, &signature)?.into_any())
-        }
-        Target::Many(paths) => {
-            let b = configure_display(blocking::display(paths), options)?;
-            let signatures = py
-                .detach(|| match per_target {
-                    Some(p) => b.per_target(p).run(),
-                    None => b.run(),
-                })
-                .map_err(error::to_py)?;
-            let list = PyList::empty(py);
-            for signature in &signatures {
-                list.append(convert::signature(py, signature)?)?;
-            }
-            Ok(list.into_any())
-        }
-    }
+    run!(sync py, target, t => configure_display(blocking::display(t), options)?, per_target;
+        s => convert::signature(py, &s), convert::flat(py, &s, convert::signature))
+}
+
+#[pyfunction]
+#[pyo3(signature = (target, options, *, per_target = None))]
+pub(crate) fn codesign_display_async<'py>(
+    py: Python<'py>,
+    target: Target,
+    options: DisplayArgs,
+    per_target: Option<bool>,
+) -> PyResult<Bound<'py, PyAny>> {
+    run!(async py, target, t => configure_display(codesign::display(t), options)?, per_target;
+        s => convert::signature(py, &s), convert::flat(py, &s, convert::signature))
 }
 
 #[pyfunction]
@@ -357,19 +411,28 @@ pub(crate) fn codesign_requirements<'py>(
     py: Python<'py>,
     target: Target,
 ) -> PyResult<Bound<'py, PyAny>> {
-    match target {
-        Target::One(path) => {
-            let found = py
-                .detach(|| blocking::requirements(path).run())
-                .map_err(error::to_py)?;
-            convert::flat(py, &found, convert::requirement)
-        }
-        Target::Many(paths) => {
-            let found = py
-                .detach(|| blocking::requirements(paths).run())
-                .map_err(error::to_py)?;
-            convert::nested(py, &found, convert::requirement)
-        }
+    run!(sync py, target, t => blocking::requirements(t);
+        r => convert::flat(py, &r, convert::requirement),
+        convert::nested(py, &r, convert::requirement))
+}
+
+#[pyfunction]
+pub(crate) fn codesign_requirements_async<'py>(
+    py: Python<'py>,
+    target: Target,
+) -> PyResult<Bound<'py, PyAny>> {
+    run!(async py, target, t => codesign::requirements(t);
+        r => convert::flat(py, &r, convert::requirement),
+        convert::nested(py, &r, convert::requirement))
+}
+
+fn configure_extract<S, R>(
+    b: ExtractCertificates<S, R>,
+    save_to: Option<PathBuf>,
+) -> ExtractCertificates<S, R> {
+    match save_to {
+        Some(dir) => b.save_to(dir),
+        None => b,
     }
 }
 
@@ -380,24 +443,19 @@ pub(crate) fn codesign_extract_certificates<'py>(
     target: Target,
     save_to: Option<PathBuf>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    match target {
-        Target::One(path) => {
-            let b = blocking::extract_certificates(path);
-            let b = match save_to {
-                Some(dir) => b.save_to(dir),
-                None => b,
-            };
-            let found = py.detach(|| b.run()).map_err(error::to_py)?;
-            convert::flat(py, &found, convert::certificate)
-        }
-        Target::Many(paths) => {
-            let b = blocking::extract_certificates(paths);
-            let b = match save_to {
-                Some(dir) => b.save_to(dir),
-                None => b,
-            };
-            let found = py.detach(|| b.run()).map_err(error::to_py)?;
-            convert::nested(py, &found, convert::certificate)
-        }
-    }
+    run!(sync py, target, t => configure_extract(blocking::extract_certificates(t), save_to);
+        c => convert::flat(py, &c, convert::certificate),
+        convert::nested(py, &c, convert::certificate))
+}
+
+#[pyfunction]
+#[pyo3(signature = (target, *, save_to = None))]
+pub(crate) fn codesign_extract_certificates_async<'py>(
+    py: Python<'py>,
+    target: Target,
+    save_to: Option<PathBuf>,
+) -> PyResult<Bound<'py, PyAny>> {
+    run!(async py, target, t => configure_extract(codesign::extract_certificates(t), save_to);
+        c => convert::flat(py, &c, convert::certificate),
+        convert::nested(py, &c, convert::certificate))
 }
