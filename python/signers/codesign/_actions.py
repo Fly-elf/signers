@@ -8,7 +8,7 @@ from .. import _native
 from .._errors import _call
 from .._targets import StrPath, _normalize
 from ._options import PreserveMetadata, SignatureSlot, SigningFlags, Strict, Timestamp
-from ._types import Signature
+from ._types import Certificate, Requirement, Signature
 
 
 def _path(path: StrPath | None) -> str | None:
@@ -599,3 +599,37 @@ def display(
     if single:
         return Signature._from_native(native)
     return [Signature._from_native(d) for d in native]
+
+
+@overload
+def requirements(target: StrPath) -> list[Requirement]: ...  # pyright: ignore[reportOverlappingOverload]
+@overload
+def requirements(target: Sequence[StrPath]) -> list[list[Requirement]]: ...
+def requirements(
+    target: StrPath | Sequence[StrPath],
+) -> list[Requirement] | list[list[Requirement]]:
+    targets, single = _normalize(target)
+    native = _call(_native.codesign_requirements, targets)
+    if single:
+        return [Requirement._from_native(d) for d in native]
+    return [[Requirement._from_native(d) for d in chain] for chain in native]
+
+
+@overload
+def extract_certificates(  # pyright: ignore[reportOverlappingOverload]
+    target: StrPath, *, save_to: StrPath | None = None
+) -> list[Certificate]: ...
+@overload
+def extract_certificates(
+    target: Sequence[StrPath], *, save_to: StrPath | None = None
+) -> list[list[Certificate]]: ...
+def extract_certificates(
+    target: StrPath | Sequence[StrPath], *, save_to: StrPath | None = None
+) -> list[Certificate] | list[list[Certificate]]:
+    targets, single = _normalize(target)
+    native = _call(
+        _native.codesign_extract_certificates, targets, save_to=_path(save_to)
+    )
+    if single:
+        return [Certificate(der) for der in native]
+    return [[Certificate(der) for der in chain] for chain in native]

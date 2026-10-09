@@ -351,3 +351,53 @@ pub(crate) fn codesign_display<'py>(
         }
     }
 }
+
+#[pyfunction]
+pub(crate) fn codesign_requirements<'py>(
+    py: Python<'py>,
+    target: Target,
+) -> PyResult<Bound<'py, PyAny>> {
+    match target {
+        Target::One(path) => {
+            let found = py
+                .detach(|| blocking::requirements(path).run())
+                .map_err(error::to_py)?;
+            convert::flat(py, &found, convert::requirement)
+        }
+        Target::Many(paths) => {
+            let found = py
+                .detach(|| blocking::requirements(paths).run())
+                .map_err(error::to_py)?;
+            convert::nested(py, &found, convert::requirement)
+        }
+    }
+}
+
+#[pyfunction]
+#[pyo3(signature = (target, *, save_to = None))]
+pub(crate) fn codesign_extract_certificates<'py>(
+    py: Python<'py>,
+    target: Target,
+    save_to: Option<PathBuf>,
+) -> PyResult<Bound<'py, PyAny>> {
+    match target {
+        Target::One(path) => {
+            let b = blocking::extract_certificates(path);
+            let b = match save_to {
+                Some(dir) => b.save_to(dir),
+                None => b,
+            };
+            let found = py.detach(|| b.run()).map_err(error::to_py)?;
+            convert::flat(py, &found, convert::certificate)
+        }
+        Target::Many(paths) => {
+            let b = blocking::extract_certificates(paths);
+            let b = match save_to {
+                Some(dir) => b.save_to(dir),
+                None => b,
+            };
+            let found = py.detach(|| b.run()).map_err(error::to_py)?;
+            convert::nested(py, &found, convert::certificate)
+        }
+    }
+}

@@ -93,3 +93,9 @@ def codesign_display(
     *,
     per_target: bool | None = None,
 ) -> Any: ...
+def codesign_requirements(target: str | list[str]) -> Any: ...
+def codesign_extract_certificates(
+    target: str | list[str],
+    *,
+    save_to: str | None = None,
+) -> Any: ...
