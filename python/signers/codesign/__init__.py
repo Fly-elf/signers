@@ -62,6 +62,9 @@ So far no target has been touched. Then `codesign` runs:
 `per_target` is ignored for a single path, which always runs one `codesign`.
 `requirements` and `extract_certificates` have no `per_target`: they always run one
 `codesign` per target.
+
+The exceptions and the other public types are also available here, the same classes
+as in `signers`: `codesign.BatchError`, `codesign.SigningFlags`, `codesign.Change`...
 """
 
 from ._actions import (
