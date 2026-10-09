@@ -2,10 +2,12 @@ use std::path::PathBuf;
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3::types::PyList;
 use signers::codesign::{
     PreserveMetadata, SignatureSlot, SigningFlags, Strict, Timestamp, blocking,
 };
 
+use crate::convert;
 use crate::error;
 use crate::target::Target;
 
@@ -226,17 +228,19 @@ fn configure_verify<S>(mut b: blocking::Verify<S>, a: VerifyArgs) -> PyResult<bl
         });
     }
     if let Some(name) = a.signature_slot {
-        b = b.signature_slot(match name.as_str() {
-            "FIRST" => SignatureSlot::First,
-            "SECOND" => SignatureSlot::Second,
-            _ => {
-                return Err(PyValueError::new_err(format!(
-                    "unknown SignatureSlot: {name}"
-                )));
-            }
-        });
+        b = b.signature_slot(signature_slot(&name)?);
     }
     Ok(b)
+}
+
+fn signature_slot(name: &str) -> PyResult<SignatureSlot> {
+    match name {
+        "FIRST" => Ok(SignatureSlot::First),
+        "SECOND" => Ok(SignatureSlot::Second),
+        _ => Err(PyValueError::new_err(format!(
+            "unknown SignatureSlot: {name}"
+        ))),
+    }
 }
 
 #[pyfunction]
@@ -283,4 +287,67 @@ pub(crate) fn codesign_validate_constraint(
         }),
     }
     .map_err(error::to_py)
+}
+
+#[derive(FromPyObject)]
+#[pyo3(from_item_all)]
+pub(crate) struct DisplayArgs {
+    architecture: Option<String>,
+    bundle_version: Option<String>,
+    deep: bool,
+    signature_slot: Option<String>,
+    detached: Option<PathBuf>,
+}
+
+fn configure_display<S>(
+    mut b: blocking::Display<S>,
+    a: DisplayArgs,
+) -> PyResult<blocking::Display<S>> {
+    if let Some(v) = a.architecture {
+        b = b.architecture(v);
+    }
+    if let Some(v) = a.bundle_version {
+        b = b.bundle_version(v);
+    }
+    if let Some(v) = a.detached {
+        b = b.detached(v);
+    }
+    if a.deep {
+        b = b.deep(true);
+    }
+    if let Some(name) = a.signature_slot {
+        b = b.signature_slot(signature_slot(&name)?);
+    }
+    Ok(b)
+}
+
+#[pyfunction]
+#[pyo3(signature = (target, options, *, per_target = None))]
+pub(crate) fn codesign_display<'py>(
+    py: Python<'py>,
+    target: Target,
+    options: DisplayArgs,
+    per_target: Option<bool>,
+) -> PyResult<Bound<'py, PyAny>> {
+    match target {
+        Target::One(path) => {
+            let b = configure_display(blocking::display(path), options)?;
+            let signature = py.detach(|| b.run()).map_err(error::to_py)?;
+            Ok(convert::signature(py, &signature)?.into_any())
+        }
+        Target::Many(paths) => {
+            let b = configure_display(blocking::display(paths), options)?;
+            let signatures = py
+                .detach(|| match per_target {
+                    Some(p) => b.per_target(p).run(),
+                    None => b.run(),
+                })
+                .map_err(error::to_py)?;
+            let list = PyList::empty(py);
+            for signature in &signatures {
+                list.append(convert::signature(py, signature)?)?;
+            }
+            Ok(list.into_any())
+        }
+    }
 }

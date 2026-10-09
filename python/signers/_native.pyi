@@ -1,4 +1,4 @@
-from typing import TypedDict
+from typing import Any, TypedDict
 
 class NativeError(Exception): ...
 
@@ -43,6 +43,13 @@ class VerifyOptions(TypedDict):
     check_notarization: bool
     signature_slot: str | None
 
+class DisplayOptions(TypedDict):
+    architecture: str | None
+    bundle_version: str | None
+    deep: bool
+    signature_slot: str | None
+    detached: str | None
+
 def codesign_remove_signature(
     target: str | list[str],
     *,
@@ -80,3 +87,9 @@ def codesign_validate_constraint(
     *,
     per_target: bool | None = None,
 ) -> None: ...
+def codesign_display(
+    target: str | list[str],
+    options: DisplayOptions,
+    *,
+    per_target: bool | None = None,
+) -> Any: ...
