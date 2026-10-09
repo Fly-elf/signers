@@ -3,8 +3,8 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList};
 use signers::codesign::{
-    Authority, CdHash, CodeDirectory, Format, HashType, InfoPlist, Location, OsVersion, Platform,
-    Signature, SignatureKind,
+    Authority, CdHash, Certificate, CodeDirectory, Format, HashType, InfoPlist, Location,
+    OsVersion, Platform, Requirement, RequirementKind, Signature, SignatureKind,
 };
 
 fn unsupported(what: &str) -> PyErr {
@@ -293,4 +293,51 @@ pub(crate) fn signature<'py>(py: Python<'py>, s: &Signature) -> PyResult<Bound<'
     )?;
     d.set_item("raw", s.raw())?;
     Ok(d)
+}
+
+pub(crate) fn requirement<'py>(
+    py: Python<'py>,
+    value: &Requirement,
+) -> PyResult<Bound<'py, PyAny>> {
+    let kind = match &value.kind {
+        RequirementKind::Designated => named(py, "DESIGNATED")?,
+        RequirementKind::Host => named(py, "HOST")?,
+        RequirementKind::Guest => named(py, "GUEST")?,
+        RequirementKind::Library => named(py, "LIBRARY")?,
+        RequirementKind::Plugin => named(py, "PLUGIN")?,
+        RequirementKind::Other(text) => other(py, text)?,
+        _ => return Err(unsupported("RequirementKind")),
+    };
+    let d = PyDict::new(py);
+    d.set_item("kind", kind)?;
+    d.set_item("expression", &value.expression)?;
+    d.set_item("implicit", value.implicit)?;
+    Ok(d.into_any())
+}
+
+pub(crate) fn certificate<'py>(
+    py: Python<'py>,
+    value: &Certificate,
+) -> PyResult<Bound<'py, PyAny>> {
+    Ok(PyBytes::new(py, value.der()).into_any())
+}
+
+pub(crate) fn nested<'py, T>(
+    py: Python<'py>,
+    items: &[Vec<T>],
+    f: impl Fn(Python<'py>, &T) -> PyResult<Bound<'py, PyAny>> + Copy,
+) -> PyResult<Bound<'py, PyAny>> {
+    let out = PyList::empty(py);
+    for inner in items {
+        out.append(list(py, inner, f)?)?;
+    }
+    Ok(out.into_any())
+}
+
+pub(crate) fn flat<'py, T>(
+    py: Python<'py>,
+    items: &[T],
+    f: impl Fn(Python<'py>, &T) -> PyResult<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    Ok(list(py, items, f)?.into_any())
 }
