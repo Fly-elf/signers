@@ -1,0 +1,13 @@
+[package]
+name = "signers-python"
+version.workspace = true
+edition = "2024"
+publish = false
+
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+signers = { path = "..", features = ["blocking"] }
+pyo3 = { version = "0.29", features = ["abi3-py311"] }
