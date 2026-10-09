@@ -1,5 +1,54 @@
 from importlib.metadata import version
 
+from ._errors import (
+    BatchError,
+    Change,
+    CodesignError,
+    CodesignFailedError,
+    CodesignNotFoundError,
+    ConstraintInvalidError,
+    EmptyTargetError,
+    IoError,
+    NoSignatureError,
+    NoTargetsError,
+    RequirementUnsatisfiedError,
+    ResourceChange,
+    RunError,
+    SharedOutputPerTargetError,
+    SignersError,
+    SpawnError,
+    StdioPathError,
+    TargetAccessError,
+    TargetNotFoundError,
+    TerminatedError,
+    UnexpectedOutputError,
+    VerificationFailedError,
+)
+
 __version__ = version("signers")
 
-__all__ = ["__version__"]
+__all__ = [
+    "BatchError",
+    "Change",
+    "CodesignError",
+    "CodesignFailedError",
+    "CodesignNotFoundError",
+    "ConstraintInvalidError",
+    "EmptyTargetError",
+    "IoError",
+    "NoSignatureError",
+    "NoTargetsError",
+    "RequirementUnsatisfiedError",
+    "ResourceChange",
+    "RunError",
+    "SharedOutputPerTargetError",
+    "SignersError",
+    "SpawnError",
+    "StdioPathError",
+    "TargetAccessError",
+    "TargetNotFoundError",
+    "TerminatedError",
+    "UnexpectedOutputError",
+    "VerificationFailedError",
+    "__version__",
+]
