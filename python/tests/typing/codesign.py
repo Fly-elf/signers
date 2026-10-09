@@ -128,6 +128,8 @@ def option_types() -> None:
 def errors(error: Exception) -> None:
     if isinstance(error, signers.BatchError):
         assert_type(error.failures, tuple[tuple[Path, signers.SignersError], ...])
+    if isinstance(error, codesign.BatchError):
+        assert_type(error.failures, tuple[tuple[Path, signers.SignersError], ...])
     if isinstance(error, signers.EmptyTargetError):
         assert_type(error.index, int)
     if isinstance(error, signers.TargetNotFoundError):
