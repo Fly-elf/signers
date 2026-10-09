@@ -67,6 +67,7 @@ The exceptions and the other public types are also available here, the same clas
 as in `signers`: `codesign.BatchError`, `codesign.SigningFlags`, `codesign.Change`...
 """
 
+from . import aio as aio
 from ._actions import (
     display,
     extract_certificates,
@@ -172,6 +173,7 @@ __all__ = [
     "Timestamp",
     "UnexpectedOutputError",
     "VerificationFailedError",
+    "aio",
     "display",
     "extract_certificates",
     "remove_signature",
