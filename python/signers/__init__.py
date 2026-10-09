@@ -54,6 +54,8 @@ from ._errors import (
     VerificationFailedError,
 )
 
+from . import codesign as codesign
+
 __version__ = version("signers")
 """The installed version of the package."""
 
@@ -81,4 +83,5 @@ __all__ = [
     "UnexpectedOutputError",
     "VerificationFailedError",
     "__version__",
+    "codesign",
 ]
