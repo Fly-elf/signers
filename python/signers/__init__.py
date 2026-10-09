@@ -20,6 +20,9 @@ codesign.sign_for_distribution(
 A call blocks until `codesign` finishes. A failure raises a subclass of
 `SignersError`; the package is typed, so the options and results show up in the IDE.
 
+`import signers` also loads `signers.codesign`, so `signers.codesign.sign_adhoc(...)`
+works without a second import.
+
 Where to go next:
 
 - `signers.codesign`: the actions, what they check before running anything, and
@@ -54,6 +57,8 @@ from ._errors import (
     VerificationFailedError,
 )
 
+from . import codesign as codesign
+
 __version__ = version("signers")
 """The installed version of the package."""
 
@@ -81,4 +86,5 @@ __all__ = [
     "UnexpectedOutputError",
     "VerificationFailedError",
     "__version__",
+    "codesign",
 ]

@@ -3,6 +3,8 @@
 # pyright: reportPrivateUsage=false
 
 import errno
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
@@ -180,3 +182,26 @@ def test_call_passes_arguments_and_returns_the_result() -> None:
 def test_version_is_the_crate_version() -> None:
     cargo = tomllib.loads((REPO / "Cargo.toml").read_text())
     assert signers.__version__ == cargo["workspace"]["package"]["version"]
+
+
+def test_codesign_reexports_the_errors_and_changes() -> None:
+    names = [
+        name
+        for name, obj in vars(signers).items()
+        if name in signers.__all__
+        and isinstance(obj, type)
+        and (issubclass(obj, signers.SignersError) or obj in (signers.ResourceChange, signers.Change))
+    ]
+    assert signers.BatchError.__name__ in names
+    for name in names:
+        assert getattr(signers.codesign, name) is getattr(signers, name)
+        assert name in signers.codesign.__all__
+
+
+def test_a_plain_import_exposes_the_codesign_module() -> None:
+    result = subprocess.run(
+        [sys.executable, "-c", "import signers; signers.codesign.sign_adhoc"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
