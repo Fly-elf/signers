@@ -853,13 +853,12 @@ def sign_for_distribution(
     Example:
         ```python
         from signers import codesign
-        from signers.codesign import SigningFlags
 
         codesign.sign_for_distribution(
             "MyApp.app",
             "Developer ID Application: Jane Doe (A1B2C3D4E5)",
             entitlements="MyApp.entitlements",
-            options=SigningFlags.RUNTIME | SigningFlags.LIBRARY,
+            options=codesign.SigningFlags.RUNTIME | codesign.SigningFlags.LIBRARY,
         )
         ```
     """
@@ -1024,7 +1023,7 @@ def verify(
 
     Example:
         ```python
-        from signers import RequirementUnsatisfiedError, codesign
+        from signers import codesign
 
         codesign.verify("MyApp.app", deep=True)
 
@@ -1032,7 +1031,7 @@ def verify(
         try:
             codesign.verify("mytool", test_requirement="anchor apple")
             print("signed by Apple")
-        except RequirementUnsatisfiedError:
+        except codesign.RequirementUnsatisfiedError:
             print("validly signed, but not by Apple")
         ```
     """
@@ -1108,13 +1107,13 @@ def validate_constraint(
 
     Example:
         ```python
-        from signers import BatchError, codesign
+        from signers import codesign
 
         codesign.validate_constraint("launch-constraint.plist")
 
         try:
             codesign.validate_constraint(["launch.plist", "library.plist"])
-        except BatchError as error:
+        except codesign.BatchError as error:
             for path, failure in error.failures:
                 print(f"{path}: {failure}")
         ```
@@ -1213,13 +1212,12 @@ def display(
     Example:
         ```python
         from signers import codesign
-        from signers.codesign import SigningFlags
 
         signature = codesign.display("MyApp.app")
         print(signature.identifier, signature.cd_hash)
         if signature.signature is None:
             print("signed ad hoc")
-        if SigningFlags.RUNTIME in signature.code_directory.flags:
+        if codesign.SigningFlags.RUNTIME in signature.code_directory.flags:
             print("hardened runtime")
 
         # The entitlements are a plain dict, or None if the target has none.
@@ -1291,10 +1289,9 @@ def requirements(
     Example:
         ```python
         from signers import codesign
-        from signers.codesign import RequirementKind
 
         for requirement in codesign.requirements("MyApp.app"):
-            if requirement.kind is RequirementKind.DESIGNATED:
+            if requirement.kind is codesign.RequirementKind.DESIGNATED:
                 print(requirement.expression)
 
         # Tell the requirements a signature carries from the system's defaults.

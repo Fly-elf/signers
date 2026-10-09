@@ -12,12 +12,12 @@ class SigningFlags(Flag, boundary=FlagBoundary.KEEP):
 
     Example:
         ```python
-        from signers.codesign import SigningFlags, sign
+        from signers import codesign
 
-        sign(
+        codesign.sign(
             "MyApp.app",
             "Developer ID Application: Jane Doe (A1B2C3D4E5)",
-            options=SigningFlags.RUNTIME | SigningFlags.LIBRARY,
+            options=codesign.SigningFlags.RUNTIME | codesign.SigningFlags.LIBRARY,
         )
         ```
     """
@@ -49,14 +49,14 @@ class PreserveMetadata(Flag):
 
     Example:
         ```python
-        from signers.codesign import PreserveMetadata, sign_adhoc
+        from signers import codesign
 
         # Re-sign a patched binary and keep the identifier and entitlements it had.
-        sign_adhoc(
+        codesign.sign_adhoc(
             "patched",
             force=True,
-            preserve_metadata=PreserveMetadata.IDENTIFIER
-            | PreserveMetadata.ENTITLEMENTS,
+            preserve_metadata=codesign.PreserveMetadata.IDENTIFIER
+            | codesign.PreserveMetadata.ENTITLEMENTS,
         )
         ```
     """
@@ -92,15 +92,15 @@ class Timestamp(Enum):
 
     Example:
         ```python
-        from signers.codesign import Timestamp, sign
+        from signers import codesign
 
         identity = "Developer ID Application: Jane Doe (A1B2C3D4E5)"
 
         # An offline build: no timestamp server is contacted.
-        sign("MyApp.app", identity, timestamp=Timestamp.DISABLED)
+        codesign.sign("MyApp.app", identity, timestamp=codesign.Timestamp.DISABLED)
 
         # Your own timestamp authority instead of Apple's.
-        sign("MyApp.app", identity, timestamp="http://tsa.example.com")
+        codesign.sign("MyApp.app", identity, timestamp="http://tsa.example.com")
         ```
     """
 
