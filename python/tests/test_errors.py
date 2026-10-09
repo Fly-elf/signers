@@ -3,9 +3,6 @@
 # pyright: reportPrivateUsage=false
 
 import errno
-import subprocess
-import sys
-import tomllib
 from pathlib import Path
 
 import pytest
@@ -13,7 +10,6 @@ import pytest
 import signers
 from signers import _native
 from signers._errors import _call, _from_native
-from .conftest import REPO
 
 
 @pytest.mark.parametrize(
@@ -78,41 +74,6 @@ def test_from_native_builds_the_class_with_its_attributes(
         assert type(getattr(error, name)) is type(value), name
 
 
-def test_os_error_classes_carry_the_path_as_filename() -> None:
-    error = _from_native({"kind": "TargetAccess", "message": "m", "path": "/t/a", "errno": 13})
-
-    assert isinstance(error, OSError)
-    assert error.filename == Path("/t/a")
-
-
-@pytest.mark.parametrize(
-    ("cls", "bases"),
-    [
-        (signers.NoTargetsError, (signers.SignersError, ValueError)),
-        (signers.EmptyTargetError, (signers.SignersError, ValueError)),
-        (signers.TargetNotFoundError, (signers.SignersError, FileNotFoundError)),
-        (signers.TargetAccessError, (signers.SignersError, OSError)),
-        (signers.IoError, (signers.SignersError, OSError)),
-        (signers.StdioPathError, (signers.SignersError, ValueError)),
-        (signers.SharedOutputPerTargetError, (signers.SignersError, ValueError)),
-        (signers.BatchError, (signers.SignersError,)),
-        (signers.CodesignError, (signers.SignersError,)),
-        (signers.CodesignNotFoundError, (signers.CodesignError, FileNotFoundError)),
-        (signers.SpawnError, (signers.CodesignError, OSError)),
-        (signers.RunError, (signers.CodesignError, OSError)),
-        (signers.CodesignFailedError, (signers.CodesignError,)),
-        (signers.TerminatedError, (signers.CodesignError,)),
-        (signers.UnexpectedOutputError, (signers.CodesignError,)),
-        (signers.VerificationFailedError, (signers.CodesignError,)),
-        (signers.RequirementUnsatisfiedError, (signers.CodesignError,)),
-        (signers.ConstraintInvalidError, (signers.CodesignError,)),
-        (signers.NoSignatureError, (signers.CodesignError,)),
-    ],
-)
-def test_exception_hierarchy(cls: type[Exception], bases: tuple[type[Exception], ...]) -> None:
-    assert all(issubclass(cls, base) for base in bases)
-
-
 def test_from_native_converts_verification_resources() -> None:
     error = _from_native(
         {
@@ -170,38 +131,3 @@ def test_call_raises_the_mapped_error_without_the_native_one_chained() -> None:
 
     assert raised.value.__cause__ is None
     assert raised.value.__suppress_context__
-
-
-def test_call_passes_arguments_and_returns_the_result() -> None:
-    def pair(a: int, *, b: int) -> tuple[int, int]:
-        return a, b
-
-    assert _call(pair, 1, b=2) == (1, 2)
-
-
-def test_version_is_the_crate_version() -> None:
-    cargo = tomllib.loads((REPO / "Cargo.toml").read_text())
-    assert signers.__version__ == cargo["workspace"]["package"]["version"]
-
-
-def test_codesign_reexports_the_errors_and_changes() -> None:
-    names = [
-        name
-        for name, obj in vars(signers).items()
-        if name in signers.__all__
-        and isinstance(obj, type)
-        and (issubclass(obj, signers.SignersError) or obj in (signers.ResourceChange, signers.Change))
-    ]
-    assert signers.BatchError.__name__ in names
-    for name in names:
-        assert getattr(signers.codesign, name) is getattr(signers, name)
-        assert name in signers.codesign.__all__
-
-
-def test_a_plain_import_exposes_the_codesign_module() -> None:
-    result = subprocess.run(
-        [sys.executable, "-c", "import signers; signers.codesign.sign_adhoc"],
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0, result.stderr

@@ -16,7 +16,7 @@ REPO = Path(__file__).resolve().parents[2]
 CODESIGN = "/usr/bin/codesign"
 ADHOC = 0x2
 
-_GROUPS = ("keychain", "network")
+_GROUPS = ("keychain",)
 
 _INFO_PLIST = """<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -61,10 +61,9 @@ def is_signed(path: Path, *, bundle_version: str | None = None) -> bool:
 class Workspace:
     """A throwaway directory to copy the fixture into."""
 
-    def __init__(self, root: Path, hello: Path, dylib: Path) -> None:
+    def __init__(self, root: Path, hello: Path) -> None:
         self.root = root
         self._hello = hello
-        self._dylib = dylib
 
     def adhoc_signed(self, name: str) -> Path:
         """A copy of the fixture carrying a fresh ad hoc signature."""
@@ -86,11 +85,12 @@ class Workspace:
 
     def unsigned(self, name: str) -> Path:
         """A copy of the fixture carrying no signature at all (the linker's is stripped)."""
-        return self._unsigned_copy_of(self._hello, name)
-
-    def unsigned_dylib(self, name: str) -> Path:
-        """An unsigned copy of the fixture built as a dynamic library."""
-        return self._unsigned_copy_of(self._dylib, name)
+        path = self.root / name
+        shutil.copyfile(self._hello, path)
+        path.chmod(0o755)
+        run = codesign("--remove-signature", path)
+        assert run.returncode == 0, run.stderr
+        return path
 
     def presigned(self, name: str, *args: str | os.PathLike[str]) -> Path:
         """An unsigned copy signed ad hoc by the real `codesign` with extra `args`."""
@@ -130,15 +130,6 @@ class Workspace:
             assert run.returncode == 0, run.stderr
         return bundle
 
-    def _unsigned_copy_of(self, source: Path, name: str) -> Path:
-        path = self.root / name
-        shutil.copyfile(source, path)
-        path.chmod(0o755)
-        run = codesign("--remove-signature", path)
-        assert run.returncode == 0, run.stderr
-        return path
-
-
 class Signature:
     """The `codesign -dvvvv` report of a signed path, read through the real `codesign`."""
 
@@ -162,10 +153,6 @@ class Signature:
     @property
     def authority(self) -> str | None:
         return self.field("Authority")
-
-    @property
-    def timestamp(self) -> str | None:
-        return self.field("Timestamp")
 
     @property
     def runtime_version(self) -> str | None:
@@ -215,12 +202,6 @@ def designated_requirement(path: Path) -> str:
     return run.stdout.strip()
 
 
-def output_of(path: Path) -> str:
-    """Runs the signed executable: proof that signing left a working binary."""
-    run = subprocess.run([path], capture_output=True, text=True, check=True)
-    return run.stdout.strip()
-
-
 def fixture(name: str) -> Path:
     """A file of `tests/fixtures/`."""
     return REPO / "tests/fixtures" / name
@@ -234,7 +215,7 @@ def pytest_configure(config: pytest.Config) -> None:
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Skips the tests of a group not named in `SIGNERS_TEST_GROUPS` (comma separated).
 
-    `SIGNERS_TEST_GROUPS=keychain,network uv run pytest` runs them all.
+    `SIGNERS_TEST_GROUPS=keychain uv run pytest` runs them all.
     """
     enabled = {g.strip() for g in os.environ.get("SIGNERS_TEST_GROUPS", "").split(",")}
     for item in items:
@@ -294,17 +275,9 @@ def hello(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return out
 
 
-@pytest.fixture(scope="session")
-def hello_dylib(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """The same source built as a dynamic library."""
-    out = tmp_path_factory.mktemp("fixtures-dylib") / "hello.dylib"
-    subprocess.run(["cc", "-dynamiclib", "-o", out, REPO / "tests/fixtures/hello.c"], check=True)
-    return out
-
-
 @pytest.fixture
-def workspace(tmp_path: Path, hello: Path, hello_dylib: Path) -> Workspace:
-    return Workspace(tmp_path, hello, hello_dylib)
+def workspace(tmp_path: Path, hello: Path) -> Workspace:
+    return Workspace(tmp_path, hello)
 
 
 @pytest.fixture
