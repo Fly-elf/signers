@@ -3,3 +3,8 @@ Cargo.lock
 .DS_Store
 .vscode
 .idea
+.venv/
+uv.lock
+__pycache__/
+/dist/
+/python/signers/_native*.so
