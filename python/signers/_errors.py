@@ -1,5 +1,5 @@
 import enum
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from errno import ENOENT
 from pathlib import Path
@@ -30,6 +30,7 @@ __all__ = [
     "TerminatedError",
     "UnexpectedOutputError",
     "VerificationFailedError",
+    "_acall",
     "_call",
     "_from_native",
 ]
@@ -530,5 +531,14 @@ def _from_native(payload: dict[str, object]) -> SignersError:
 def _call(fn: Callable[..., T], /, *args: object, **kwargs: object) -> T:
     try:
         return fn(*args, **kwargs)
+    except _native.NativeError as e:
+        raise _from_native(e.args[0]) from None
+
+
+async def _acall(
+    fn: Callable[..., Awaitable[T]], /, *args: object, **kwargs: object
+) -> T:
+    try:
+        return await fn(*args, **kwargs)
     except _native.NativeError as e:
         raise _from_native(e.args[0]) from None

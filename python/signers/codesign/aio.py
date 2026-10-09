@@ -1,177 +1,77 @@
 # pyright: reportPrivateUsage=false
-import os
+"""Awaitable form of the `codesign` actions, for asyncio.
+
+Each function here is the `async def` twin of the one of the same name in `codesign`:
+the same arguments, result and exceptions. They need asyncio, so await them inside a
+running event loop. Argument errors are raised at the `await`, and cancelling a call
+raises `asyncio.CancelledError` while a `codesign` already started runs to the end.
+
+Awaiting calls together runs their `codesign` processes at the same time:
+
+```python
+import asyncio
+from signers import codesign
+
+
+async def main():
+    await codesign.aio.sign_adhoc("patched.dylib", force=True)
+    ls, cat = await asyncio.gather(
+        codesign.aio.display("/bin/ls"),
+        codesign.aio.display("/bin/cat"),
+    )
+    print(ls.identifier, cat.identifier)
+
+
+asyncio.run(main())
+```
+"""
+
 from collections.abc import Sequence
-from enum import Flag
-from typing import TYPE_CHECKING, Any, overload
+from typing import overload
 
 from .. import _native
-from .._errors import _call
+from .._errors import _acall
 from .._targets import StrPath, _normalize
+from ._actions import (
+    _certificates,
+    _display_options,
+    _path,
+    _requirements,
+    _sign_options,
+    _signatures,
+    _verify_options,
+)
 from ._options import PreserveMetadata, SignatureSlot, SigningFlags, Strict, Timestamp
 from ._types import Certificate, Requirement, Signature
 
-if TYPE_CHECKING:
-    from .._native import DisplayOptions, SignOptions, VerifyOptions
-
-
-def _path(path: StrPath | None) -> str | None:
-    return None if path is None else os.fspath(path)
-
-
-def _bits(flags: Flag | None) -> int | None:
-    return None if flags is None else flags.value
-
-
-def _timestamp(timestamp: Timestamp | str | None) -> str | None:
-    return timestamp.name if isinstance(timestamp, Timestamp) else timestamp
-
-
-def _sign_options(
-    *,
-    identifier: str | None,
-    requirements: str | None,
-    prefix: str | None,
-    keychain: StrPath | None,
-    entitlements: StrPath | None,
-    force_library_entitlements: bool,
-    generate_entitlement_der: bool,
-    options: SigningFlags | None,
-    runtime_version: str | None,
-    launch_constraint_self: StrPath | None,
-    launch_constraint_parent: StrPath | None,
-    launch_constraint_responsible: StrPath | None,
-    library_constraint: StrPath | None,
-    enforce_constraint_validity: bool,
-    force: bool,
-    deep: bool,
-    preserve_metadata: PreserveMetadata | None,
-    page_size: int | None,
-    timestamp: Timestamp | str | None,
-    bundle_version: str | None,
-    strip_disallowed_xattrs: bool,
-    single_threaded_signing: bool,
-    dry_run: bool,
-    detached: StrPath | None,
-    detached_database: bool,
-    file_list: StrPath | None,
-) -> "SignOptions":
-    return {
-        "identifier": identifier,
-        "requirements": requirements,
-        "prefix": prefix,
-        "keychain": _path(keychain),
-        "entitlements": _path(entitlements),
-        "force_library_entitlements": force_library_entitlements,
-        "generate_entitlement_der": generate_entitlement_der,
-        "options": _bits(options),
-        "runtime_version": runtime_version,
-        "launch_constraint_self": _path(launch_constraint_self),
-        "launch_constraint_parent": _path(launch_constraint_parent),
-        "launch_constraint_responsible": _path(launch_constraint_responsible),
-        "library_constraint": _path(library_constraint),
-        "enforce_constraint_validity": enforce_constraint_validity,
-        "force": force,
-        "deep": deep,
-        "preserve_metadata": _bits(preserve_metadata),
-        "page_size": page_size,
-        "timestamp": _timestamp(timestamp),
-        "bundle_version": bundle_version,
-        "strip_disallowed_xattrs": strip_disallowed_xattrs,
-        "single_threaded_signing": single_threaded_signing,
-        "dry_run": dry_run,
-        "detached": _path(detached),
-        "detached_database": detached_database,
-        "file_list": _path(file_list),
-    }
-
-
-def _verify_options(
-    *,
-    deep: bool,
-    strict: Strict | None,
-    ignore_resources: bool,
-    architecture: str | None,
-    bundle_version: str | None,
-    check_designated_requirement: bool,
-    test_requirement: str | None,
-    test_requirement_file: StrPath | None,
-    detached: StrPath | None,
-    check_notarization: bool,
-    signature_slot: SignatureSlot | None,
-) -> "VerifyOptions":
-    if test_requirement is not None and test_requirement_file is not None:
-        raise TypeError(
-            "test_requirement and test_requirement_file are mutually exclusive"
-        )
-    return {
-        "deep": deep,
-        "strict": None if strict is None else strict.name,
-        "ignore_resources": ignore_resources,
-        "architecture": architecture,
-        "bundle_version": bundle_version,
-        "check_designated_requirement": check_designated_requirement,
-        "test_requirement": test_requirement,
-        "test_requirement_file": _path(test_requirement_file),
-        "detached": _path(detached),
-        "check_notarization": check_notarization,
-        "signature_slot": None if signature_slot is None else signature_slot.name,
-    }
-
-
-def _display_options(
-    *,
-    architecture: str | None,
-    bundle_version: str | None,
-    deep: bool,
-    signature_slot: SignatureSlot | None,
-    detached: StrPath | None,
-) -> "DisplayOptions":
-    return {
-        "architecture": architecture,
-        "bundle_version": bundle_version,
-        "deep": deep,
-        "signature_slot": None if signature_slot is None else signature_slot.name,
-        "detached": _path(detached),
-    }
-
-
-def _signatures(native: Any, single: bool) -> Signature | list[Signature]:
-    if single:
-        return Signature._from_native(native)
-    return [Signature._from_native(d) for d in native]
-
-
-def _requirements(
-    native: Any, single: bool
-) -> list[Requirement] | list[list[Requirement]]:
-    if single:
-        return [Requirement._from_native(d) for d in native]
-    return [[Requirement._from_native(d) for d in chain] for chain in native]
-
-
-def _certificates(
-    native: Any, single: bool
-) -> list[Certificate] | list[list[Certificate]]:
-    if single:
-        return [Certificate(der) for der in native]
-    return [[Certificate(der) for der in chain] for chain in native]
+__all__ = [
+    "display",
+    "extract_certificates",
+    "remove_signature",
+    "requirements",
+    "sign",
+    "sign_adhoc",
+    "sign_for_distribution",
+    "validate_constraint",
+    "verify",
+]
 
 
 @overload
-def remove_signature(
+async def remove_signature(
     target: StrPath,
     *,
     per_target: bool | None = None,
     bundle_version: str | None = None,
 ) -> None: ...
 @overload
-def remove_signature(
+async def remove_signature(
     target: Sequence[StrPath],
     *,
     per_target: bool | None = None,
     bundle_version: str | None = None,
 ) -> None: ...
-def remove_signature(
+async def remove_signature(
     target: StrPath | Sequence[StrPath],
     *,
     per_target: bool | None = None,
@@ -185,6 +85,12 @@ def remove_signature(
 
     You don't need to remove a signature before re-signing: `sign` with `force=True`
     replaces it in one step.
+
+    This is the awaitable form of `codesign.remove_signature`: the same arguments,
+    result and exceptions. It works with asyncio only. Errors in the arguments, such as
+    a `TypeError` for a bad target, are raised when you `await` it, not when you call
+    it. Cancelling the awaiting task raises `asyncio.CancelledError`, but a `codesign`
+    that has already started runs to the end, so the targets may still change.
 
     Args:
         target: The path to strip, or a sequence of paths.
@@ -214,17 +120,25 @@ def remove_signature(
         CodesignNotFoundError: No `codesign` was found on `PATH`.
         CodesignError: `codesign` couldn't start or was killed (`SpawnError`,
             `RunError`, `TerminatedError`), or printed output that couldn't be read.
+        asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
+            already started still runs to the end.
 
     Example:
         ```python
+        import asyncio
         from signers import codesign
 
-        codesign.remove_signature(["mytool", "libfoo.dylib"])
+
+        async def main():
+            await codesign.aio.remove_signature(["mytool", "libfoo.dylib"])
+
+
+        asyncio.run(main())
         ```
     """
     targets, _ = _normalize(target)
-    _call(
-        _native.codesign_remove_signature,
+    await _acall(
+        _native.codesign_remove_signature_async,
         targets,
         per_target=per_target,
         bundle_version=bundle_version,
@@ -232,7 +146,7 @@ def remove_signature(
 
 
 @overload
-def sign(
+async def sign(
     target: StrPath,
     identity: str,
     *,
@@ -264,10 +178,8 @@ def sign(
     detached_database: bool = False,
     file_list: StrPath | None = None,
 ) -> None: ...
-
-
 @overload
-def sign(
+async def sign(
     target: Sequence[StrPath],
     identity: str,
     *,
@@ -299,9 +211,7 @@ def sign(
     detached_database: bool = False,
     file_list: StrPath | None = None,
 ) -> None: ...
-
-
-def sign(
+async def sign(
     target: StrPath | Sequence[StrPath],
     identity: str,
     *,
@@ -340,6 +250,12 @@ def sign(
 
     Sign the nested code first, then the bundle that seals it. This replaces the
     deprecated `deep`.
+
+    This is the awaitable form of `codesign.sign`: the same arguments, result and
+    exceptions. It works with asyncio only. Errors in the arguments, such as a
+    `TypeError` for a bad target, are raised when you `await` it, not when you call it.
+    Cancelling the awaiting task raises `asyncio.CancelledError`, but a `codesign` that
+    has already started runs to the end, so the targets may still change.
 
     Args:
         target: The path to sign, or a sequence of paths.
@@ -454,19 +370,30 @@ def sign(
         CodesignNotFoundError: No `codesign` was found on `PATH`.
         CodesignError: `codesign` couldn't start or was killed (`SpawnError`,
             `RunError`, `TerminatedError`), or printed output that couldn't be read.
+        asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
+            already started still runs to the end.
 
     Example:
         ```python
+        import asyncio
         from signers import codesign
 
-        identity = "Apple Development: Jane Doe (A1B2C3D4E5)"
-        codesign.sign("MyApp.app/Contents/Frameworks/Engine.framework", identity)
-        codesign.sign("MyApp.app", identity, entitlements="MyApp.entitlements")
+
+        async def main():
+            identity = "Apple Development: Jane Doe (A1B2C3D4E5)"
+            engine = "MyApp.app/Contents/Frameworks/Engine.framework"
+            await codesign.aio.sign(engine, identity)
+            await codesign.aio.sign(
+                "MyApp.app", identity, entitlements="MyApp.entitlements"
+            )
+
+
+        asyncio.run(main())
         ```
     """
     targets, _ = _normalize(target)
-    _call(
-        _native.codesign_sign,
+    await _acall(
+        _native.codesign_sign_async,
         targets,
         identity,
         _sign_options(
@@ -502,7 +429,7 @@ def sign(
 
 
 @overload
-def sign_adhoc(
+async def sign_adhoc(
     target: StrPath,
     *,
     per_target: bool | None = None,
@@ -533,10 +460,8 @@ def sign_adhoc(
     detached_database: bool = False,
     file_list: StrPath | None = None,
 ) -> None: ...
-
-
 @overload
-def sign_adhoc(
+async def sign_adhoc(
     target: Sequence[StrPath],
     *,
     per_target: bool | None = None,
@@ -567,9 +492,7 @@ def sign_adhoc(
     detached_database: bool = False,
     file_list: StrPath | None = None,
 ) -> None: ...
-
-
-def sign_adhoc(
+async def sign_adhoc(
     target: StrPath | Sequence[StrPath],
     *,
     per_target: bool | None = None,
@@ -607,6 +530,12 @@ def sign_adhoc(
 
     Signing an already signed target fails with "is already signed" unless you set
     `force`. A signature added by the linker doesn't need `force`.
+
+    This is the awaitable form of `codesign.sign_adhoc`: the same arguments, result and
+    exceptions. It works with asyncio only. Errors in the arguments, such as a
+    `TypeError` for a bad target, are raised when you `await` it, not when you call it.
+    Cancelling the awaiting task raises `asyncio.CancelledError`, but a `codesign` that
+    has already started runs to the end, so the targets may still change.
 
     Args:
         target: The path to sign, or a sequence of paths.
@@ -716,20 +645,32 @@ def sign_adhoc(
         CodesignNotFoundError: No `codesign` was found on `PATH`.
         CodesignError: `codesign` couldn't start or was killed (`SpawnError`,
             `RunError`, `TerminatedError`), or printed output that couldn't be read.
+        asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
+            already started still runs to the end.
 
     Example:
         ```python
+        import asyncio
         from signers import codesign
 
-        # The patch broke the old signature; `force` replaces it.
-        codesign.sign_adhoc("patched.dylib", force=True)
 
-        codesign.sign_adhoc(["liba.dylib", "libb.dylib"], force=True)
+        async def main():
+            # The patch broke the old signature; `force` replaces it.
+            await codesign.aio.sign_adhoc("patched.dylib", force=True)
+
+            # Independent targets can be signed at the same time.
+            await asyncio.gather(
+                codesign.aio.sign_adhoc("liba.dylib", force=True),
+                codesign.aio.sign_adhoc("libb.dylib", force=True),
+            )
+
+
+        asyncio.run(main())
         ```
     """
     targets, _ = _normalize(target)
-    _call(
-        _native.codesign_sign_adhoc,
+    await _acall(
+        _native.codesign_sign_adhoc_async,
         targets,
         _sign_options(
             identifier=identifier,
@@ -764,7 +705,7 @@ def sign_adhoc(
 
 
 @overload
-def sign_for_distribution(
+async def sign_for_distribution(
     target: StrPath,
     identity: str,
     *,
@@ -796,10 +737,8 @@ def sign_for_distribution(
     detached_database: bool = False,
     file_list: StrPath | None = None,
 ) -> None: ...
-
-
 @overload
-def sign_for_distribution(
+async def sign_for_distribution(
     target: Sequence[StrPath],
     identity: str,
     *,
@@ -831,9 +770,7 @@ def sign_for_distribution(
     detached_database: bool = False,
     file_list: StrPath | None = None,
 ) -> None: ...
-
-
-def sign_for_distribution(
+async def sign_for_distribution(
     target: StrPath | Sequence[StrPath],
     identity: str,
     *,
@@ -874,6 +811,12 @@ def sign_for_distribution(
 
     Signing an already signed target fails with "is already signed" unless you set
     `force`. A signature added by the linker doesn't need `force`.
+
+    This is the awaitable form of `codesign.sign_for_distribution`: the same arguments,
+    result and exceptions. It works with asyncio only. Errors in the arguments, such as
+    a `TypeError` for a bad target, are raised when you `await` it, not when you call
+    it. Cancelling the awaiting task raises `asyncio.CancelledError`, but a `codesign`
+    that has already started runs to the end, so the targets may still change.
 
     Args:
         target: The path to sign, or a sequence of paths.
@@ -986,22 +929,30 @@ def sign_for_distribution(
         CodesignNotFoundError: No `codesign` was found on `PATH`.
         CodesignError: `codesign` couldn't start or was killed (`SpawnError`,
             `RunError`, `TerminatedError`), or printed output that couldn't be read.
+        asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
+            already started still runs to the end.
 
     Example:
         ```python
+        import asyncio
         from signers import codesign
 
-        codesign.sign_for_distribution(
-            "MyApp.app",
-            "Developer ID Application: Jane Doe (A1B2C3D4E5)",
-            entitlements="MyApp.entitlements",
-            options=codesign.SigningFlags.RUNTIME | codesign.SigningFlags.LIBRARY,
-        )
+
+        async def main():
+            await codesign.aio.sign_for_distribution(
+                "MyApp.app",
+                "Developer ID Application: Jane Doe (A1B2C3D4E5)",
+                entitlements="MyApp.entitlements",
+                options=codesign.SigningFlags.RUNTIME | codesign.SigningFlags.LIBRARY,
+            )
+
+
+        asyncio.run(main())
         ```
     """
     targets, _ = _normalize(target)
-    _call(
-        _native.codesign_sign_for_distribution,
+    await _acall(
+        _native.codesign_sign_for_distribution_async,
         targets,
         identity,
         _sign_options(
@@ -1037,7 +988,7 @@ def sign_for_distribution(
 
 
 @overload
-def verify(
+async def verify(
     target: StrPath,
     *,
     per_target: bool | None = None,
@@ -1054,7 +1005,7 @@ def verify(
     signature_slot: SignatureSlot | None = None,
 ) -> None: ...
 @overload
-def verify(
+async def verify(
     target: Sequence[StrPath],
     *,
     per_target: bool | None = None,
@@ -1070,7 +1021,7 @@ def verify(
     check_notarization: bool = False,
     signature_slot: SignatureSlot | None = None,
 ) -> None: ...
-def verify(
+async def verify(
     target: StrPath | Sequence[StrPath],
     *,
     per_target: bool | None = None,
@@ -1095,6 +1046,12 @@ def verify(
     Given a sequence, each target is verified on its own by default, so one call reports
     every target that failed, as `BatchError`. `per_target=False` runs one `codesign`
     instead, which stops at the first target it rejects.
+
+    This is the awaitable form of `codesign.verify`: the same arguments, result and
+    exceptions. It works with asyncio only. Errors in the arguments, such as a
+    `TypeError` for a bad target, are raised when you `await` it, not when you call it.
+    Cancelling the awaiting task raises `asyncio.CancelledError`, but a `codesign` that
+    has already started runs to the end.
 
     Args:
         target: The path to check, or a sequence of paths.
@@ -1157,24 +1114,32 @@ def verify(
         CodesignNotFoundError: No `codesign` was found on `PATH`.
         CodesignError: `codesign` couldn't start or was killed (`SpawnError`,
             `RunError`, `TerminatedError`).
+        asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
+            already started still runs to the end.
 
     Example:
         ```python
+        import asyncio
         from signers import codesign
 
-        codesign.verify("MyApp.app", deep=True)
 
-        # Tell a broken signature from a requirement that isn't met.
-        try:
-            codesign.verify("mytool", test_requirement="anchor apple")
-            print("signed by Apple")
-        except codesign.RequirementUnsatisfiedError:
-            print("validly signed, but not by Apple")
+        async def main():
+            await codesign.aio.verify("MyApp.app", deep=True)
+
+            # Tell a broken signature from a requirement that isn't met.
+            try:
+                await codesign.aio.verify("mytool", test_requirement="anchor apple")
+                print("signed by Apple")
+            except codesign.RequirementUnsatisfiedError:
+                print("validly signed, but not by Apple")
+
+
+        asyncio.run(main())
         ```
     """
     targets, _ = _normalize(target)
-    _call(
-        _native.codesign_verify,
+    await _acall(
+        _native.codesign_verify_async,
         targets,
         _verify_options(
             deep=deep,
@@ -1194,12 +1159,14 @@ def verify(
 
 
 @overload
-def validate_constraint(plist: StrPath, *, per_target: bool | None = None) -> None: ...
+async def validate_constraint(
+    plist: StrPath, *, per_target: bool | None = None
+) -> None: ...
 @overload
-def validate_constraint(
+async def validate_constraint(
     plist: Sequence[StrPath], *, per_target: bool | None = None
 ) -> None: ...
-def validate_constraint(
+async def validate_constraint(
     plist: StrPath | Sequence[StrPath], *, per_target: bool | None = None
 ) -> None:
     """Checks that each plist is a valid launch or library constraint.
@@ -1213,6 +1180,12 @@ def validate_constraint(
     instead. Then the first plist `codesign` can't read stops the run, and the plists
     after it go unchecked. The rejections of the plists before it can't be told apart:
     the whole run fails with one `ConstraintInvalidError`.
+
+    This is the awaitable form of `codesign.validate_constraint`: the same arguments,
+    result and exceptions. It works with asyncio only. Errors in the arguments, such as
+    a `TypeError` for a bad target, are raised when you `await` it, not when you call
+    it. Cancelling the awaiting task raises `asyncio.CancelledError`, but a `codesign`
+    that has already started runs to the end.
 
     Args:
         plist: The constraint plist, or a sequence of plists.
@@ -1237,27 +1210,37 @@ def validate_constraint(
         CodesignNotFoundError: No `codesign` was found on `PATH`.
         CodesignError: `codesign` couldn't start or was killed (`SpawnError`,
             `RunError`, `TerminatedError`).
+        asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
+            already started still runs to the end.
 
     Example:
         ```python
+        import asyncio
         from signers import codesign
 
-        codesign.validate_constraint("launch-constraint.plist")
 
-        try:
-            codesign.validate_constraint(["launch.plist", "library.plist"])
-        except codesign.BatchError as error:
-            for path, failure in error.failures:
-                print(f"{path}: {failure}")
+        async def main():
+            await codesign.aio.validate_constraint("launch-constraint.plist")
+
+            plists = ["launch.plist", "library.plist"]
+            try:
+                await codesign.aio.validate_constraint(plists)
+            except codesign.BatchError as error:
+                for path, failure in error.failures:
+                    print(f"{path}: {failure}")
+
+
+        asyncio.run(main())
         ```
     """
     targets, _ = _normalize(plist)
-    _call(_native.codesign_validate_constraint, targets, per_target=per_target)
+    await _acall(
+        _native.codesign_validate_constraint_async, targets, per_target=per_target
+    )
 
 
-# A str is also a Sequence[str]; the first overload wins, as intended.
 @overload
-def display(  # pyright: ignore[reportOverlappingOverload]
+async def display(  # pyright: ignore[reportOverlappingOverload]
     target: StrPath,
     *,
     per_target: bool | None = None,
@@ -1268,7 +1251,7 @@ def display(  # pyright: ignore[reportOverlappingOverload]
     detached: StrPath | None = None,
 ) -> Signature: ...
 @overload
-def display(
+async def display(
     target: Sequence[StrPath],
     *,
     per_target: bool | None = None,
@@ -1278,7 +1261,7 @@ def display(
     signature_slot: SignatureSlot | None = None,
     detached: StrPath | None = None,
 ) -> list[Signature]: ...
-def display(
+async def display(
     target: StrPath | Sequence[StrPath],
     *,
     per_target: bool | None = None,
@@ -1299,6 +1282,12 @@ def display(
     every target that failed, as `BatchError`. The signatures of the targets that did
     read are dropped with it. `per_target=False` runs one `codesign` instead: it stops
     at the first target it rejects, and the entitlements of every target stay `None`.
+
+    This is the awaitable form of `codesign.display`: the same arguments, result and
+    exceptions. It works with asyncio only. Errors in the arguments, such as a
+    `TypeError` for a bad target, are raised when you `await` it, not when you call it.
+    Cancelling the awaiting task raises `asyncio.CancelledError`, but a `codesign` that
+    has already started runs to the end.
 
     Args:
         target: The path to read, or a sequence of paths.
@@ -1341,28 +1330,32 @@ def display(
         CodesignNotFoundError: No `codesign` was found on `PATH`.
         CodesignError: `codesign` couldn't start or was killed (`SpawnError`,
             `RunError`, `TerminatedError`).
+        asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
+            already started still runs to the end.
 
     Example:
         ```python
+        import asyncio
         from signers import codesign
 
-        signature = codesign.display("MyApp.app")
-        print(signature.identifier, signature.cd_hash)
-        if signature.signature is None:
-            print("signed ad hoc")
-        if codesign.SigningFlags.RUNTIME in signature.code_directory.flags:
-            print("hardened runtime")
 
-        # The entitlements are a plain dict, or None if the target has none.
-        entitlements = codesign.display("mytool").entitlements or {}
-        print(entitlements.get("com.apple.security.get-task-allow", False))
+        async def main():
+            signature = await codesign.aio.display("MyApp.app")
+            print(signature.identifier, signature.cd_hash)
 
-        ls, cat = codesign.display(["/bin/ls", "/bin/cat"])
+            # The entitlements are a plain dict, or None if the target has none.
+            entitlements = (await codesign.aio.display("mytool")).entitlements or {}
+            print(entitlements.get("com.apple.security.get-task-allow", False))
+
+            ls, cat = await codesign.aio.display(["/bin/ls", "/bin/cat"])
+
+
+        asyncio.run(main())
         ```
     """
     targets, single = _normalize(target)
-    native = _call(
-        _native.codesign_display,
+    native = await _acall(
+        _native.codesign_display_async,
         targets,
         _display_options(
             architecture=architecture,
@@ -1377,10 +1370,10 @@ def display(
 
 
 @overload
-def requirements(target: StrPath) -> list[Requirement]: ...  # pyright: ignore[reportOverlappingOverload]
+async def requirements(target: StrPath) -> list[Requirement]: ...  # pyright: ignore[reportOverlappingOverload]
 @overload
-def requirements(target: Sequence[StrPath]) -> list[list[Requirement]]: ...
-def requirements(
+async def requirements(target: Sequence[StrPath]) -> list[list[Requirement]]: ...
+async def requirements(
     target: StrPath | Sequence[StrPath],
 ) -> list[Requirement] | list[list[Requirement]]:
     """Reads the requirements of the signature of the target (`--display -r-`).
@@ -1396,6 +1389,12 @@ def requirements(
     requirements per target. `codesign` prints the requirements of all targets together,
     with nothing to tell which target a line belongs to, so this action always runs one
     `codesign` per target and has no `per_target`.
+
+    This is the awaitable form of `codesign.requirements`: the same arguments, result
+    and exceptions. It works with asyncio only. Errors in the arguments, such as a
+    `TypeError` for a bad target, are raised when you `await` it, not when you call it.
+    Cancelling the awaiting task raises `asyncio.CancelledError`, but a `codesign` that
+    has already started runs to the end.
 
     Args:
         target: The path to read, or a sequence of paths.
@@ -1416,34 +1415,40 @@ def requirements(
         CodesignNotFoundError: No `codesign` was found on `PATH`.
         CodesignError: `codesign` couldn't start or was killed (`SpawnError`,
             `RunError`, `TerminatedError`).
+        asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
+            already started still runs to the end.
 
     Example:
         ```python
+        import asyncio
         from signers import codesign
 
-        for requirement in codesign.requirements("MyApp.app"):
-            if requirement.kind is codesign.RequirementKind.DESIGNATED:
-                print(requirement.expression)
 
-        # Tell the requirements a signature carries from the system's defaults.
-        ls, cat = codesign.requirements(["/bin/ls", "/bin/cat"])
-        embedded = [r for r in ls + cat if not r.implicit]
+        async def main():
+            for requirement in await codesign.aio.requirements("MyApp.app"):
+                if requirement.kind is codesign.RequirementKind.DESIGNATED:
+                    print(requirement.expression)
+
+            ls, cat = await codesign.aio.requirements(["/bin/ls", "/bin/cat"])
+
+
+        asyncio.run(main())
         ```
     """
     targets, single = _normalize(target)
-    native = _call(_native.codesign_requirements, targets)
+    native = await _acall(_native.codesign_requirements_async, targets)
     return _requirements(native, single)
 
 
 @overload
-def extract_certificates(  # pyright: ignore[reportOverlappingOverload]
+async def extract_certificates(  # pyright: ignore[reportOverlappingOverload]
     target: StrPath, *, save_to: StrPath | None = None
 ) -> list[Certificate]: ...
 @overload
-def extract_certificates(
+async def extract_certificates(
     target: Sequence[StrPath], *, save_to: StrPath | None = None
 ) -> list[list[Certificate]]: ...
-def extract_certificates(
+async def extract_certificates(
     target: StrPath | Sequence[StrPath], *, save_to: StrPath | None = None
 ) -> list[Certificate] | list[list[Certificate]]:
     """Reads the certificate chain that signed the target, leaf first.
@@ -1456,6 +1461,12 @@ def extract_certificates(
     failed is reported together as `BatchError`. One `codesign` over several targets
     would write every chain to the same files, so this action always runs one per target
     and has no `per_target`.
+
+    This is the awaitable form of `codesign.extract_certificates`: the same arguments,
+    result and exceptions. It works with asyncio only. Errors in the arguments, such as
+    a `TypeError` for a bad target, are raised when you `await` it, not when you call
+    it. Cancelling the awaiting task raises `asyncio.CancelledError`, but a `codesign`
+    that has already started runs to the end, so its files may still be written.
 
     Args:
         target: The path to read, or a sequence of paths.
@@ -1487,23 +1498,32 @@ def extract_certificates(
         CodesignNotFoundError: No `codesign` was found on `PATH`.
         CodesignError: `codesign` couldn't start or was killed (`SpawnError`,
             `RunError`, `TerminatedError`).
+        asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
+            already started still runs to the end.
 
     Example:
         ```python
+        import asyncio
         from signers import codesign
 
-        chain = codesign.extract_certificates("MyApp.app")
-        if chain:
-            print(f"signed with a certificate of {len(chain[0].der)} bytes")
-        else:
-            print("signed ad hoc")
 
-        # Save the chains of two apps as PEM files in certs/.
-        a, b = codesign.extract_certificates(["A.app", "B.app"], save_to="certs")
+        async def main():
+            chain = await codesign.aio.extract_certificates("MyApp.app")
+            if chain:
+                print(f"signed with a certificate of {len(chain[0].der)} bytes")
+            else:
+                print("signed ad hoc")
+
+            # Save the chains of two apps as PEM files in certs/.
+            apps = ["A.app", "B.app"]
+            a, b = await codesign.aio.extract_certificates(apps, save_to="certs")
+
+
+        asyncio.run(main())
         ```
     """
     targets, single = _normalize(target)
-    native = _call(
-        _native.codesign_extract_certificates, targets, save_to=_path(save_to)
+    native = await _acall(
+        _native.codesign_extract_certificates_async, targets, save_to=_path(save_to)
     )
     return _certificates(native, single)
