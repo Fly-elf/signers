@@ -30,6 +30,19 @@ class SignOptions(TypedDict):
     detached_database: bool
     file_list: str | None
 
+class VerifyOptions(TypedDict):
+    deep: bool
+    strict: str | None
+    ignore_resources: bool
+    architecture: str | None
+    bundle_version: str | None
+    check_designated_requirement: bool
+    test_requirement: str | None
+    test_requirement_file: str | None
+    detached: str | None
+    check_notarization: bool
+    signature_slot: str | None
+
 def codesign_remove_signature(
     target: str | list[str],
     *,
@@ -53,6 +66,17 @@ def codesign_sign_for_distribution(
     target: str | list[str],
     identity: str,
     options: SignOptions,
+    *,
+    per_target: bool | None = None,
+) -> None: ...
+def codesign_verify(
+    target: str | list[str],
+    options: VerifyOptions,
+    *,
+    per_target: bool | None = None,
+) -> None: ...
+def codesign_validate_constraint(
+    target: str | list[str],
     *,
     per_target: bool | None = None,
 ) -> None: ...
