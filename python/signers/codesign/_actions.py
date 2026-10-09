@@ -1,3 +1,4 @@
+# pyright: reportPrivateUsage=false
 import os
 from collections.abc import Sequence
 from enum import Flag
@@ -7,6 +8,7 @@ from .. import _native
 from .._errors import _call
 from .._targets import StrPath, _normalize
 from ._options import PreserveMetadata, SignatureSlot, SigningFlags, Strict, Timestamp
+from ._types import Signature
 
 
 def _path(path: StrPath | None) -> str | None:
@@ -546,3 +548,54 @@ def validate_constraint(
 ) -> None:
     targets, _ = _normalize(plist)
     _call(_native.codesign_validate_constraint, targets, per_target=per_target)
+
+
+# A str is also a Sequence[str]; the first overload wins, as intended.
+@overload
+def display(  # pyright: ignore[reportOverlappingOverload]
+    target: StrPath,
+    *,
+    per_target: bool | None = None,
+    architecture: str | None = None,
+    bundle_version: str | None = None,
+    deep: bool = False,
+    signature_slot: SignatureSlot | None = None,
+    detached: StrPath | None = None,
+) -> Signature: ...
+@overload
+def display(
+    target: Sequence[StrPath],
+    *,
+    per_target: bool | None = None,
+    architecture: str | None = None,
+    bundle_version: str | None = None,
+    deep: bool = False,
+    signature_slot: SignatureSlot | None = None,
+    detached: StrPath | None = None,
+) -> list[Signature]: ...
+def display(
+    target: StrPath | Sequence[StrPath],
+    *,
+    per_target: bool | None = None,
+    architecture: str | None = None,
+    bundle_version: str | None = None,
+    deep: bool = False,
+    signature_slot: SignatureSlot | None = None,
+    detached: StrPath | None = None,
+) -> Signature | list[Signature]:
+    targets, single = _normalize(target)
+    native = _call(
+        _native.codesign_display,
+        targets,
+        {
+            "architecture": architecture,
+            "bundle_version": bundle_version,
+            "deep": deep,
+            "signature_slot": None if signature_slot is None else signature_slot.name,
+            "detached": _path(detached),
+        },
+        per_target=per_target,
+    )
+    if single:
+        return Signature._from_native(native)
+    return [Signature._from_native(d) for d in native]
