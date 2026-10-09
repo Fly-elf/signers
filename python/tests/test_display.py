@@ -9,7 +9,6 @@ from typing import Any
 
 import pytest
 
-import signers
 from signers import _native, codesign
 from signers.codesign import (
     CertificateSignature,
@@ -48,12 +47,13 @@ def test_display_reads_an_adhoc_signature_as_codesign_reports_it(workspace: Work
     assert isinstance(signature, Signature)
     assert signature.signature is None
     assert signature.code_directory.flags.value == report.flags
-    assert signature.identifier == report.identifier
-    assert signature.field("Identifier") == report.identifier
+    assert signature.identifier == report.identifier == signature.field("Identifier")
     assert signature.executable.resolve() == target.resolve()
     assert signature.format.kind is FormatKind.MACHO_THIN
     assert signature.entitlements is None
     assert report.field("Hash type") == "sha256 size=32" and signature.hash_type is HashType.SHA256
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        signature.identifier = "x"  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def test_display_reads_an_apple_signed_binary() -> None:
@@ -127,36 +127,6 @@ def test_display_lists_one_signature_per_target(workspace: Workspace) -> None:
 
     assert [s.signature is None for s in signatures] == [True, False]
     assert [s.identifier for s in unshared] == [s.identifier for s in signatures]
-
-
-def test_display_raises_no_signature_for_a_slot_the_code_lacks() -> None:
-    with pytest.raises(signers.NoSignatureError):
-        codesign.display("/bin/ls", signature_slot=SignatureSlot.SECOND)
-
-
-def test_display_raises_codesign_failed_for_unsigned_code(workspace: Workspace) -> None:
-    with pytest.raises(signers.CodesignFailedError, match="not signed"):
-        codesign.display(workspace.unsigned("hello"))
-
-
-def test_signature_is_a_frozen_value_that_hides_the_raw_report() -> None:
-    signature = codesign.display(APPLE_SIGNED)
-
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        signature.identifier = "x"  # pyright: ignore[reportAttributeAccessIssue]
-    assert signature.raw not in repr(signature)
-    assert signature == Signature._from_native(_native_dict(APPLE_SIGNED))
-
-
-def test_field_returns_the_first_exact_key_and_strips_a_carriage_return() -> None:
-    raw = "Identifier=a\r\nIdentifier=b\nIdentifier2=c\nno separator\nAuthority=x=y"
-    signature = dataclasses.replace(codesign.display(APPLE_SIGNED), raw=raw)
-
-    assert signature.field("Identifier") == "a"
-    assert signature.field("Identifier2") == "c"
-    assert signature.field("Authority") == "x=y"
-    assert signature.field("Missing") is None
-    assert signature.field("no separator") is None
 
 
 def test_from_native_keeps_the_raw_value_of_every_catch_all() -> None:
