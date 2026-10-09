@@ -1,7 +1,10 @@
 use std::path::PathBuf;
 
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use signers::codesign::{PreserveMetadata, SigningFlags, Timestamp, blocking};
+use signers::codesign::{
+    PreserveMetadata, SignatureSlot, SigningFlags, Strict, Timestamp, blocking,
+};
 
 use crate::error;
 use crate::target::Target;
@@ -125,12 +128,12 @@ fn configure<S>(mut b: blocking::Sign<S>, a: SignArgs) -> blocking::Sign<S> {
     b
 }
 
-macro_rules! run_sign {
-    ($py:ident, $target:ident, $per_target:ident, $args:ident, $t:ident => $start:expr) => {
+macro_rules! run_with {
+    ($py:ident, $target:ident, $per_target:ident, $args:ident, $configure:ident, $t:ident => $start:expr) => {
         match $target {
-            Target::One($t) => $py.detach(|| configure($start, $args).run()),
+            Target::One($t) => $py.detach(|| $configure($start, $args).run()),
             Target::Many($t) => $py.detach(|| {
-                let b = configure($start, $args);
+                let b = $configure($start, $args);
                 match $per_target {
                     Some(p) => b.per_target(p).run(),
                     None => b.run(),
@@ -151,7 +154,7 @@ pub(crate) fn codesign_sign(
     options: SignArgs,
     per_target: Option<bool>,
 ) -> PyResult<()> {
-    run_sign!(py, target, per_target, options, t => blocking::sign(t, identity))
+    run_with!(py, target, per_target, options, configure, t => blocking::sign(t, identity))
 }
 
 #[pyfunction]
@@ -162,7 +165,7 @@ pub(crate) fn codesign_sign_adhoc(
     options: SignArgs,
     per_target: Option<bool>,
 ) -> PyResult<()> {
-    run_sign!(py, target, per_target, options, t => blocking::sign_adhoc(t))
+    run_with!(py, target, per_target, options, configure, t => blocking::sign_adhoc(t))
 }
 
 #[pyfunction]
@@ -174,5 +177,110 @@ pub(crate) fn codesign_sign_for_distribution(
     options: SignArgs,
     per_target: Option<bool>,
 ) -> PyResult<()> {
-    run_sign!(py, target, per_target, options, t => blocking::sign_for_distribution(t, identity))
+    run_with!(py, target, per_target, options, configure, t => blocking::sign_for_distribution(t, identity))
+}
+
+#[derive(FromPyObject)]
+#[pyo3(from_item_all)]
+pub(crate) struct VerifyArgs {
+    deep: bool,
+    strict: Option<String>,
+    ignore_resources: bool,
+    architecture: Option<String>,
+    bundle_version: Option<String>,
+    check_designated_requirement: bool,
+    test_requirement: Option<String>,
+    test_requirement_file: Option<PathBuf>,
+    detached: Option<PathBuf>,
+    check_notarization: bool,
+    signature_slot: Option<String>,
+}
+
+fn configure_verify<S>(mut b: blocking::Verify<S>, a: VerifyArgs) -> PyResult<blocking::Verify<S>> {
+    macro_rules! set {
+        ($($f:ident),*) => {$(if let Some(v) = a.$f { b = b.$f(v); })*};
+    }
+    macro_rules! flag {
+        ($($f:ident),*) => {$(if a.$f { b = b.$f(true); })*};
+    }
+
+    set!(
+        architecture,
+        bundle_version,
+        test_requirement,
+        test_requirement_file,
+        detached
+    );
+    flag!(
+        deep,
+        ignore_resources,
+        check_designated_requirement,
+        check_notarization
+    );
+    if let Some(name) = a.strict {
+        b = b.strict(match name.as_str() {
+            "ALL" => Strict::All,
+            "SYMLINKS" => Strict::Symlinks,
+            "SIDEBAND" => Strict::Sideband,
+            _ => return Err(PyValueError::new_err(format!("unknown Strict: {name}"))),
+        });
+    }
+    if let Some(name) = a.signature_slot {
+        b = b.signature_slot(match name.as_str() {
+            "FIRST" => SignatureSlot::First,
+            "SECOND" => SignatureSlot::Second,
+            _ => {
+                return Err(PyValueError::new_err(format!(
+                    "unknown SignatureSlot: {name}"
+                )));
+            }
+        });
+    }
+    Ok(b)
+}
+
+#[pyfunction]
+#[pyo3(signature = (target, options, *, per_target = None))]
+pub(crate) fn codesign_verify(
+    py: Python<'_>,
+    target: Target,
+    options: VerifyArgs,
+    per_target: Option<bool>,
+) -> PyResult<()> {
+    match target {
+        Target::One(path) => {
+            let b = configure_verify(blocking::verify(path), options)?;
+            py.detach(|| b.run())
+        }
+        Target::Many(paths) => {
+            let b = configure_verify(blocking::verify(paths), options)?;
+            py.detach(|| match per_target {
+                Some(p) => b.per_target(p).run(),
+                None => b.run(),
+            })
+            .map(drop)
+        }
+    }
+    .map_err(error::to_py)
+}
+
+#[pyfunction]
+#[pyo3(signature = (target, *, per_target = None))]
+pub(crate) fn codesign_validate_constraint(
+    py: Python<'_>,
+    target: Target,
+    per_target: Option<bool>,
+) -> PyResult<()> {
+    match target {
+        Target::One(path) => py.detach(|| blocking::validate_constraint(path).run()),
+        Target::Many(paths) => py.detach(|| {
+            let b = blocking::validate_constraint(paths);
+            match per_target {
+                Some(p) => b.per_target(p).run(),
+                None => b.run(),
+            }
+            .map(drop)
+        }),
+    }
+    .map_err(error::to_py)
 }
