@@ -47,13 +47,13 @@ class SignersError(Exception):
 
     Example:
         ```python
-        from signers import SignersError, TargetNotFoundError, codesign
+        from signers import codesign
 
         try:
             codesign.sign_adhoc("mytool", force=True)
-        except TargetNotFoundError as error:
+        except codesign.TargetNotFoundError as error:
             print(f"no such file: {error.path}")
-        except SignersError as error:
+        except codesign.SignersError as error:
             print(error)
         ```
     """
@@ -191,11 +191,11 @@ class BatchError(SignersError):
 
     Example:
         ```python
-        from signers import BatchError, codesign
+        from signers import codesign
 
         try:
             codesign.verify(["A.app", "B.app"], deep=True)
-        except BatchError as error:
+        except codesign.BatchError as error:
             for path, failure in error.failures:
                 print(f"{path}: {failure}")
         ```
@@ -357,13 +357,13 @@ class VerificationFailedError(CodesignError):
 
     Example:
         ```python
-        from signers import Change, VerificationFailedError, codesign
+        from signers import codesign
 
         try:
             codesign.verify("MyApp.app", check_designated_requirement=True)
-        except VerificationFailedError as error:
+        except codesign.VerificationFailedError as error:
             for resource in error.resources:
-                if resource.change is Change.MODIFIED:
+                if resource.change is codesign.Change.MODIFIED:
                     print(f"tampered: {resource.path}")
         ```
 

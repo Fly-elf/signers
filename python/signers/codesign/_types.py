@@ -151,10 +151,9 @@ class Constraints(Flag, boundary=FlagBoundary.KEEP):
     Example:
         ```python
         from signers import codesign
-        from signers.codesign import Constraints
 
         signature = codesign.display("MyApp.app")
-        if Constraints.LAUNCH_SELF in signature.constraints:
+        if codesign.Constraints.LAUNCH_SELF in signature.constraints:
             print("constrained at launch")
         ```
     """
@@ -453,12 +452,11 @@ class Signature:
     Example:
         ```python
         from signers import codesign
-        from signers.codesign import SigningFlags
 
         signature = codesign.display("MyApp.app")
 
         print(signature.identifier, signature.cd_hash)
-        if SigningFlags.RUNTIME in signature.code_directory.flags:
+        if codesign.SigningFlags.RUNTIME in signature.code_directory.flags:
             print("hardened runtime")
         if signature.signature is not None:
             print(f"signed through {len(signature.signature.authorities)} certificates")

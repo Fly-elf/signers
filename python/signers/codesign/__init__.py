@@ -62,6 +62,9 @@ So far no target has been touched. Then `codesign` runs:
 `per_target` is ignored for a single path, which always runs one `codesign`.
 `requirements` and `extract_certificates` have no `per_target`: they always run one
 `codesign` per target.
+
+The exceptions and the other public types are also available here, the same classes
+as in `signers`: `codesign.BatchError`, `codesign.SigningFlags`, `codesign.Change`...
 """
 
 from ._actions import (
@@ -74,6 +77,30 @@ from ._actions import (
     sign_for_distribution,
     validate_constraint,
     verify,
+)
+from .._errors import (
+    BatchError,
+    Change,
+    CodesignError,
+    CodesignFailedError,
+    CodesignNotFoundError,
+    ConstraintInvalidError,
+    EmptyTargetError,
+    IoError,
+    NoSignatureError,
+    NoTargetsError,
+    RequirementUnsatisfiedError,
+    ResourceChange,
+    RunError,
+    SharedOutputPerTargetError,
+    SignersError,
+    SpawnError,
+    StdioPathError,
+    TargetAccessError,
+    TargetNotFoundError,
+    TerminatedError,
+    UnexpectedOutputError,
+    VerificationFailedError,
 )
 from ._options import PreserveMetadata, SignatureSlot, SigningFlags, Strict, Timestamp
 from ._types import (
@@ -99,30 +126,52 @@ from ._types import (
 )
 
 __all__ = [
+    "BatchError",
     "CdHash",
     "Certificate",
     "CertificateSignature",
+    "Change",
     "CmsDigest",
     "CodeDirectory",
     "CodeHashes",
+    "CodesignError",
+    "CodesignFailedError",
+    "CodesignNotFoundError",
+    "ConstraintInvalidError",
     "Constraints",
+    "EmptyTargetError",
     "ExecutableSegment",
     "Format",
     "FormatKind",
     "HashType",
+    "IoError",
     "Location",
+    "NoSignatureError",
+    "NoTargetsError",
     "OsVersion",
     "Platform",
     "PreserveMetadata",
     "Requirement",
     "RequirementKind",
+    "RequirementUnsatisfiedError",
     "RequirementsSummary",
+    "ResourceChange",
+    "RunError",
     "SealedResources",
+    "SharedOutputPerTargetError",
     "Signature",
     "SignatureSlot",
+    "SignersError",
     "SigningFlags",
+    "SpawnError",
+    "StdioPathError",
     "Strict",
+    "TargetAccessError",
+    "TargetNotFoundError",
+    "TerminatedError",
     "Timestamp",
+    "UnexpectedOutputError",
+    "VerificationFailedError",
     "display",
     "extract_certificates",
     "remove_signature",
