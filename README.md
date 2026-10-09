@@ -109,8 +109,27 @@ except codesign.BatchError as error:
 ```
 
 Actions that sign, remove or check return `None`; `per_target` is ignored for a single path. Calls
-block until `codesign` finishes (there is no async API in Python), and the package is typed, so
-options and results complete in the IDE and show up in `help()`.
+block until `codesign` finishes, and the package is typed, so options and results complete in the
+IDE and show up in `help()`.
+
+For asyncio, `codesign.aio` has the same actions as awaitables:
+
+```python
+import asyncio
+from signers import codesign
+
+async def main():
+    ls, cat = await asyncio.gather(
+        codesign.aio.display("/bin/ls"),
+        codesign.aio.display("/bin/cat"),
+    )
+    print(ls.identifier, cat.identifier)
+
+asyncio.run(main())
+```
+
+Cancelling an awaiting task raises `CancelledError`, but a `codesign` that already started runs to
+the end.
 
 ## Requirements
 
@@ -151,7 +170,7 @@ Early development: the API may still change.
 - [x] `codesign` backend, blocking: the same actions, behind the `blocking` feature
 - [ ] `rcodesign` backend: native, through the [`apple-codesign`](https://crates.io/crates/apple-codesign)
       crate, on any OS
-- [x] Python bindings: `codesign` backend, sync
+- [x] Python bindings: `codesign` backend, sync and asyncio (`codesign.aio`)
 
 ## License
 
