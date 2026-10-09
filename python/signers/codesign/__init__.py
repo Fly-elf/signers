@@ -1,6 +1,8 @@
 from ._actions import (
     display,
+    extract_certificates,
     remove_signature,
+    requirements,
     sign,
     sign_adhoc,
     sign_for_distribution,
@@ -10,6 +12,7 @@ from ._actions import (
 from ._options import PreserveMetadata, SignatureSlot, SigningFlags, Strict, Timestamp
 from ._types import (
     CdHash,
+    Certificate,
     CertificateSignature,
     CmsDigest,
     CodeDirectory,
@@ -22,6 +25,8 @@ from ._types import (
     Location,
     OsVersion,
     Platform,
+    Requirement,
+    RequirementKind,
     RequirementsSummary,
     SealedResources,
     Signature,
@@ -29,6 +34,7 @@ from ._types import (
 
 __all__ = [
     "CdHash",
+    "Certificate",
     "CertificateSignature",
     "CmsDigest",
     "CodeDirectory",
@@ -42,6 +48,8 @@ __all__ = [
     "OsVersion",
     "Platform",
     "PreserveMetadata",
+    "Requirement",
+    "RequirementKind",
     "RequirementsSummary",
     "SealedResources",
     "Signature",
@@ -50,7 +58,9 @@ __all__ = [
     "Strict",
     "Timestamp",
     "display",
+    "extract_certificates",
     "remove_signature",
+    "requirements",
     "sign",
     "sign_adhoc",
     "sign_for_distribution",
