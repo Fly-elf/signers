@@ -1,6 +1,6 @@
 # signers
 
-Sign, re-sign, strip, verify and inspect code signatures on macOS, from async or blocking Rust.
+Sign, re-sign, strip, verify and inspect code signatures on macOS, from async or blocking Rust, or from Python.
 
 `signers` runs Apple's `codesign` tool. Each action is a function that returns a typed builder, which
 offers only the options `codesign` honours for that action. Nothing runs until you `.await` it, or call
@@ -85,10 +85,38 @@ Each `.run()` builds a single-threaded Tokio runtime for the call and drops it b
 caller needs none, and `per_target` still runs concurrently. Calling `.run()` inside a Tokio runtime
 panics: async code uses the functions of `signers::codesign`.
 
+## Python
+
+The same actions are available from Python, with options as keyword arguments:
+
+```python
+from signers import codesign
+
+# Re-sign after patching, then seal the hardened runtime into an app's signature.
+codesign.sign_adhoc("patched.dylib", force=True)
+codesign.sign("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)",
+              options=codesign.SigningFlags.RUNTIME)
+
+# One path gives one value, a sequence gives a list, even with a single element.
+signature = codesign.display("/bin/ls")
+signatures = codesign.display(["/bin/ls", "/bin/cat"])
+
+try:
+    codesign.verify(["a.app", "b.app"], deep=True)
+except codesign.BatchError as error:
+    for path, failure in error.failures:
+        print(f"{path}: {failure}")
+```
+
+Actions that sign, remove or check return `None`; `per_target` is ignored for a single path. Calls
+block until `codesign` finishes (there is no async API in Python), and the package is typed, so
+options and results complete in the IDE and show up in `help()`.
+
 ## Requirements
 
 - macOS, which ships `codesign`.
 - For the async API, a Tokio runtime with I/O enabled, such as `#[tokio::main]`.
+- For the Python bindings, Python 3.11 or later.
 
 ## Installation
 
@@ -107,6 +135,13 @@ The `blocking` feature adds the blocking API, alongside the async one, and Tokio
 signers = { git = "https://github.com/Fly-elf/signers", features = ["blocking"] }
 ```
 
+For Python, install from the Git repository. It builds from source, so it needs a Rust toolchain
+(`cargo`); it is not on PyPI yet:
+
+```sh
+pip install git+https://github.com/Fly-elf/signers
+```
+
 ## Status
 
 Early development: the API may still change.
@@ -116,7 +151,7 @@ Early development: the API may still change.
 - [x] `codesign` backend, blocking: the same actions, behind the `blocking` feature
 - [ ] `rcodesign` backend: native, through the [`apple-codesign`](https://crates.io/crates/apple-codesign)
       crate, on any OS
-- [ ] Python bindings
+- [x] Python bindings: `codesign` backend, sync
 
 ## License
 
