@@ -2,13 +2,16 @@
 import os
 from collections.abc import Sequence
 from enum import Flag
-from typing import overload
+from typing import TYPE_CHECKING, Any, overload
 
 from .. import _native
 from .._errors import _call
 from .._targets import StrPath, _normalize
 from ._options import PreserveMetadata, SignatureSlot, SigningFlags, Strict, Timestamp
 from ._types import Certificate, Requirement, Signature
+
+if TYPE_CHECKING:
+    from .._native import DisplayOptions, SignOptions, VerifyOptions
 
 
 def _path(path: StrPath | None) -> str | None:
@@ -21,6 +24,137 @@ def _bits(flags: Flag | None) -> int | None:
 
 def _timestamp(timestamp: Timestamp | str | None) -> str | None:
     return timestamp.name if isinstance(timestamp, Timestamp) else timestamp
+
+
+def _sign_options(
+    *,
+    identifier: str | None,
+    requirements: str | None,
+    prefix: str | None,
+    keychain: StrPath | None,
+    entitlements: StrPath | None,
+    force_library_entitlements: bool,
+    generate_entitlement_der: bool,
+    options: SigningFlags | None,
+    runtime_version: str | None,
+    launch_constraint_self: StrPath | None,
+    launch_constraint_parent: StrPath | None,
+    launch_constraint_responsible: StrPath | None,
+    library_constraint: StrPath | None,
+    enforce_constraint_validity: bool,
+    force: bool,
+    deep: bool,
+    preserve_metadata: PreserveMetadata | None,
+    page_size: int | None,
+    timestamp: Timestamp | str | None,
+    bundle_version: str | None,
+    strip_disallowed_xattrs: bool,
+    single_threaded_signing: bool,
+    dry_run: bool,
+    detached: StrPath | None,
+    detached_database: bool,
+    file_list: StrPath | None,
+) -> "SignOptions":
+    return {
+        "identifier": identifier,
+        "requirements": requirements,
+        "prefix": prefix,
+        "keychain": _path(keychain),
+        "entitlements": _path(entitlements),
+        "force_library_entitlements": force_library_entitlements,
+        "generate_entitlement_der": generate_entitlement_der,
+        "options": _bits(options),
+        "runtime_version": runtime_version,
+        "launch_constraint_self": _path(launch_constraint_self),
+        "launch_constraint_parent": _path(launch_constraint_parent),
+        "launch_constraint_responsible": _path(launch_constraint_responsible),
+        "library_constraint": _path(library_constraint),
+        "enforce_constraint_validity": enforce_constraint_validity,
+        "force": force,
+        "deep": deep,
+        "preserve_metadata": _bits(preserve_metadata),
+        "page_size": page_size,
+        "timestamp": _timestamp(timestamp),
+        "bundle_version": bundle_version,
+        "strip_disallowed_xattrs": strip_disallowed_xattrs,
+        "single_threaded_signing": single_threaded_signing,
+        "dry_run": dry_run,
+        "detached": _path(detached),
+        "detached_database": detached_database,
+        "file_list": _path(file_list),
+    }
+
+
+def _verify_options(
+    *,
+    deep: bool,
+    strict: Strict | None,
+    ignore_resources: bool,
+    architecture: str | None,
+    bundle_version: str | None,
+    check_designated_requirement: bool,
+    test_requirement: str | None,
+    test_requirement_file: StrPath | None,
+    detached: StrPath | None,
+    check_notarization: bool,
+    signature_slot: SignatureSlot | None,
+) -> "VerifyOptions":
+    if test_requirement is not None and test_requirement_file is not None:
+        raise TypeError(
+            "test_requirement and test_requirement_file are mutually exclusive"
+        )
+    return {
+        "deep": deep,
+        "strict": None if strict is None else strict.name,
+        "ignore_resources": ignore_resources,
+        "architecture": architecture,
+        "bundle_version": bundle_version,
+        "check_designated_requirement": check_designated_requirement,
+        "test_requirement": test_requirement,
+        "test_requirement_file": _path(test_requirement_file),
+        "detached": _path(detached),
+        "check_notarization": check_notarization,
+        "signature_slot": None if signature_slot is None else signature_slot.name,
+    }
+
+
+def _display_options(
+    *,
+    architecture: str | None,
+    bundle_version: str | None,
+    deep: bool,
+    signature_slot: SignatureSlot | None,
+    detached: StrPath | None,
+) -> "DisplayOptions":
+    return {
+        "architecture": architecture,
+        "bundle_version": bundle_version,
+        "deep": deep,
+        "signature_slot": None if signature_slot is None else signature_slot.name,
+        "detached": _path(detached),
+    }
+
+
+def _signatures(native: Any, single: bool) -> Signature | list[Signature]:
+    if single:
+        return Signature._from_native(native)
+    return [Signature._from_native(d) for d in native]
+
+
+def _requirements(
+    native: Any, single: bool
+) -> list[Requirement] | list[list[Requirement]]:
+    if single:
+        return [Requirement._from_native(d) for d in native]
+    return [[Requirement._from_native(d) for d in chain] for chain in native]
+
+
+def _certificates(
+    native: Any, single: bool
+) -> list[Certificate] | list[list[Certificate]]:
+    if single:
+        return [Certificate(der) for der in native]
+    return [[Certificate(der) for der in chain] for chain in native]
 
 
 @overload
@@ -130,6 +264,7 @@ def sign(
     detached_database: bool = False,
     file_list: StrPath | None = None,
 ) -> None: ...
+
 
 @overload
 def sign(
@@ -334,34 +469,34 @@ def sign(
         _native.codesign_sign,
         targets,
         identity,
-        {
-            "identifier": identifier,
-            "requirements": requirements,
-            "prefix": prefix,
-            "keychain": _path(keychain),
-            "entitlements": _path(entitlements),
-            "force_library_entitlements": force_library_entitlements,
-            "generate_entitlement_der": generate_entitlement_der,
-            "options": _bits(options),
-            "runtime_version": runtime_version,
-            "launch_constraint_self": _path(launch_constraint_self),
-            "launch_constraint_parent": _path(launch_constraint_parent),
-            "launch_constraint_responsible": _path(launch_constraint_responsible),
-            "library_constraint": _path(library_constraint),
-            "enforce_constraint_validity": enforce_constraint_validity,
-            "force": force,
-            "deep": deep,
-            "preserve_metadata": _bits(preserve_metadata),
-            "page_size": page_size,
-            "timestamp": _timestamp(timestamp),
-            "bundle_version": bundle_version,
-            "strip_disallowed_xattrs": strip_disallowed_xattrs,
-            "single_threaded_signing": single_threaded_signing,
-            "dry_run": dry_run,
-            "detached": _path(detached),
-            "detached_database": detached_database,
-            "file_list": _path(file_list),
-        },
+        _sign_options(
+            identifier=identifier,
+            requirements=requirements,
+            prefix=prefix,
+            keychain=keychain,
+            entitlements=entitlements,
+            force_library_entitlements=force_library_entitlements,
+            generate_entitlement_der=generate_entitlement_der,
+            options=options,
+            runtime_version=runtime_version,
+            launch_constraint_self=launch_constraint_self,
+            launch_constraint_parent=launch_constraint_parent,
+            launch_constraint_responsible=launch_constraint_responsible,
+            library_constraint=library_constraint,
+            enforce_constraint_validity=enforce_constraint_validity,
+            force=force,
+            deep=deep,
+            preserve_metadata=preserve_metadata,
+            page_size=page_size,
+            timestamp=timestamp,
+            bundle_version=bundle_version,
+            strip_disallowed_xattrs=strip_disallowed_xattrs,
+            single_threaded_signing=single_threaded_signing,
+            dry_run=dry_run,
+            detached=detached,
+            detached_database=detached_database,
+            file_list=file_list,
+        ),
         per_target=per_target,
     )
 
@@ -398,6 +533,7 @@ def sign_adhoc(
     detached_database: bool = False,
     file_list: StrPath | None = None,
 ) -> None: ...
+
 
 @overload
 def sign_adhoc(
@@ -595,34 +731,34 @@ def sign_adhoc(
     _call(
         _native.codesign_sign_adhoc,
         targets,
-        {
-            "identifier": identifier,
-            "requirements": requirements,
-            "prefix": prefix,
-            "keychain": _path(keychain),
-            "entitlements": _path(entitlements),
-            "force_library_entitlements": force_library_entitlements,
-            "generate_entitlement_der": generate_entitlement_der,
-            "options": _bits(options),
-            "runtime_version": runtime_version,
-            "launch_constraint_self": _path(launch_constraint_self),
-            "launch_constraint_parent": _path(launch_constraint_parent),
-            "launch_constraint_responsible": _path(launch_constraint_responsible),
-            "library_constraint": _path(library_constraint),
-            "enforce_constraint_validity": enforce_constraint_validity,
-            "force": force,
-            "deep": deep,
-            "preserve_metadata": _bits(preserve_metadata),
-            "page_size": page_size,
-            "timestamp": _timestamp(timestamp),
-            "bundle_version": bundle_version,
-            "strip_disallowed_xattrs": strip_disallowed_xattrs,
-            "single_threaded_signing": single_threaded_signing,
-            "dry_run": dry_run,
-            "detached": _path(detached),
-            "detached_database": detached_database,
-            "file_list": _path(file_list),
-        },
+        _sign_options(
+            identifier=identifier,
+            requirements=requirements,
+            prefix=prefix,
+            keychain=keychain,
+            entitlements=entitlements,
+            force_library_entitlements=force_library_entitlements,
+            generate_entitlement_der=generate_entitlement_der,
+            options=options,
+            runtime_version=runtime_version,
+            launch_constraint_self=launch_constraint_self,
+            launch_constraint_parent=launch_constraint_parent,
+            launch_constraint_responsible=launch_constraint_responsible,
+            library_constraint=library_constraint,
+            enforce_constraint_validity=enforce_constraint_validity,
+            force=force,
+            deep=deep,
+            preserve_metadata=preserve_metadata,
+            page_size=page_size,
+            timestamp=timestamp,
+            bundle_version=bundle_version,
+            strip_disallowed_xattrs=strip_disallowed_xattrs,
+            single_threaded_signing=single_threaded_signing,
+            dry_run=dry_run,
+            detached=detached,
+            detached_database=detached_database,
+            file_list=file_list,
+        ),
         per_target=per_target,
     )
 
@@ -660,6 +796,7 @@ def sign_for_distribution(
     detached_database: bool = False,
     file_list: StrPath | None = None,
 ) -> None: ...
+
 
 @overload
 def sign_for_distribution(
@@ -867,34 +1004,34 @@ def sign_for_distribution(
         _native.codesign_sign_for_distribution,
         targets,
         identity,
-        {
-            "identifier": identifier,
-            "requirements": requirements,
-            "prefix": prefix,
-            "keychain": _path(keychain),
-            "entitlements": _path(entitlements),
-            "force_library_entitlements": force_library_entitlements,
-            "generate_entitlement_der": generate_entitlement_der,
-            "options": _bits(options),
-            "runtime_version": runtime_version,
-            "launch_constraint_self": _path(launch_constraint_self),
-            "launch_constraint_parent": _path(launch_constraint_parent),
-            "launch_constraint_responsible": _path(launch_constraint_responsible),
-            "library_constraint": _path(library_constraint),
-            "enforce_constraint_validity": enforce_constraint_validity,
-            "force": force,
-            "deep": deep,
-            "preserve_metadata": _bits(preserve_metadata),
-            "page_size": page_size,
-            "timestamp": _timestamp(timestamp),
-            "bundle_version": bundle_version,
-            "strip_disallowed_xattrs": strip_disallowed_xattrs,
-            "single_threaded_signing": single_threaded_signing,
-            "dry_run": dry_run,
-            "detached": _path(detached),
-            "detached_database": detached_database,
-            "file_list": _path(file_list),
-        },
+        _sign_options(
+            identifier=identifier,
+            requirements=requirements,
+            prefix=prefix,
+            keychain=keychain,
+            entitlements=entitlements,
+            force_library_entitlements=force_library_entitlements,
+            generate_entitlement_der=generate_entitlement_der,
+            options=options,
+            runtime_version=runtime_version,
+            launch_constraint_self=launch_constraint_self,
+            launch_constraint_parent=launch_constraint_parent,
+            launch_constraint_responsible=launch_constraint_responsible,
+            library_constraint=library_constraint,
+            enforce_constraint_validity=enforce_constraint_validity,
+            force=force,
+            deep=deep,
+            preserve_metadata=preserve_metadata,
+            page_size=page_size,
+            timestamp=timestamp,
+            bundle_version=bundle_version,
+            strip_disallowed_xattrs=strip_disallowed_xattrs,
+            single_threaded_signing=single_threaded_signing,
+            dry_run=dry_run,
+            detached=detached,
+            detached_database=detached_database,
+            file_list=file_list,
+        ),
         per_target=per_target,
     )
 
@@ -1035,27 +1172,23 @@ def verify(
             print("validly signed, but not by Apple")
         ```
     """
-    if test_requirement is not None and test_requirement_file is not None:
-        raise TypeError(
-            "test_requirement and test_requirement_file are mutually exclusive"
-        )
     targets, _ = _normalize(target)
     _call(
         _native.codesign_verify,
         targets,
-        {
-            "deep": deep,
-            "strict": None if strict is None else strict.name,
-            "ignore_resources": ignore_resources,
-            "architecture": architecture,
-            "bundle_version": bundle_version,
-            "check_designated_requirement": check_designated_requirement,
-            "test_requirement": test_requirement,
-            "test_requirement_file": _path(test_requirement_file),
-            "detached": _path(detached),
-            "check_notarization": check_notarization,
-            "signature_slot": None if signature_slot is None else signature_slot.name,
-        },
+        _verify_options(
+            deep=deep,
+            strict=strict,
+            ignore_resources=ignore_resources,
+            architecture=architecture,
+            bundle_version=bundle_version,
+            check_designated_requirement=check_designated_requirement,
+            test_requirement=test_requirement,
+            test_requirement_file=test_requirement_file,
+            detached=detached,
+            check_notarization=check_notarization,
+            signature_slot=signature_slot,
+        ),
         per_target=per_target,
     )
 
@@ -1231,18 +1364,16 @@ def display(
     native = _call(
         _native.codesign_display,
         targets,
-        {
-            "architecture": architecture,
-            "bundle_version": bundle_version,
-            "deep": deep,
-            "signature_slot": None if signature_slot is None else signature_slot.name,
-            "detached": _path(detached),
-        },
+        _display_options(
+            architecture=architecture,
+            bundle_version=bundle_version,
+            deep=deep,
+            signature_slot=signature_slot,
+            detached=detached,
+        ),
         per_target=per_target,
     )
-    if single:
-        return Signature._from_native(native)
-    return [Signature._from_native(d) for d in native]
+    return _signatures(native, single)
 
 
 @overload
@@ -1301,9 +1432,7 @@ def requirements(
     """
     targets, single = _normalize(target)
     native = _call(_native.codesign_requirements, targets)
-    if single:
-        return [Requirement._from_native(d) for d in native]
-    return [[Requirement._from_native(d) for d in chain] for chain in native]
+    return _requirements(native, single)
 
 
 @overload
@@ -1377,6 +1506,4 @@ def extract_certificates(
     native = _call(
         _native.codesign_extract_certificates, targets, save_to=_path(save_to)
     )
-    if single:
-        return [Certificate(der) for der in native]
-    return [[Certificate(der) for der in chain] for chain in native]
+    return _certificates(native, single)
