@@ -5,6 +5,7 @@ from typing import TypeAlias, cast
 __all__ = ["StrPath", "_normalize"]
 
 StrPath: TypeAlias = str | os.PathLike[str]
+"""A path: a `str` or any `os.PathLike[str]`, such as `pathlib.Path`."""
 
 
 def _normalize(
