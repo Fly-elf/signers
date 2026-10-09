@@ -6,7 +6,7 @@ from typing import overload
 from .. import _native
 from .._errors import _call
 from .._targets import StrPath, _normalize
-from ._options import PreserveMetadata, SigningFlags, Timestamp
+from ._options import PreserveMetadata, SignatureSlot, SigningFlags, Strict, Timestamp
 
 
 def _path(path: StrPath | None) -> str | None:
@@ -458,3 +458,91 @@ def sign_for_distribution(
         },
         per_target=per_target,
     )
+
+
+@overload
+def verify(
+    target: StrPath,
+    *,
+    per_target: bool | None = None,
+    deep: bool = False,
+    strict: Strict | None = None,
+    ignore_resources: bool = False,
+    architecture: str | None = None,
+    bundle_version: str | None = None,
+    check_designated_requirement: bool = False,
+    test_requirement: str | None = None,
+    test_requirement_file: StrPath | None = None,
+    detached: StrPath | None = None,
+    check_notarization: bool = False,
+    signature_slot: SignatureSlot | None = None,
+) -> None: ...
+@overload
+def verify(
+    target: Sequence[StrPath],
+    *,
+    per_target: bool | None = None,
+    deep: bool = False,
+    strict: Strict | None = None,
+    ignore_resources: bool = False,
+    architecture: str | None = None,
+    bundle_version: str | None = None,
+    check_designated_requirement: bool = False,
+    test_requirement: str | None = None,
+    test_requirement_file: StrPath | None = None,
+    detached: StrPath | None = None,
+    check_notarization: bool = False,
+    signature_slot: SignatureSlot | None = None,
+) -> None: ...
+def verify(
+    target: StrPath | Sequence[StrPath],
+    *,
+    per_target: bool | None = None,
+    deep: bool = False,
+    strict: Strict | None = None,
+    ignore_resources: bool = False,
+    architecture: str | None = None,
+    bundle_version: str | None = None,
+    check_designated_requirement: bool = False,
+    test_requirement: str | None = None,
+    test_requirement_file: StrPath | None = None,
+    detached: StrPath | None = None,
+    check_notarization: bool = False,
+    signature_slot: SignatureSlot | None = None,
+) -> None:
+    if test_requirement is not None and test_requirement_file is not None:
+        raise TypeError(
+            "test_requirement and test_requirement_file are mutually exclusive"
+        )
+    targets, _ = _normalize(target)
+    _call(
+        _native.codesign_verify,
+        targets,
+        {
+            "deep": deep,
+            "strict": None if strict is None else strict.name,
+            "ignore_resources": ignore_resources,
+            "architecture": architecture,
+            "bundle_version": bundle_version,
+            "check_designated_requirement": check_designated_requirement,
+            "test_requirement": test_requirement,
+            "test_requirement_file": _path(test_requirement_file),
+            "detached": _path(detached),
+            "check_notarization": check_notarization,
+            "signature_slot": None if signature_slot is None else signature_slot.name,
+        },
+        per_target=per_target,
+    )
+
+
+@overload
+def validate_constraint(plist: StrPath, *, per_target: bool | None = None) -> None: ...
+@overload
+def validate_constraint(
+    plist: Sequence[StrPath], *, per_target: bool | None = None
+) -> None: ...
+def validate_constraint(
+    plist: StrPath | Sequence[StrPath], *, per_target: bool | None = None
+) -> None:
+    targets, _ = _normalize(plist)
+    _call(_native.codesign_validate_constraint, targets, per_target=per_target)
