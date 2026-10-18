@@ -35,11 +35,10 @@ The `blocking` feature adds `signers::codesign::blocking`, alongside the async A
 cargo add signers --features blocking
 ```
 
-Python: 3.11 or later. The package is not on PyPI yet; installing from the repository builds it from source,
-so it needs a Rust toolchain (`cargo`).
+Python: 3.11 or later.
 
 ```sh
-pip install git+https://github.com/Fly-elf/signers
+pip install signers
 ```
 
 To build from a checkout, see [CONTRIBUTING.md](https://github.com/Fly-elf/signers/blob/main/CONTRIBUTING.md).
