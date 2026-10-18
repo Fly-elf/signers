@@ -57,11 +57,13 @@ compile_error!("signers currently supports only macOS");
 #[cfg(target_os = "macos")]
 pub mod codesign;
 #[cfg(target_os = "macos")]
+mod engine;
+#[cfg(target_os = "macos")]
 pub mod errors;
 #[cfg(target_os = "macos")]
 mod target;
 
 #[cfg(target_os = "macos")]
-pub use errors::{CodesignError, Error, Result};
+pub use errors::{CodesignError, Error, ProcessError, Result};
 #[cfg(target_os = "macos")]
 pub use target::IntoTargets;

@@ -11,9 +11,9 @@ use base64::engine::general_purpose::STANDARD;
 use tempfile::TempDir;
 
 use crate::codesign::Certificate;
-use crate::codesign::action::PushArgs;
 use crate::codesign::action::action;
-use crate::codesign::action::sealed::ToArgs;
+use crate::codesign::tool::Codesign;
+use crate::engine::{Operation, PushArgs};
 use crate::errors::{Error, Result};
 
 action! {
@@ -102,9 +102,10 @@ impl Options {
     }
 }
 
-impl ToArgs for Options {
+impl Operation for Options {
+    type Tool = Codesign;
     type Output = Vec<Certificate>;
-    const PER_TARGET: bool = true;
+    const BATCH: bool = true;
 
     fn validate(&self) -> Result<()> {
         let dir = TempDir::new().map_err(|source| Error::Io {
@@ -268,7 +269,7 @@ mod tests {
             fn check() {}
         }
         impl<T: ?Sized> AmbiguousIfShared<()> for T {}
-        impl<T: ?Sized + crate::codesign::action::sealed::SharedRun> AmbiguousIfShared<u8> for T {}
+        impl<T: ?Sized + crate::engine::SharedRun> AmbiguousIfShared<u8> for T {}
 
         <ExtractCertificates as AmbiguousIfShared<_>>::check();
     }

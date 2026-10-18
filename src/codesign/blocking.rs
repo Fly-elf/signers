@@ -25,19 +25,8 @@
 //! ```
 
 use super::actions::sign;
-use super::asynchronous::Async;
-use super::core::Core;
-use crate::codesign::action::sealed::ToArgs;
-use crate::errors::{CodesignError, Result};
-use crate::target::{IntoTargets, One, Shape};
-
-// Private so the marker stays unnameable: a `pub(crate)` type in the public alias is a privacy error.
-mod marker {
-    #[derive(Debug, Clone, Copy)]
-    pub struct Blocking;
-}
-
-pub(crate) use marker::Blocking;
+use crate::engine::Blocking;
+use crate::target::{IntoTargets, One};
 
 #[doc(no_inline)]
 pub use super::{
@@ -46,24 +35,6 @@ pub use super::{
     PreserveMetadata, Requirement, RequirementKind, RequirementsSummary, SealedResources,
     Signature, SignatureKind, SignatureSlot, SigningFlags, Strict, Timestamp,
 };
-
-impl<S> Core<S, Blocking>
-where
-    S: Shape,
-{
-    pub(super) fn run<O>(self, options: O) -> Result<S::Out<O::Output>>
-    where
-        O: ToArgs + Send + 'static,
-    {
-        // A runtime per call costs microseconds against the milliseconds of each `codesign`
-        // process, and leaves no global state or threads behind.
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .map_err(CodesignError::Spawn)?;
-        runtime.block_on(self.into_runtime::<Async>().run(options))
-    }
-}
 
 /// A blocking [`RemoveSignature`](super::RemoveSignature), started by `.run()`.
 pub type RemoveSignature<S = One> = super::RemoveSignature<S, Blocking>;
