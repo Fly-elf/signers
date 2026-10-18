@@ -147,7 +147,7 @@ def test_enforce_constraint_validity_reaches_codesign(workspace: Workspace) -> N
     tolerated, rejected = workspace.unsigned("tolerated"), workspace.unsigned("rejected")
 
     codesign.sign_adhoc(tolerated, launch_constraint_self=fixture("bad-constraint.plist"))
-    with pytest.raises(signers.CodesignFailedError) as raised:
+    with pytest.raises(signers.ProcessFailedError) as raised:
         codesign.sign_adhoc(
             rejected, launch_constraint_self=fixture("bad-constraint.plist"), enforce_constraint_validity=True
         )
@@ -181,7 +181,7 @@ def test_dry_run_and_detached_reach_codesign(workspace: Workspace) -> None:
 def test_detached_database_reaches_codesign(workspace: Workspace) -> None:
     target = workspace.unsigned("hello")
 
-    with pytest.raises(signers.CodesignFailedError) as raised:
+    with pytest.raises(signers.ProcessFailedError) as raised:
         codesign.sign_adhoc(target, detached_database=True)
 
     assert "cannot access a database" in raised.value.stderr

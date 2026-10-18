@@ -6,7 +6,7 @@ use std::fs;
 use signers::codesign::SignatureSlot;
 use signers::codesign::blocking::{display, sign_adhoc, verify};
 use signers::codesign::blocking::{extract_certificates, validate_constraint};
-use signers::{CodesignError, Error};
+use signers::{CodesignError, Error, ProcessError};
 
 use crate::support::fixture::{Workspace, fixture};
 use crate::support::inspect;
@@ -20,7 +20,12 @@ fn a_refused_target_is_a_failed_run_with_codesigns_diagnostics() {
     let error = sign_adhoc(&target).run().unwrap_err();
 
     match error {
-        Error::Codesign(CodesignError::Failed { code, stderr, .. }) => {
+        Error::Process(ProcessError::Failed {
+            program: "codesign",
+            code,
+            stderr,
+            ..
+        }) => {
             assert_eq!(code, 1);
             assert!(stderr.contains("is already signed"), "{stderr}");
         }

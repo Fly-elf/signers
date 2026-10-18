@@ -55,14 +55,16 @@ def test_invalid_targets_raise_type_error() -> None:
             codesign.remove_signature(target)  # pyright: ignore[reportArgumentType, reportCallIssue]
 
 
-def test_codesign_rejecting_a_target_raises_codesign_failed_error(workspace: Workspace) -> None:
+def test_codesign_rejecting_a_target_raises_process_failed_error(workspace: Workspace) -> None:
     rejected = workspace.plain_dir("plain")
 
-    with pytest.raises(signers.CodesignFailedError) as raised:
+    with pytest.raises(signers.ProcessFailedError) as raised:
         codesign.remove_signature(rejected)
 
     error = raised.value
-    assert isinstance(error, signers.CodesignError)
+    assert isinstance(error, signers.ProcessError)
+    assert not isinstance(error, signers.CodesignError)
+    assert error.program == "codesign"
     assert error.code == 1
     assert "bundle format unrecognized" in error.stderr
     assert isinstance(error.stdout, str)
@@ -82,7 +84,8 @@ def test_per_target_failures_come_back_in_a_batch_error_in_input_order(workspace
     assert [path for path, _ in failures] == [first, last]
     for path, error in failures:
         assert isinstance(path, Path)
-        assert isinstance(error, signers.CodesignFailedError)
+        assert isinstance(error, signers.ProcessFailedError)
+        assert error.program == "codesign"
         assert error.code == 1
         assert str(path) in str(raised.value)
 
@@ -104,10 +107,10 @@ def test_an_empty_path_raises_empty_target_error_with_its_index(workspace: Works
     assert isinstance(raised.value, ValueError)
 
 
-def test_a_missing_path_raises_target_not_found_error(tmp_path: Path) -> None:
+def test_a_missing_path_raises_path_not_found_error(tmp_path: Path) -> None:
     missing = tmp_path / "missing"
 
-    with pytest.raises(signers.TargetNotFoundError) as raised:
+    with pytest.raises(signers.PathNotFoundError) as raised:
         codesign.remove_signature(missing)
 
     error = raised.value
@@ -116,9 +119,10 @@ def test_a_missing_path_raises_target_not_found_error(tmp_path: Path) -> None:
     assert isinstance(error.path, Path)
     assert error.errno == errno.ENOENT
     assert error.filename == missing
+    assert str(error) == f"path does not exist: {missing}"
 
 
-def test_an_unreadable_parent_raises_target_access_error(tmp_path: Path) -> None:
+def test_an_unreadable_parent_raises_path_access_error(tmp_path: Path) -> None:
     if os.geteuid() == 0:
         pytest.skip("root ignores directory permissions")
     locked = tmp_path / "locked"
@@ -127,7 +131,7 @@ def test_an_unreadable_parent_raises_target_access_error(tmp_path: Path) -> None
     target.touch()
     locked.chmod(0)
     try:
-        with pytest.raises(signers.TargetAccessError) as raised:
+        with pytest.raises(signers.PathAccessError) as raised:
             codesign.remove_signature(target)
     finally:
         locked.chmod(0o755)
@@ -136,3 +140,81 @@ def test_an_unreadable_parent_raises_target_access_error(tmp_path: Path) -> None
     assert isinstance(error, OSError)
     assert error.path == target
     assert error.errno == errno.EACCES
+    assert str(error).startswith(f"could not access {target}: ")
+
+
+def _stand_in(workspace: Workspace, monkeypatch: pytest.MonkeyPatch, script: str | None, *, executable: bool = True) -> None:
+    """Puts a `codesign` made of `script` first on `PATH`; with `None`, an empty directory instead."""
+    bin_dir = workspace.join("bin")
+    bin_dir.mkdir()
+    if script is not None:
+        stand_in = bin_dir / "codesign"
+        stand_in.write_text(f"#!/bin/sh\n{script}\n")
+        stand_in.chmod(0o755 if executable else 0o644)
+    monkeypatch.setenv("PATH", str(bin_dir))
+
+
+def test_a_missing_codesign_raises_codesign_not_found_error(workspace: Workspace, monkeypatch: pytest.MonkeyPatch) -> None:
+    target = workspace.unsigned("hello")
+    _stand_in(workspace, monkeypatch, None)
+
+    with pytest.raises(signers.CodesignNotFoundError) as raised:
+        codesign.sign_adhoc(target)
+
+    error = raised.value
+    assert isinstance(error, signers.CodesignError)
+    assert not isinstance(error, signers.ProcessError)
+    assert isinstance(error, FileNotFoundError)
+    assert "/usr/bin" in str(error)
+
+
+def test_a_missing_codesign_stops_a_per_target_batch_alone(workspace: Workspace, monkeypatch: pytest.MonkeyPatch) -> None:
+    targets = [workspace.unsigned("a"), workspace.unsigned("b")]
+    _stand_in(workspace, monkeypatch, None)
+
+    with pytest.raises(signers.CodesignNotFoundError):
+        codesign.sign_adhoc(targets, per_target=True)
+
+
+def test_a_codesign_that_cannot_start_raises_spawn_error(workspace: Workspace, monkeypatch: pytest.MonkeyPatch) -> None:
+    targets = [workspace.unsigned("a"), workspace.unsigned("b")]
+    _stand_in(workspace, monkeypatch, "exit 0", executable=False)
+
+    for per_target in (False, True):
+        with pytest.raises(signers.SpawnError) as raised:
+            codesign.sign_adhoc(targets, per_target=per_target)
+
+        error = raised.value
+        assert isinstance(error, signers.ProcessError)
+        assert isinstance(error, OSError)
+        assert error.program == "codesign"
+        assert error.errno == errno.EACCES
+
+
+def test_a_codesign_killed_by_a_signal_raises_terminated_error(workspace: Workspace, monkeypatch: pytest.MonkeyPatch) -> None:
+    target = workspace.unsigned("hello")
+    _stand_in(workspace, monkeypatch, "echo partial; echo warning >&2; kill -9 $$")
+
+    with pytest.raises(signers.TerminatedError) as raised:
+        codesign.sign_adhoc(target)
+
+    error = raised.value
+    assert isinstance(error, signers.ProcessError)
+    assert error.program == "codesign"
+    assert error.signal == 9
+    assert error.stdout == "partial"
+    assert error.stderr == "warning"
+
+
+def test_an_unreadable_report_raises_unexpected_output_error(workspace: Workspace, monkeypatch: pytest.MonkeyPatch) -> None:
+    target = workspace.unsigned("hello")
+    _stand_in(workspace, monkeypatch, "exit 0")
+
+    with pytest.raises(signers.UnexpectedOutputError) as raised:
+        codesign.display(target)
+
+    error = raised.value
+    assert isinstance(error, signers.ProcessError)
+    assert error.program == "codesign"
+    assert error.detail
+    assert error.detail in str(error)

@@ -13,8 +13,8 @@ use std::future::IntoFuture;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
-use signers::codesign::{sign, verify};
-use signers::{CodesignError, Error};
+use signers::codesign::{display, sign, verify};
+use signers::{CodesignError, Error, ProcessError};
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect;
@@ -62,7 +62,8 @@ fn a_codesign_that_cannot_be_executed_is_a_spawn_failure() {
     };
 
     match result.unwrap_err() {
-        Error::Codesign(CodesignError::Spawn(source)) => {
+        Error::Process(ProcessError::Spawn { program, source }) => {
+            assert_eq!(program, "codesign");
             assert_eq!(source.kind(), std::io::ErrorKind::PermissionDenied)
         }
         other => panic!("expected Spawn, got {other:?}"),
@@ -87,7 +88,8 @@ fn a_codesign_killed_by_a_signal_is_reported_as_terminated() {
     };
 
     match result.unwrap_err() {
-        Error::Codesign(CodesignError::Terminated {
+        Error::Process(ProcessError::Terminated {
+            program: "codesign",
             status,
             stdout,
             stderr,
@@ -101,6 +103,30 @@ fn a_codesign_killed_by_a_signal_is_reported_as_terminated() {
             assert!(stderr.is_empty(), "the stand-in said something: {stderr}");
         }
         other => panic!("expected Terminated, got {other:?}"),
+    }
+}
+
+/// A `display` that exits 0 with no report is not a `codesign` verdict: it is the generic
+/// unreadable-output failure, charged to the program.
+#[test]
+fn a_report_short_of_the_targets_is_unexpected_output() {
+    let _serialised = crate::serialised();
+
+    let workspace = Workspace::new();
+    let target = workspace.write("target.bin", "irrelevant\n");
+    let bin = fake_codesign(&workspace, "exit 0");
+
+    let result = {
+        let _path = ScopedPath::to(&bin);
+        crate::runtime().block_on(display(&target).into_future())
+    };
+
+    match result.unwrap_err() {
+        Error::Process(ProcessError::UnexpectedOutput { program, detail }) => {
+            assert_eq!(program, "codesign");
+            assert!(!detail.is_empty(), "the error does not say what was wrong");
+        }
+        other => panic!("expected UnexpectedOutput, got {other:?}"),
     }
 }
 
@@ -119,7 +145,8 @@ fn a_silent_failure_still_reports_its_exit_code() {
 
     let error = result.unwrap_err();
     match &error {
-        Error::Codesign(CodesignError::Failed {
+        Error::Process(ProcessError::Failed {
+            program: "codesign",
             code,
             stdout,
             stderr,
@@ -160,7 +187,8 @@ fn a_failure_keeps_what_codesign_printed_on_both_streams() {
 
     let error = result.unwrap_err();
     match &error {
-        Error::Codesign(CodesignError::Failed {
+        Error::Process(ProcessError::Failed {
+            program: "codesign",
             code,
             stdout,
             stderr,
@@ -191,7 +219,12 @@ fn a_killed_codesign_keeps_what_it_printed_on_both_streams() {
     };
 
     match result.unwrap_err() {
-        Error::Codesign(CodesignError::Terminated { stdout, stderr, .. }) => {
+        Error::Process(ProcessError::Terminated {
+            program: "codesign",
+            stdout,
+            stderr,
+            ..
+        }) => {
             assert_eq!(stdout, "partial");
             assert_eq!(stderr, "warning");
         }
@@ -342,7 +375,12 @@ fn per_target_failures_keep_the_order_of_the_targets_not_of_the_exits() {
     assert_eq!(failed, targets.iter().collect::<Vec<_>>());
     for (path, error) in &failures {
         match error {
-            Error::Codesign(CodesignError::Failed { code, stderr, .. }) => {
+            Error::Process(ProcessError::Failed {
+                program: "codesign",
+                code,
+                stderr,
+                ..
+            }) => {
                 assert_eq!(*code, 4);
                 assert_eq!(*stderr, format!("refused {}", path.display()));
             }
@@ -382,7 +420,11 @@ fn a_per_target_process_killed_by_a_signal_is_charged_to_its_target() {
     };
     assert_eq!(*path, targets[1]);
     match error {
-        Error::Codesign(CodesignError::Terminated { status, .. }) => {
+        Error::Process(ProcessError::Terminated {
+            program: "codesign",
+            status,
+            ..
+        }) => {
             assert_eq!(
                 status.signal(),
                 Some(9),
@@ -539,7 +581,8 @@ fn a_codesign_that_cannot_be_executed_fails_a_per_target_batch_as_a_whole() {
     };
 
     match result.unwrap_err() {
-        Error::Codesign(CodesignError::Spawn(source)) => {
+        Error::Process(ProcessError::Spawn { program, source }) => {
+            assert_eq!(program, "codesign");
             assert_eq!(source.kind(), std::io::ErrorKind::PermissionDenied)
         }
         other => panic!("expected Spawn, got {other:?}"),

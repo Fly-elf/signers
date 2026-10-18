@@ -8,8 +8,8 @@
 use std::future::IntoFuture;
 use std::path::PathBuf;
 
-use signers::Error;
 use signers::codesign::sign;
+use signers::{Error, ProcessError};
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect::{self, Signature};
@@ -176,7 +176,13 @@ async fn a_single_failure_in_a_collection_is_still_a_batch() {
         };
         assert_eq!(*path, directory);
         assert!(
-            matches!(error, Error::Codesign(_)),
+            matches!(
+                error,
+                Error::Process(ProcessError::Failed {
+                    program: "codesign",
+                    ..
+                })
+            ),
             "the failure is not what codesign reported: {error:?}"
         );
     }

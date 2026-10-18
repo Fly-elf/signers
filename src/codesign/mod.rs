@@ -57,20 +57,27 @@
 //!    [`Error::SharedOutputPerTarget`](crate::Error::SharedOutputPerTarget);
 //! 3. that there is a target at all, else [`Error::NoTargets`](crate::Error::NoTargets);
 //! 4. that no target is an empty path, else [`Error::EmptyTarget`](crate::Error::EmptyTarget);
-//! 5. that every target exists, else [`Error::TargetNotFound`](crate::Error::TargetNotFound) or
-//!    [`Error::TargetAccess`](crate::Error::TargetAccess).
+//! 5. that every target exists, else [`Error::PathNotFound`](crate::Error::PathNotFound) or
+//!    [`Error::PathAccess`](crate::Error::PathAccess).
 //!
 //! So far no target has been touched. Then `codesign` runs:
 //!
 //! - once over all the targets, for a single target and by default for the actions that change
-//!   them ([`sign`] and its presets, [`remove_signature`]). Its failure comes as
-//!   [`Error::Codesign`](crate::Error::Codesign). It stops at the first target it rejects: the
-//!   targets before that one have already been changed, the ones after it haven't.
+//!   them ([`sign`] and its presets, [`remove_signature`]). It stops at the first target it
+//!   rejects: the targets before that one have already been changed, the ones after it haven't.
 //! - once per target, with [`per_target(true)`](Sign::per_target), which is the default for the
 //!   actions that only read them. Every target runs, and the failures come together as
 //!   [`Error::Batch`](crate::Error::Batch). If `codesign` can't start at all
 //!   ([`CodesignError::NotFound`](crate::CodesignError::NotFound),
-//!   [`CodesignError::Spawn`](crate::CodesignError::Spawn)), that error comes alone instead.
+//!   [`ProcessError::Spawn`](crate::ProcessError::Spawn)), that error comes alone instead.
+//!
+//! What `codesign` does wrong comes as [`Error::Process`](crate::Error::Process), a
+//! [`ProcessError`](crate::ProcessError) with `program` `"codesign"`: it couldn't start or be
+//! waited on, it exited non-zero ([`Failed`](crate::ProcessError::Failed)), a signal killed it,
+//! or its output couldn't be read. A missing executable is the exception: it is
+//! [`CodesignError::NotFound`](crate::CodesignError::NotFound), which adds a hint about
+//! `/usr/bin`. The other [`CodesignError`](crate::CodesignError) variants are the verdicts of
+//! [`verify`], [`validate_constraint`] and [`display`].
 //!
 //! # Panics
 //!

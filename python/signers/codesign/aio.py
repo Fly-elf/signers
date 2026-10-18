@@ -111,14 +111,14 @@ async def remove_signature(
         TypeError: `target` is neither a path nor a sequence of paths.
         NoTargetsError: `target` is an empty sequence.
         EmptyTargetError: A target is an empty path.
-        TargetNotFoundError: A target doesn't exist.
-        TargetAccessError: Whether a target exists couldn't be checked.
-        CodesignFailedError: `codesign` rejected a target. The targets before it have
+        PathNotFoundError: A target doesn't exist.
+        PathAccessError: Whether a target exists couldn't be checked.
+        ProcessFailedError: `codesign` rejected a target. The targets before it have
             already changed.
         BatchError: With `per_target=True`, every target that failed, each with its own
             error.
         CodesignNotFoundError: No `codesign` was found on `PATH`.
-        CodesignError: `codesign` couldn't start or was killed (`SpawnError`,
+        ProcessError: `codesign` couldn't start or was killed (`SpawnError`,
             `RunError`, `TerminatedError`), or printed output that couldn't be read.
         asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
             already started still runs to the end.
@@ -359,16 +359,16 @@ async def sign(
         TypeError: `target` is neither a path nor a sequence of paths.
         NoTargetsError: `target` is an empty sequence.
         EmptyTargetError: A target is an empty path.
-        TargetNotFoundError: A target doesn't exist.
-        TargetAccessError: Whether a target exists couldn't be checked.
+        PathNotFoundError: A target doesn't exist.
+        PathAccessError: Whether a target exists couldn't be checked.
         StdioPathError: `requirements` or `file_list` is `"-"`.
         SharedOutputPerTargetError: `per_target` is true with `detached` or `file_list`.
-        CodesignFailedError: `codesign` rejected a target. The targets before it have
+        ProcessFailedError: `codesign` rejected a target. The targets before it have
             already changed.
         BatchError: With `per_target=True`, every target that failed, each with its own
             error.
         CodesignNotFoundError: No `codesign` was found on `PATH`.
-        CodesignError: `codesign` couldn't start or was killed (`SpawnError`,
+        ProcessError: `codesign` couldn't start or was killed (`SpawnError`,
             `RunError`, `TerminatedError`), or printed output that couldn't be read.
         asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
             already started still runs to the end.
@@ -634,16 +634,16 @@ async def sign_adhoc(
         TypeError: `target` is neither a path nor a sequence of paths.
         NoTargetsError: `target` is an empty sequence.
         EmptyTargetError: A target is an empty path.
-        TargetNotFoundError: A target doesn't exist.
-        TargetAccessError: Whether a target exists couldn't be checked.
+        PathNotFoundError: A target doesn't exist.
+        PathAccessError: Whether a target exists couldn't be checked.
         StdioPathError: `requirements` or `file_list` is `"-"`.
         SharedOutputPerTargetError: `per_target` is true with `detached` or `file_list`.
-        CodesignFailedError: `codesign` rejected a target. The targets before it have
+        ProcessFailedError: `codesign` rejected a target. The targets before it have
             already changed.
         BatchError: With `per_target=True`, every target that failed, each with its own
             error.
         CodesignNotFoundError: No `codesign` was found on `PATH`.
-        CodesignError: `codesign` couldn't start or was killed (`SpawnError`,
+        ProcessError: `codesign` couldn't start or was killed (`SpawnError`,
             `RunError`, `TerminatedError`), or printed output that couldn't be read.
         asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
             already started still runs to the end.
@@ -918,16 +918,16 @@ async def sign_for_distribution(
         TypeError: `target` is neither a path nor a sequence of paths.
         NoTargetsError: `target` is an empty sequence.
         EmptyTargetError: A target is an empty path.
-        TargetNotFoundError: A target doesn't exist.
-        TargetAccessError: Whether a target exists couldn't be checked.
+        PathNotFoundError: A target doesn't exist.
+        PathAccessError: Whether a target exists couldn't be checked.
         StdioPathError: `requirements` or `file_list` is `"-"`.
         SharedOutputPerTargetError: `per_target` is true with `detached` or `file_list`.
-        CodesignFailedError: `codesign` rejected a target. The targets before it have
+        ProcessFailedError: `codesign` rejected a target. The targets before it have
             already changed.
         BatchError: With `per_target=True`, every target that failed, each with its own
             error.
         CodesignNotFoundError: No `codesign` was found on `PATH`.
-        CodesignError: `codesign` couldn't start or was killed (`SpawnError`,
+        ProcessError: `codesign` couldn't start or was killed (`SpawnError`,
             `RunError`, `TerminatedError`), or printed output that couldn't be read.
         asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
             already started still runs to the end.
@@ -1101,8 +1101,8 @@ async def verify(
         TypeError: `target` is neither a path nor a sequence of paths.
         NoTargetsError: `target` is an empty sequence.
         EmptyTargetError: A target is an empty path.
-        TargetNotFoundError: A target doesn't exist.
-        TargetAccessError: Whether a target exists couldn't be checked.
+        PathNotFoundError: A target doesn't exist.
+        PathAccessError: Whether a target exists couldn't be checked.
         TypeError: `test_requirement` and `test_requirement_file` were both given.
         StdioPathError: `test_requirement_file` is `"-"`.
         VerificationFailedError: The signature is invalid or modified, the target is
@@ -1112,7 +1112,7 @@ async def verify(
             `per_target=False`, the first target `codesign` rejects raises its own error
             instead.
         CodesignNotFoundError: No `codesign` was found on `PATH`.
-        CodesignError: `codesign` couldn't start or was killed (`SpawnError`,
+        ProcessError: `codesign` couldn't start or was killed (`SpawnError`,
             `RunError`, `TerminatedError`).
         asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
             already started still runs to the end.
@@ -1200,15 +1200,15 @@ async def validate_constraint(
         TypeError: `plist` is neither a path nor a sequence of paths.
         NoTargetsError: `plist` is an empty sequence.
         EmptyTargetError: A plist is an empty path.
-        TargetNotFoundError: A plist doesn't exist.
-        TargetAccessError: Whether a plist exists couldn't be checked.
+        PathNotFoundError: A plist doesn't exist.
+        PathAccessError: Whether a plist exists couldn't be checked.
         ConstraintInvalidError: A constraint has an unknown key or is empty.
-        CodesignFailedError: A plist isn't a dictionary (exit code 1).
+        ProcessFailedError: A plist isn't a dictionary (exit code 1).
         BatchError: Every target that failed, each with its own error. With
             `per_target=False`, the first target `codesign` rejects raises its own error
             instead.
         CodesignNotFoundError: No `codesign` was found on `PATH`.
-        CodesignError: `codesign` couldn't start or was killed (`SpawnError`,
+        ProcessError: `codesign` couldn't start or was killed (`SpawnError`,
             `RunError`, `TerminatedError`).
         asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
             already started still runs to the end.
@@ -1297,9 +1297,9 @@ async def display(
         architecture: Reads this slice of a universal binary, e.g. `"arm64"` or
             `"x86_64"`. Without it a universal binary is reported whole, as
             `FormatKind.MACHO_UNIVERSAL`. A slice the binary doesn't have fails with
-            `CodesignFailedError` (`--architecture`).
+            `ProcessFailedError` (`--architecture`).
         bundle_version: Reads this version of a versioned bundle instead of `Current`. A
-            version the bundle doesn't have fails with `CodesignFailedError`
+            version the bundle doesn't have fails with `ProcessFailedError`
             (`--bundle-version`).
         deep: Lists the code nested in a bundle, in `Signature.nested`. Only the items
             directly inside the bundle are listed, and their own signatures aren't read
@@ -1317,9 +1317,9 @@ async def display(
         TypeError: `target` is neither a path nor a sequence of paths.
         NoTargetsError: `target` is an empty sequence.
         EmptyTargetError: A target is an empty path.
-        TargetNotFoundError: A target doesn't exist.
-        TargetAccessError: Whether a target exists couldn't be checked.
-        CodesignFailedError: The target is unsigned (exit code 1). With one `codesign`
+        PathNotFoundError: A target doesn't exist.
+        PathAccessError: Whether a target exists couldn't be checked.
+        ProcessFailedError: The target is unsigned (exit code 1). With one `codesign`
             over several targets, `stderr` also holds the reports of the targets
             before it.
         NoSignatureError: The `signature_slot` holds no signature.
@@ -1328,7 +1328,7 @@ async def display(
             `per_target=False`, the first target `codesign` rejects raises its own error
             instead.
         CodesignNotFoundError: No `codesign` was found on `PATH`.
-        CodesignError: `codesign` couldn't start or was killed (`SpawnError`,
+        ProcessError: `codesign` couldn't start or was killed (`SpawnError`,
             `RunError`, `TerminatedError`).
         asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
             already started still runs to the end.
@@ -1407,13 +1407,13 @@ async def requirements(
         TypeError: `target` is neither a path nor a sequence of paths.
         NoTargetsError: `target` is an empty sequence.
         EmptyTargetError: A target is an empty path.
-        TargetNotFoundError: A target doesn't exist.
-        TargetAccessError: Whether a target exists couldn't be checked.
-        CodesignFailedError: The target is unsigned (exit code 1).
+        PathNotFoundError: A target doesn't exist.
+        PathAccessError: Whether a target exists couldn't be checked.
+        ProcessFailedError: The target is unsigned (exit code 1).
         UnexpectedOutputError: A line couldn't be read as a requirement.
         BatchError: With a sequence, every target that failed, each with its own error.
         CodesignNotFoundError: No `codesign` was found on `PATH`.
-        CodesignError: `codesign` couldn't start or was killed (`SpawnError`,
+        ProcessError: `codesign` couldn't start or was killed (`SpawnError`,
             `RunError`, `TerminatedError`).
         asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
             already started still runs to the end.
@@ -1489,14 +1489,14 @@ async def extract_certificates(
         TypeError: `target` is neither a path nor a sequence of paths.
         NoTargetsError: `target` is an empty sequence.
         EmptyTargetError: A target is an empty path.
-        TargetNotFoundError: A target doesn't exist.
-        TargetAccessError: Whether a target exists couldn't be checked.
+        PathNotFoundError: A target doesn't exist.
+        PathAccessError: Whether a target exists couldn't be checked.
         IoError: A file or directory couldn't be read or written, also when the system's
             temporary directory can't be used.
-        CodesignFailedError: The target is unsigned (exit code 1).
+        ProcessFailedError: The target is unsigned (exit code 1).
         BatchError: With a sequence, every target that failed, each with its own error.
         CodesignNotFoundError: No `codesign` was found on `PATH`.
-        CodesignError: `codesign` couldn't start or was killed (`SpawnError`,
+        ProcessError: `codesign` couldn't start or was killed (`SpawnError`,
             `RunError`, `TerminatedError`).
         asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
             already started still runs to the end.

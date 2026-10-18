@@ -64,7 +64,7 @@ fn a_missing_target_is_reported_by_every_action() {
 
     for error in errors {
         assert!(
-            matches!(&error, Error::TargetNotFound(path) if *path == missing),
+            matches!(&error, Error::PathNotFound(path) if *path == missing),
             "got {error:?}"
         );
     }
@@ -83,7 +83,7 @@ fn a_missing_target_aborts_the_whole_batch() {
             .run()
             .unwrap_err();
         assert!(
-            matches!(&error, Error::TargetNotFound(path) if *path == missing),
+            matches!(&error, Error::PathNotFound(path) if *path == missing),
             "per_target({per_target}): got {error:?}"
         );
     }
@@ -106,11 +106,11 @@ fn an_unreadable_parent_directory_is_an_access_error() {
 
     fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
     match error {
-        Error::TargetAccess { path, source } => {
+        Error::PathAccess { path, source } => {
             assert_eq!(path, target);
             assert_eq!(source.kind(), std::io::ErrorKind::PermissionDenied);
         }
-        other => panic!("expected TargetAccess, got {other:?}"),
+        other => panic!("expected PathAccess, got {other:?}"),
     }
 }
 
