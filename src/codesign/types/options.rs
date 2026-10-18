@@ -4,6 +4,7 @@ use bitflags::bitflags;
 ///
 /// Without it, `codesign` uses the slot the system prefers. The second slot exists only if the
 /// code carries two signatures. Pass it to [`verify`](crate::codesign::verify).
+/// Needs macOS 27 or later.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum SignatureSlot {

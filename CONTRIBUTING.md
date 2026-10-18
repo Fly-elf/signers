@@ -49,6 +49,7 @@ To run one group, pass only its `--cfg`.
   and `security`. The keychain stays off the search list and is deleted afterwards; your keychains are not
   touched.
 - `network`: reaches Apple's timestamp server.
+- `macos27`: needs the `codesign` of macOS 27 or later (`--signature-slot`, total and chosen signature lines).
 
 Changing `RUSTFLAGS` rebuilds all dependencies.
 
