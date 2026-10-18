@@ -137,7 +137,8 @@ class SignatureSlot(Enum):
     """Which of the two signatures of a code object to use (`--signature-slot`).
 
     Without it, `codesign` uses the slot the system prefers. The second slot exists only
-    if the code carries two signatures. Pass it to `verify` or `display`.
+    if the code carries two signatures. Pass it to `verify` or `display`. Needs macOS 27
+    or later.
     """
 
     FIRST = "FIRST"

@@ -107,11 +107,13 @@ pub struct Signature {
     pub internal_requirements: Option<RequirementsSummary>,
     /// The number of signatures in the code (`Total signatures`).
     ///
-    /// `None` when the report has no such line, as for code signed by the linker.
+    /// `None` when the report has no such line, as for code signed by the linker and on macOS
+    /// before 27.
     pub total_signatures: Option<u32>,
     /// The index of the signature this report describes (`Chosen signature`).
     ///
-    /// `None` when the report has no such line, as for code signed by the linker.
+    /// `None` when the report has no such line, as for code signed by the linker and on macOS
+    /// before 27.
     pub chosen_signature: Option<u32>,
     /// The code nested directly in a bundle, as `codesign` prints each path (`Nested`).
     ///
