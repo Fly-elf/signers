@@ -105,7 +105,7 @@ mod tests {
     fn args_of<S>(builder: &Requirements<S>) -> Vec<OsString> {
         builder
             .options
-            .to_args(&builder.core.targets)
+            .to_args(&builder.job.targets)
             .into_iter()
             .map(Cow::into_owned)
             .collect()
@@ -147,9 +147,9 @@ mod tests {
 
     #[test]
     fn collections_default_to_one_run_per_target() {
-        assert!(requirements(vec!["a", "b"]).core.per_target);
-        assert!(requirements(["a", "b"]).core.per_target);
-        assert!(!requirements("a").core.per_target);
+        assert!(requirements(vec!["a", "b"]).job.batch);
+        assert!(requirements(["a", "b"]).job.batch);
+        assert!(!requirements("a").job.batch);
     }
 
     #[test]
@@ -289,7 +289,7 @@ mod tests {
             fn check() {}
         }
         impl<T: ?Sized> AmbiguousIfShared<()> for T {}
-        impl<T: ?Sized + crate::codesign::action::sealed::SharedRun> AmbiguousIfShared<u8> for T {}
+        impl<T: ?Sized + crate::engine::SharedRun> AmbiguousIfShared<u8> for T {}
 
         <Requirements as AmbiguousIfShared<_>>::check();
     }

@@ -269,7 +269,7 @@ mod tests {
             fn check() {}
         }
         impl<T: ?Sized> AmbiguousIfShared<()> for T {}
-        impl<T: ?Sized + crate::codesign::action::sealed::SharedRun> AmbiguousIfShared<u8> for T {}
+        impl<T: ?Sized + crate::engine::SharedRun> AmbiguousIfShared<u8> for T {}
 
         <ExtractCertificates as AmbiguousIfShared<_>>::check();
     }

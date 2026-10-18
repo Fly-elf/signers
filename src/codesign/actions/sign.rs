@@ -389,7 +389,7 @@ mod tests {
     fn args_of<S>(builder: &Sign<S>) -> Vec<OsString> {
         builder
             .options
-            .to_args(&builder.core.targets)
+            .to_args(&builder.job.targets)
             .into_iter()
             .map(Cow::into_owned)
             .collect()
@@ -751,7 +751,7 @@ mod tests {
             .unwrap();
         assert_eq!(silent.len(), 3);
 
-        let noisy = action.output_bytes(&targets[..1], b"noise".to_vec(), vec![0xff, 0xfe]);
+        let noisy = action.output(&targets[..1], "noise".into(), "\u{FFFD}\u{FFFD}".into());
         assert_eq!(noisy.unwrap().len(), 1);
 
         let none = action.output(&[], "noise".into(), String::new());
@@ -762,23 +762,25 @@ mod tests {
     /// unless the caller asks otherwise.
     #[test]
     fn every_constructor_defaults_to_one_process_for_all_targets() {
-        assert!(!sign("app", "-").core.per_target);
-        assert!(!sign_adhoc(vec!["a.app", "b.app"]).core.per_target);
+        const { assert!(!Options::BATCH) };
+
+        assert!(!sign("app", "-").job.batch);
+        assert!(!sign_adhoc(vec!["a.app", "b.app"]).job.batch);
         assert!(
             !sign_for_distribution(["a.app", "b.app"], "Developer ID")
-                .core
-                .per_target
+                .job
+                .batch
         );
     }
 
     #[test]
     fn per_target_keeps_the_last_value_and_renders_no_argument() {
         let action = sign(vec!["app"], "-").per_target(true);
-        assert!(action.core.per_target);
+        assert!(action.job.batch);
         assert_eq!(args_of(&action), os(&["--sign", "-", "--", "app"]));
 
         let action = action.per_target(false);
-        assert!(!action.core.per_target);
+        assert!(!action.job.batch);
         assert_eq!(args_of(&action), os(&["--sign", "-", "--", "app"]));
     }
 

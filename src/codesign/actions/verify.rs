@@ -271,7 +271,7 @@ mod tests {
     fn args_of<S>(builder: &Verify<S>) -> Vec<OsString> {
         builder
             .options
-            .to_args(&builder.core.targets)
+            .to_args(&builder.job.targets)
             .into_iter()
             .map(Cow::into_owned)
             .collect()
@@ -623,7 +623,7 @@ mod tests {
                 .unwrap(),
             [(), (), ()]
         );
-        let noisy = action.output_bytes(&targets[..1], b"noise".to_vec(), vec![0xff, 0xfe]);
+        let noisy = action.output(&targets[..1], "noise".into(), "\u{FFFD}\u{FFFD}".into());
         assert_eq!(noisy.unwrap(), [()]);
         assert!(
             action
@@ -637,10 +637,10 @@ mod tests {
     /// unless the caller asks for one process.
     #[test]
     fn the_constructor_defaults_to_one_process_per_target_for_collections() {
-        assert!(verify(vec!["a.app", "b.app"]).core.per_target);
-        assert!(verify(["a.app", "b.app"]).core.per_target);
-        assert!(verify(&["a.app", "b.app"][..]).core.per_target);
-        assert!(!verify(vec!["a.app"]).per_target(false).core.per_target);
+        assert!(verify(vec!["a.app", "b.app"]).job.batch);
+        assert!(verify(["a.app", "b.app"]).job.batch);
+        assert!(verify(&["a.app", "b.app"][..]).job.batch);
+        assert!(!verify(vec!["a.app"]).per_target(false).job.batch);
     }
 
     #[test]
