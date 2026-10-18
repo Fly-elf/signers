@@ -43,13 +43,13 @@ pub enum Error {
     EmptyTarget(usize),
 
     /// This target doesn't exist.
-    #[error("target does not exist: {0}")]
-    TargetNotFound(PathBuf),
+    #[error("path does not exist: {0}")]
+    PathNotFound(PathBuf),
 
     /// Whether this target exists couldn't be checked, e.g. because a parent directory denies
     /// access.
-    #[error("could not access target {path}: {source}")]
-    TargetAccess {
+    #[error("could not access {path}: {source}")]
+    PathAccess {
         path: PathBuf,
         source: std::io::Error,
     },
