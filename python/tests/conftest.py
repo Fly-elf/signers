@@ -227,16 +227,21 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 class Identity:
     """A throwaway self-signed code-signing identity in a keychain of its own.
 
-    The keychain is off the search list, so `codesign` only finds the identity through
-    `keychain=`; the user's keychain is never touched.
+    `codesign` finds the identity through `keychain=`; the user's keychains are never touched.
+    The `codesign` of the macOS 26 CI runner did not, most likely because the keychain was off
+    the user's search list: only where a first signature fails is it added to the list, until
+    `delete()`.
     """
 
     _PASSWORD = "signers"
+    _FILE_NAME = "signers-test.keychain-db"
     _counter = itertools.count()
 
     def __init__(self, directory: Path) -> None:
         self.name = f"signers-test-{os.getpid()}-{next(self._counter)}"
-        self.keychain = directory / "signers-test.keychain-db"
+        self.keychain = directory / self._FILE_NAME
+        self._directory = directory
+        self._on_search_list = False
         config = directory / "cert.cnf"
         config.write_text(
             f"[req]\ndistinguished_name = dn\nx509_extensions = ext\nprompt = no\n"
@@ -257,9 +262,46 @@ class Identity:
                   "-T", CODESIGN)
         self._run("security", "set-key-partition-list", "-S", "apple-tool:,apple:,codesign:",
                   "-s", "-k", self._PASSWORD, self.keychain)
+        if self._sign_probe().returncode != 0:
+            # Canonical, as `security list-keychains` prints it.
+            self.keychain = self.keychain.resolve()
+            self._on_search_list = True
+            try:
+                self._set_search_list([*self._search_list(), self.keychain])
+                probe = self._sign_probe()
+                assert probe.returncode == 0, (
+                    "could not sign with the identity, even with its keychain on the search list: "
+                    f"{probe.stderr.strip()}"
+                )
+            except BaseException:
+                self.delete()
+                raise
 
     def delete(self) -> None:
+        if self._on_search_list:
+            try:
+                self._set_search_list([p for p in self._search_list() if p != self.keychain])
+            except subprocess.CalledProcessError:
+                pass
         subprocess.run(["security", "delete-keychain", self.keychain], capture_output=True)
+
+    def _sign_probe(self) -> subprocess.CompletedProcess[str]:
+        probe = self._directory / "probe"
+        probe.write_text("probe\n")
+        return codesign("--sign", self.name, "--force", "--keychain", self.keychain, "--", probe)
+
+    @classmethod
+    def _search_list(cls) -> list[Path]:
+        """The user's search list, less any throwaway keychain a killed run left behind."""
+        run = subprocess.run(["security", "list-keychains", "-d", "user"],
+                             capture_output=True, text=True, check=True)
+        listed = (Path(line.strip().strip('"')) for line in run.stdout.splitlines() if line.strip())
+        return [p for p in listed if not (p.name == cls._FILE_NAME and not p.exists())]
+
+    @staticmethod
+    def _set_search_list(keychains: list[Path]) -> None:
+        subprocess.run(["security", "list-keychains", "-d", "user", "-s", *keychains],
+                       capture_output=True)
 
     @staticmethod
     def _run(*args: str | os.PathLike[str]) -> None:
