@@ -3,6 +3,8 @@ from typing import Any, TypedDict
 
 class NativeError(Exception): ...
 
+def refresh_log_levels() -> None: ...
+
 class SignOptions(TypedDict):
     identifier: str | None
     requirements: str | None

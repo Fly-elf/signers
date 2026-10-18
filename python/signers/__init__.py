@@ -56,6 +56,7 @@ from ._errors import (
     UnexpectedOutputError,
     VerificationFailedError,
 )
+from ._logging import refresh_log_levels
 
 from . import codesign as codesign
 
@@ -87,4 +88,5 @@ __all__ = [
     "VerificationFailedError",
     "__version__",
     "codesign",
+    "refresh_log_levels",
 ]
