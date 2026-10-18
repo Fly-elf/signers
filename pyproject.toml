@@ -5,11 +5,11 @@ build-backend = "maturin"
 [project]
 name = "signers"
 dynamic = ["version"]
-description = "Typed Python API for macOS code signing via codesign"
+description = "Typed Python API over code signing tools, starting with macOS codesign"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT OR Apache-2.0"
-keywords = ["macos", "codesign", "code-signing", "apple-codesign"]
+keywords = ["codesign", "code-signing", "macos", "signing", "apple"]
 classifiers = [
     "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
