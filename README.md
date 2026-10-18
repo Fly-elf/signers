@@ -1,6 +1,6 @@
 # signers
 
-[![crates.io](https://img.shields.io/crates/v/signers.svg)](https://crates.io/crates/signers) [![docs.rs](https://img.shields.io/docsrs/signers)](https://docs.rs/signers) [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/Fly-elf/signers)
+[![crates.io](https://img.shields.io/crates/v/signers.svg)](https://crates.io/crates/signers) [![PyPI](https://img.shields.io/pypi/v/signers.svg)](https://pypi.org/project/signers/) [![docs.rs](https://img.shields.io/docsrs/signers)](https://docs.rs/signers) [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/Fly-elf/signers)
 
 `signers` is a typed front-end for code signing tools, usable from async or blocking Rust and from Python.
 It runs the real tool and gives each of its operations a small API that only accepts the options that
