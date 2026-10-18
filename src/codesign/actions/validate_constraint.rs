@@ -78,7 +78,7 @@ mod tests {
     fn args_of<S>(builder: &ValidateConstraint<S>) -> Vec<OsString> {
         builder
             .options
-            .to_args(&builder.core.targets)
+            .to_args(&builder.job.targets)
             .into_iter()
             .map(Cow::into_owned)
             .collect()

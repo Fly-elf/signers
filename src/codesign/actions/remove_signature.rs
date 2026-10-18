@@ -86,7 +86,7 @@ mod tests {
     fn args_of<S>(builder: &RemoveSignature<S>) -> Vec<OsString> {
         builder
             .options
-            .to_args(&builder.core.targets)
+            .to_args(&builder.job.targets)
             .into_iter()
             .map(Cow::into_owned)
             .collect()
@@ -155,7 +155,7 @@ mod tests {
             .unwrap();
         assert_eq!(silent.len(), 3);
 
-        let noisy = action.output_bytes(&targets[..1], b"noise".to_vec(), vec![0xff, 0xfe]);
+        let noisy = action.output(&targets[..1], "noise".into(), "\u{FFFD}\u{FFFD}".into());
         assert_eq!(noisy.unwrap().len(), 1);
 
         let none = action.output(&[], "noise".into(), String::new());
@@ -166,19 +166,19 @@ mod tests {
     /// unless the caller asks otherwise.
     #[test]
     fn the_constructor_defaults_to_one_process_for_all_targets() {
-        assert!(!remove_signature("app").core.per_target);
-        assert!(!remove_signature(vec!["a.app", "b.app"]).core.per_target);
-        assert!(!remove_signature(["a.app", "b.app"]).core.per_target);
+        assert!(!remove_signature("app").job.batch);
+        assert!(!remove_signature(vec!["a.app", "b.app"]).job.batch);
+        assert!(!remove_signature(["a.app", "b.app"]).job.batch);
     }
 
     #[test]
     fn per_target_keeps_the_last_value_and_renders_no_argument() {
         let action = remove_signature(vec!["app"]).per_target(true);
-        assert!(action.core.per_target);
+        assert!(action.job.batch);
         assert_eq!(args_of(&action), os(&["--remove-signature", "--", "app"]));
 
         let action = action.per_target(false);
-        assert!(!action.core.per_target);
+        assert!(!action.job.batch);
         assert_eq!(args_of(&action), os(&["--remove-signature", "--", "app"]));
     }
 
