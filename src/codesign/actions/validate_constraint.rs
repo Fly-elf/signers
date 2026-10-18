@@ -2,9 +2,9 @@ use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 
-use crate::codesign::action::PushArgs;
 use crate::codesign::action::action;
-use crate::codesign::action::sealed::{SharedRun, ToArgs};
+use crate::codesign::tool::Codesign;
+use crate::engine::{Operation, PushArgs, SharedRun};
 use crate::errors::CodesignError;
 
 action! {
@@ -29,9 +29,10 @@ action! {
 
 impl<S, R> SharedRun for ValidateConstraint<S, R> {}
 
-impl ToArgs for Options {
+impl Operation for Options {
+    type Tool = Codesign;
     type Output = ();
-    const PER_TARGET: bool = true;
+    const BATCH: bool = true;
 
     fn to_args<'a>(&'a self, targets: &'a [PathBuf]) -> Vec<Cow<'a, OsStr>> {
         let mut args: Vec<Cow<'a, OsStr>> = Vec::new();

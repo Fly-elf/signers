@@ -27,7 +27,7 @@
 use super::actions::sign;
 use super::asynchronous::Async;
 use super::core::Core;
-use crate::codesign::action::sealed::ToArgs;
+use crate::engine::Operation;
 use crate::errors::{CodesignError, Result};
 use crate::target::{IntoTargets, One, Shape};
 
@@ -53,7 +53,7 @@ where
 {
     pub(super) fn run<O>(self, options: O) -> Result<S::Out<O::Output>>
     where
-        O: ToArgs + Send + 'static,
+        O: Operation + Send + 'static,
     {
         // A runtime per call costs microseconds against the milliseconds of each `codesign`
         // process, and leaves no global state or threads behind.

@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 use std::path::PathBuf;
 
-use crate::codesign::action::sealed::ToArgs;
+use crate::engine::Operation;
 use crate::target::{self, IntoTargets, Shape};
 
 #[derive(Debug, Clone)]
@@ -17,12 +17,12 @@ where
 {
     pub(super) fn new<O, T>(target: T) -> Self
     where
-        O: ToArgs,
+        O: Operation,
         T: IntoTargets<Shape = S>,
     {
         Self {
             targets: target.into_targets(),
-            per_target: O::PER_TARGET && !<S as target::sealed::Shape>::SINGLE,
+            per_target: O::BATCH && !<S as target::sealed::Shape>::SINGLE,
             marker: PhantomData,
         }
     }
