@@ -24,6 +24,11 @@ async def main():
 
 asyncio.run(main())
 ```
+
+The scripts for [inspecting several targets](https://github.com/Fly-elf/signers/blob/v0.1.0/examples/python/codesign/inspect_targets.py) and
+[signing for distribution](https://github.com/Fly-elf/signers/blob/v0.1.0/examples/python/codesign/sign_for_distribution.py) use this API. The other two,
+[re-signing a patched binary](https://github.com/Fly-elf/signers/blob/v0.1.0/examples/python/codesign/resign_patched.py) and [signing an app bundle](https://github.com/Fly-elf/signers/blob/v0.1.0/examples/python/codesign/sign_bundle.py),
+are synchronous, with the same arguments.
 """
 
 from collections.abc import Sequence
@@ -256,6 +261,9 @@ async def sign(
     `TypeError` for a bad target, are raised when you `await` it, not when you call it.
     Cancelling the awaiting task raises `asyncio.CancelledError`, but a `codesign` that
     has already started runs to the end, so the targets may still change.
+
+    A complete build step, signing the nested code before the bundle, is in the
+    [example script](https://github.com/Fly-elf/signers/blob/v0.1.0/examples/python/codesign/sign_bundle.py), which is synchronous.
 
     Args:
         target: The path to sign, or a sequence of paths.
@@ -536,6 +544,9 @@ async def sign_adhoc(
     `TypeError` for a bad target, are raised when you `await` it, not when you call it.
     Cancelling the awaiting task raises `asyncio.CancelledError`, but a `codesign` that
     has already started runs to the end, so the targets may still change.
+
+    To keep the identifier and entitlements of the old signature, see the
+    [example script](https://github.com/Fly-elf/signers/blob/v0.1.0/examples/python/codesign/resign_patched.py), which is synchronous.
 
     Args:
         target: The path to sign, or a sequence of paths.
@@ -818,6 +829,9 @@ async def sign_for_distribution(
     it. Cancelling the awaiting task raises `asyncio.CancelledError`, but a `codesign`
     that has already started runs to the end, so the targets may still change.
 
+    A complete release flow, with the checks after signing, is in the
+    [example script](https://github.com/Fly-elf/signers/blob/v0.1.0/examples/python/codesign/sign_for_distribution.py).
+
     Args:
         target: The path to sign, or a sequence of paths.
         identity: The signing identity, usually a Developer ID Application certificate:
@@ -939,10 +953,10 @@ async def sign_for_distribution(
 
 
         async def main():
+            # Also limit the libraries it loads to system ones and its own team's.
             await codesign.aio.sign_for_distribution(
                 "MyApp.app",
                 "Developer ID Application: Jane Doe (A1B2C3D4E5)",
-                entitlements="MyApp.entitlements",
                 options=codesign.SigningFlags.RUNTIME | codesign.SigningFlags.LIBRARY,
             )
 
@@ -1052,6 +1066,9 @@ async def verify(
     `TypeError` for a bad target, are raised when you `await` it, not when you call it.
     Cancelling the awaiting task raises `asyncio.CancelledError`, but a `codesign` that
     has already started runs to the end.
+
+    Verifying several targets and reporting each verdict is shown in the
+    [example script](https://github.com/Fly-elf/signers/blob/v0.1.0/examples/python/codesign/inspect_targets.py).
 
     Args:
         target: The path to check, or a sequence of paths.
@@ -1288,6 +1305,9 @@ async def display(
     `TypeError` for a bad target, are raised when you `await` it, not when you call it.
     Cancelling the awaiting task raises `asyncio.CancelledError`, but a `codesign` that
     has already started runs to the end.
+
+    Reading the signature, requirements and verdict of several targets is shown in
+    the [example script](https://github.com/Fly-elf/signers/blob/v0.1.0/examples/python/codesign/inspect_targets.py).
 
     Args:
         target: The path to read, or a sequence of paths.

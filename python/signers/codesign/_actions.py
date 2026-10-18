@@ -341,6 +341,9 @@ def sign(
     Sign the nested code first, then the bundle that seals it. This replaces the
     deprecated `deep`.
 
+    A complete build step, signing the nested code before the bundle, is in the
+    [example script](https://github.com/Fly-elf/signers/blob/v0.1.0/examples/python/codesign/sign_bundle.py).
+
     Args:
         target: The path to sign, or a sequence of paths.
         identity: The signing identity: `"-"` for an ad hoc signature (see
@@ -607,6 +610,9 @@ def sign_adhoc(
 
     Signing an already signed target fails with "is already signed" unless you set
     `force`. A signature added by the linker doesn't need `force`.
+
+    To keep the identifier and entitlements of the old signature, see the
+    [example script](https://github.com/Fly-elf/signers/blob/v0.1.0/examples/python/codesign/resign_patched.py).
 
     Args:
         target: The path to sign, or a sequence of paths.
@@ -875,6 +881,10 @@ def sign_for_distribution(
     Signing an already signed target fails with "is already signed" unless you set
     `force`. A signature added by the linker doesn't need `force`.
 
+    A complete release flow, with the checks after signing, is in the
+    [example script](https://github.com/Fly-elf/signers/blob/v0.1.0/examples/python/codesign/sign_for_distribution.py),
+    written with asyncio.
+
     Args:
         target: The path to sign, or a sequence of paths.
         identity: The signing identity, usually a Developer ID Application certificate:
@@ -991,10 +1001,10 @@ def sign_for_distribution(
         ```python
         from signers import codesign
 
+        # Also limit the libraries it loads to system ones and its own team's.
         codesign.sign_for_distribution(
             "MyApp.app",
             "Developer ID Application: Jane Doe (A1B2C3D4E5)",
-            entitlements="MyApp.entitlements",
             options=codesign.SigningFlags.RUNTIME | codesign.SigningFlags.LIBRARY,
         )
         ```
@@ -1095,6 +1105,9 @@ def verify(
     Given a sequence, each target is verified on its own by default, so one call reports
     every target that failed, as `BatchError`. `per_target=False` runs one `codesign`
     instead, which stops at the first target it rejects.
+
+    Verifying several targets and reporting each verdict is shown in the
+    [example script](https://github.com/Fly-elf/signers/blob/v0.1.0/examples/python/codesign/inspect_targets.py), written with asyncio.
 
     Args:
         target: The path to check, or a sequence of paths.
@@ -1299,6 +1312,9 @@ def display(
     every target that failed, as `BatchError`. The signatures of the targets that did
     read are dropped with it. `per_target=False` runs one `codesign` instead: it stops
     at the first target it rejects, and the entitlements of every target stay `None`.
+
+    Reading the signature, requirements and verdict of several targets is shown in
+    the [example script](https://github.com/Fly-elf/signers/blob/v0.1.0/examples/python/codesign/inspect_targets.py), written with asyncio.
 
     Args:
         target: The path to read, or a sequence of paths.
