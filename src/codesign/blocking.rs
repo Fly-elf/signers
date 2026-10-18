@@ -23,6 +23,13 @@
 //! codesign::verify("MyApp.app").deep(true).run()?;
 //! # Ok(()) }
 //! ```
+//!
+//! The examples of [re-signing a patched binary][resign-patched] and of
+//! [signing an app bundle][sign-bundle] use this API. The other two are async, with the same
+//! calls.
+//!
+#![doc = concat!("[resign-patched]: https://github.com/Fly-elf/signers/blob/v", env!("CARGO_PKG_VERSION"), "/examples/rust/codesign/resign_patched.rs")]
+#![doc = concat!("[sign-bundle]: https://github.com/Fly-elf/signers/blob/v", env!("CARGO_PKG_VERSION"), "/examples/rust/codesign/sign_bundle.rs")]
 
 use super::actions::sign;
 use crate::engine::Blocking;
@@ -84,6 +91,11 @@ pub type Sign<S = One> = super::Sign<S, Blocking>;
 /// Signs `target` with the identity that `identity` names (`--sign`).
 ///
 /// Blocking form of [`codesign::sign`](super::sign), which has the details.
+///
+/// A complete build step, signing the nested code before the bundle, is in the
+/// [bundle example][sign-bundle].
+///
+#[doc = concat!("[sign-bundle]: https://github.com/Fly-elf/signers/blob/v", env!("CARGO_PKG_VERSION"), "/examples/rust/codesign/sign_bundle.rs")]
 pub fn sign<T: IntoTargets>(target: T, identity: impl Into<String>) -> Sign<T::Shape> {
     super::Sign::new(target, sign::Options::new(identity))
 }
@@ -91,6 +103,11 @@ pub fn sign<T: IntoTargets>(target: T, identity: impl Into<String>) -> Sign<T::S
 /// Signs `target` ad hoc, with no certificate (`--sign -`).
 ///
 /// Blocking form of [`codesign::sign_adhoc`](super::sign_adhoc), which has the details.
+///
+/// A complete script, keeping the identifier and entitlements of the old signature, is in the
+/// [re-signing example][resign-patched].
+///
+#[doc = concat!("[resign-patched]: https://github.com/Fly-elf/signers/blob/v", env!("CARGO_PKG_VERSION"), "/examples/rust/codesign/resign_patched.rs")]
 pub fn sign_adhoc<T: IntoTargets>(target: T) -> Sign<T::Shape> {
     super::Sign::new(target, sign::Options::adhoc())
 }
@@ -100,6 +117,11 @@ pub fn sign_adhoc<T: IntoTargets>(target: T) -> Sign<T::Shape> {
 ///
 /// Blocking form of [`codesign::sign_for_distribution`](super::sign_for_distribution), which
 /// has the details.
+///
+/// A complete release flow, with the checks after signing, is in the
+/// [distribution example][sign-for-distribution], written with the async API.
+///
+#[doc = concat!("[sign-for-distribution]: https://github.com/Fly-elf/signers/blob/v", env!("CARGO_PKG_VERSION"), "/examples/rust/codesign/sign_for_distribution.rs")]
 pub fn sign_for_distribution<T: IntoTargets>(
     target: T,
     identity: impl Into<String>,
@@ -113,6 +135,10 @@ pub type Verify<S = One> = super::Verify<S, Blocking>;
 /// Checks the signature of `target` (`--verify`), changing nothing.
 ///
 /// Blocking form of [`codesign::verify`](super::verify), which has the details.
+///
+/// The [inspection example][inspect] verifies several targets, written with the async API.
+///
+#[doc = concat!("[inspect]: https://github.com/Fly-elf/signers/blob/v", env!("CARGO_PKG_VERSION"), "/examples/rust/codesign/inspect.rs")]
 pub fn verify<T: IntoTargets>(target: T) -> Verify<T::Shape> {
     super::Verify::new(target, Default::default())
 }
@@ -123,6 +149,10 @@ pub type Display<S = One> = super::Display<S, Blocking>;
 /// Reads the signature of `target` (`--display`), changing nothing.
 ///
 /// Blocking form of [`codesign::display`](super::display), which has the details.
+///
+/// The [inspection example][inspect] reads several targets, written with the async API.
+///
+#[doc = concat!("[inspect]: https://github.com/Fly-elf/signers/blob/v", env!("CARGO_PKG_VERSION"), "/examples/rust/codesign/inspect.rs")]
 pub fn display<T: IntoTargets>(target: T) -> Display<T::Shape> {
     super::Display::new(target, Default::default())
 }

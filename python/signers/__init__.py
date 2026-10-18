@@ -35,6 +35,8 @@ Where to go next:
   running one `codesign` per target of a sequence.
 - `SignersError`: what can fail, and the attributes each error carries.
 - `refresh_log_levels`: applying a lowered `signers` logger level.
+- [Examples](https://github.com/Fly-elf/signers/tree/v0.1.0/examples): complete scripts for re-signing a patched binary, inspecting
+  several targets, signing a bundle and signing for distribution, in Python and Rust.
 """
 
 from importlib.metadata import version

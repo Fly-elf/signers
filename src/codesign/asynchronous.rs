@@ -30,6 +30,11 @@ use crate::target::IntoTargets;
 ///     .await?;
 /// # Ok(()) }
 /// ```
+///
+/// A whole bundle, with its nested code signed first, is in the
+/// [complete example][sign-bundle], written with the blocking API.
+///
+#[doc = concat!("[sign-bundle]: https://github.com/Fly-elf/signers/blob/v", env!("CARGO_PKG_VERSION"), "/examples/rust/codesign/sign_bundle.rs")]
 pub fn sign<T: IntoTargets>(target: T, identity: impl Into<String>) -> Sign<T::Shape> {
     Sign::new(target, sign::Options::new(identity))
 }
@@ -49,6 +54,11 @@ pub fn sign<T: IntoTargets>(target: T, identity: impl Into<String>) -> Sign<T::S
 /// codesign::sign_adhoc("patched.dylib").force(true).await?;
 /// # Ok(()) }
 /// ```
+///
+/// To keep the identifier and entitlements of the old signature, see the
+/// [complete example][resign-patched], written with the blocking API.
+///
+#[doc = concat!("[resign-patched]: https://github.com/Fly-elf/signers/blob/v", env!("CARGO_PKG_VERSION"), "/examples/rust/codesign/resign_patched.rs")]
 pub fn sign_adhoc<T: IntoTargets>(target: T) -> Sign<T::Shape> {
     Sign::new(target, sign::Options::adhoc())
 }
@@ -69,12 +79,17 @@ pub fn sign_adhoc<T: IntoTargets>(target: T) -> Sign<T::Shape> {
 /// # async fn run() -> signers::Result<()> {
 /// use signers::codesign::{self, SigningFlags};
 ///
+/// // Also limit the libraries it loads to system ones and its own team's.
 /// codesign::sign_for_distribution("MyApp.app", "Developer ID Application: Jane Doe (A1B2C3D4E5)")
-///     .entitlements("MyApp.entitlements")
 ///     .options(SigningFlags::RUNTIME | SigningFlags::LIBRARY)
 ///     .await?;
 /// # Ok(()) }
 /// ```
+///
+/// The [complete example][sign-for-distribution] signs the nested code and the app with
+/// entitlements, then verifies the result and checks the team.
+///
+#[doc = concat!("[sign-for-distribution]: https://github.com/Fly-elf/signers/blob/v", env!("CARGO_PKG_VERSION"), "/examples/rust/codesign/sign_for_distribution.rs")]
 pub fn sign_for_distribution<T: IntoTargets>(
     target: T,
     identity: impl Into<String>,
@@ -127,6 +142,10 @@ pub fn sign_for_distribution<T: IntoTargets>(
 /// }
 /// # Ok(()) }
 /// ```
+///
+/// The [complete example][inspect] verifies several targets and reports each one's verdict.
+///
+#[doc = concat!("[inspect]: https://github.com/Fly-elf/signers/blob/v", env!("CARGO_PKG_VERSION"), "/examples/rust/codesign/inspect.rs")]
 pub fn verify<T: IntoTargets>(target: T) -> Verify<T::Shape> {
     Verify::new(target, Default::default())
 }
@@ -197,6 +216,11 @@ pub fn verify<T: IntoTargets>(target: T) -> Verify<T::Shape> {
 /// println!("{} {}", ls.cd_hash, cat.cd_hash);
 /// # Ok(()) }
 /// ```
+///
+/// The [complete example][inspect] reports the signature, requirements and verdict of each of
+/// several targets, keeping the ones that succeed when others fail.
+///
+#[doc = concat!("[inspect]: https://github.com/Fly-elf/signers/blob/v", env!("CARGO_PKG_VERSION"), "/examples/rust/codesign/inspect.rs")]
 pub fn display<T: IntoTargets>(target: T) -> Display<T::Shape> {
     Display::new(target, Default::default())
 }

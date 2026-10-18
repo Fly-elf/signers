@@ -20,6 +20,15 @@
 //! has the same functions, where `.run()` takes the place of `.await`. It needs the `blocking`
 //! feature.
 //!
+//! Complete programs for the common jobs:
+//!
+//! - [Re-signing a patched binary][resign-patched], keeping its identifier and entitlements
+//!   (blocking).
+//! - [Inspecting several targets][inspect] at once: signature, requirements and verification
+//!   (async).
+//! - [Signing an app bundle][sign-bundle], nested code first (blocking).
+//! - [Signing for distribution][sign-for-distribution] and checking the result (async).
+//!
 //! Nothing runs until `.await`. Until then a builder is a plain value that you can build over
 //! several statements, clone or drop. The future it turns into is `Send + 'static`, so you can
 //! spawn it.
@@ -84,6 +93,11 @@
 //! `.await` panics outside a Tokio runtime, and in one built without I/O
 //! ([`enable_io`](https://docs.rs/tokio/1/tokio/runtime/struct.Builder.html#method.enable_io)).
 //! `#[tokio::main]` enables I/O.
+//!
+#![doc = concat!("[resign-patched]: https://github.com/Fly-elf/signers/blob/v", env!("CARGO_PKG_VERSION"), "/examples/rust/codesign/resign_patched.rs")]
+#![doc = concat!("[inspect]: https://github.com/Fly-elf/signers/blob/v", env!("CARGO_PKG_VERSION"), "/examples/rust/codesign/inspect.rs")]
+#![doc = concat!("[sign-bundle]: https://github.com/Fly-elf/signers/blob/v", env!("CARGO_PKG_VERSION"), "/examples/rust/codesign/sign_bundle.rs")]
+#![doc = concat!("[sign-for-distribution]: https://github.com/Fly-elf/signers/blob/v", env!("CARGO_PKG_VERSION"), "/examples/rust/codesign/sign_for_distribution.rs")]
 
 mod action;
 mod actions;
