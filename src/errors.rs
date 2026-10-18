@@ -119,50 +119,6 @@ pub enum CodesignError {
     )]
     NotFound,
 
-    /// `codesign` was found but couldn't start, e.g. because it isn't executable.
-    ///
-    /// The blocking `.run()` also returns it when it can't create its runtime.
-    #[error("failed to spawn the `codesign` process or the Tokio runtime: {0}")]
-    Spawn(#[source] std::io::Error),
-
-    /// Waiting for `codesign` or reading its output failed.
-    ///
-    /// The outcome is unknown, so the targets may or may not have changed.
-    #[error("failed while running the `codesign` process: {0}")]
-    Run(#[source] std::io::Error),
-
-    /// `codesign` exited with `code`.
-    ///
-    /// `stderr` holds its diagnostics and `stdout` what it printed on standard output, both
-    /// trimmed. Only `stderr` is part of the message.
-    ///
-    /// When one `codesign` runs over several targets, the targets before the rejected one have
-    /// already changed. See [`codesign`](crate::codesign#errors).
-    #[error("`codesign` exited with code {code}: {}", diagnostics(.stderr))]
-    Failed {
-        code: i32,
-        stdout: String,
-        stderr: String,
-    },
-
-    /// `codesign` was killed by a signal before it could exit.
-    ///
-    /// `status` holds the signal (`ExitStatusExt::signal`). `stderr` is usually empty. `stdout`
-    /// holds what `codesign` printed on standard output, trimmed; it isn't part of the message.
-    #[error("the `codesign` process terminated abnormally ({status}): {}", diagnostics(.stderr))]
-    Terminated {
-        status: ExitStatus,
-        stdout: String,
-        stderr: String,
-    },
-
-    /// `codesign` exited 0, but its output couldn't be read as the action's result.
-    ///
-    /// `detail` says what didn't match, e.g. the number of results against the number of
-    /// targets.
-    #[error("`codesign` produced output this crate can't read: {detail}")]
-    UnexpectedOutput { detail: String },
-
     /// [`verify`](crate::codesign::verify) found the target's signature wanting.
     ///
     /// The signature is invalid or modified, the target is unsigned, or the requirement text of

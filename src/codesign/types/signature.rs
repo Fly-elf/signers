@@ -4,7 +4,8 @@ use std::str::FromStr;
 use bitflags::bitflags;
 
 use super::options::SigningFlags;
-use crate::errors::{CodesignError, Error, Result};
+use crate::codesign::tool::Codesign;
+use crate::errors::{Error, Result};
 
 /// The signature of one target, as `codesign --display` reports it.
 ///
@@ -741,17 +742,11 @@ fn hex<T: TryFrom<u64>>(line: &str, digits: &str) -> Result<T> {
 }
 
 fn unreadable(line: &str) -> Error {
-    CodesignError::UnexpectedOutput {
-        detail: format!("unreadable report line {line:?}"),
-    }
-    .into()
+    Codesign::unexpected_output(format!("unreadable report line {line:?}"))
 }
 
 fn missing(key: &str) -> Error {
-    CodesignError::UnexpectedOutput {
-        detail: format!("the report has no {key} line"),
-    }
-    .into()
+    Codesign::unexpected_output(format!("the report has no {key} line"))
 }
 
 #[cfg(test)]
