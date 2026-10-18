@@ -1,7 +1,14 @@
+mod execute;
+mod job;
 mod operation;
 mod process;
+mod runtime;
 mod tool;
 
+pub use job::Job;
 pub use operation::{Operation, PushArgs, SharedRun};
-pub(crate) use process::{RunError, spawn};
+#[cfg(feature = "async")]
+pub use runtime::Async;
+#[cfg(feature = "blocking")]
+pub use runtime::Blocking;
 pub use tool::Tool;

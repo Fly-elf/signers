@@ -1,40 +1,8 @@
-use std::future::Future;
-use std::num::NonZeroUsize;
-use std::path::PathBuf;
-use std::pin::Pin;
-
-use futures_util::StreamExt;
-
 use super::actions::sign;
-use super::core::Core;
-use super::tool::Codesign;
 use crate::codesign::{
     Display, ExtractCertificates, RemoveSignature, Requirements, Sign, ValidateConstraint, Verify,
 };
-use crate::engine::{Operation, RunError, Tool, spawn};
-use crate::errors::{CodesignError, Error, ProcessError, Result};
-use crate::target::{IntoTargets, Shape};
-
-#[derive(Debug, Clone, Copy)]
-pub struct Async;
-
-type RunFuture<T> = Pin<Box<dyn Future<Output = Result<T>> + Send>>;
-
-impl<S> Core<S, Async>
-where
-    S: Shape,
-{
-    pub(super) fn run<O>(self, options: O) -> RunFuture<S::Out<O::Output>>
-    where
-        O: Operation + Send + 'static,
-    {
-        Box::pin(async move {
-            execute(&options, &self.targets, self.per_target)
-                .await
-                .map(S::wrap)
-        })
-    }
-}
+use crate::target::IntoTargets;
 
 /// Signs `target` with the identity that `identity` names (`--sign`).
 ///
@@ -388,90 +356,6 @@ pub fn requirements<T: IntoTargets>(target: T) -> Requirements<T::Shape> {
 /// ```
 pub fn extract_certificates<T: IntoTargets>(target: T) -> ExtractCertificates<T::Shape> {
     ExtractCertificates::new(target, Default::default())
-}
-
-/// Checks the options and targets, then runs `codesign` once over all targets or once per target.
-async fn execute<A: Operation>(
-    action: &A,
-    targets: &[PathBuf],
-    per_target: bool,
-) -> Result<Vec<A::Output>> {
-    action.validate()?;
-    if per_target && let Some(option) = action.shared_output() {
-        return Err(Error::SharedOutputPerTarget(option));
-    }
-
-    if targets.is_empty() {
-        return Err(Error::NoTargets);
-    }
-    if let Some(index) = targets.iter().position(|t| t.as_os_str().is_empty()) {
-        return Err(Error::EmptyTarget(index));
-    }
-    for target in targets {
-        match tokio::fs::try_exists(target).await {
-            Ok(true) => {}
-            Ok(false) => return Err(Error::TargetNotFound(target.clone())),
-            Err(source) => {
-                return Err(Error::TargetAccess {
-                    path: target.clone(),
-                    source,
-                });
-            }
-        }
-    }
-
-    // One run over all targets, and its error stays plain.
-    if !per_target {
-        return run(action, targets).await;
-    }
-
-    let cap = std::thread::available_parallelism().map_or(1, NonZeroUsize::get);
-    // The runs are built before they are buffered: mapping the stream
-    // itself doesn't compile inside a `Send` boxed future (higher-ranked
-    // lifetime limitation).
-    let runs: Vec<_> = targets
-        .iter()
-        .map(|target| run(action, std::slice::from_ref(target)))
-        .collect();
-    let results: Vec<Result<Vec<A::Output>>> = futures_util::stream::iter(runs)
-        .buffered(cap)
-        .collect()
-        .await;
-
-    let mut outputs = Vec::with_capacity(targets.len());
-    let mut failures = Vec::new();
-    for (target, result) in targets.iter().zip(results) {
-        match result {
-            Ok(output) => outputs.extend(output),
-            // `codesign` itself couldn't start: that isn't about this target.
-            Err(error @ Error::Codesign(CodesignError::NotFound | CodesignError::Spawn(_))) => {
-                return Err(error);
-            }
-            Err(error) => failures.push((target.clone(), error)),
-        }
-    }
-    if failures.is_empty() {
-        Ok(outputs)
-    } else {
-        Err(Error::Batch(failures))
-    }
-}
-
-/// Runs one `codesign` over `targets` and turns its exit into outputs or an error.
-async fn run<A: Operation>(action: &A, targets: &[PathBuf]) -> Result<Vec<A::Output>> {
-    let exit = spawn::<Codesign>(&action.to_args(targets))
-        .await
-        .map_err(RunError::into_error)?;
-    let (stdout, stderr) =
-        exit.success::<Codesign>(|code, stdout, stderr| action.failure(code, stdout, stderr))?;
-    let outputs = action.output(targets, stdout, stderr)?;
-    if outputs.len() != targets.len() {
-        return Err(Codesign::error(ProcessError::UnexpectedOutput {
-            program: Codesign::PROGRAM,
-            detail: format!("{} outputs for {} targets", outputs.len(), targets.len()),
-        }));
-    }
-    Ok(outputs)
 }
 
 /// The runner's side of its contract with an action, which no shipped action
