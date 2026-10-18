@@ -16,7 +16,7 @@ REPO = Path(__file__).resolve().parents[2]
 CODESIGN = "/usr/bin/codesign"
 ADHOC = 0x2
 
-_GROUPS = ("keychain",)
+_GROUPS = ("keychain", "macos27")
 
 _INFO_PLIST = """<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -215,7 +215,7 @@ def pytest_configure(config: pytest.Config) -> None:
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Skips the tests of a group not named in `SIGNERS_TEST_GROUPS` (comma separated).
 
-    `SIGNERS_TEST_GROUPS=keychain uv run pytest` runs them all.
+    `SIGNERS_TEST_GROUPS=keychain,macos27 uv run pytest` runs them all.
     """
     enabled = {g.strip() for g in os.environ.get("SIGNERS_TEST_GROUPS", "").split(",")}
     for item in items:
