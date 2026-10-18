@@ -4,15 +4,15 @@ use crate::errors::{Error, ProcessError};
 
 /// An external program that actions run, looked up on `PATH`.
 ///
-/// A tool with its own error type overrides [`error`](Self::error) to map every
-/// [`ProcessError`] onto it; the default wraps it as [`Error::Process`].
+/// A tool overrides [`error`](Self::error) to report some failures as an error of its own; the
+/// default wraps every [`ProcessError`] as [`Error::Process`].
 pub trait Tool: 'static {
     /// The executable name; also what [`ProcessError`] reports as `program`.
     const PROGRAM: &'static str;
 
     /// Turns a process failure into the error this tool reports.
     ///
-    /// An override must cover every [`ProcessError`] variant, so a new one can't go unmapped.
+    /// An override maps the failures it names and wraps the rest as [`Error::Process`].
     fn error(error: ProcessError) -> Error {
         Error::Process(error)
     }

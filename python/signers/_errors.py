@@ -217,9 +217,11 @@ class BatchError(SignersError):
 
 
 class CodesignError(SignersError):
-    """Base class of the errors from running `codesign` itself.
+    """Base class of what only `codesign` reports.
 
-    `codesign` couldn't run, or it rejected the job.
+    That is a missing executable (`CodesignNotFoundError`) and the verdicts of `verify`,
+    `validate_constraint` and `display`. Any other failure of its process is a
+    `ProcessError`.
     """
 
 
@@ -227,7 +229,8 @@ class CodesignNotFoundError(CodesignError, FileNotFoundError):
     """No `codesign` was found on `PATH`.
 
     `codesign` ships with macOS in `/usr/bin`. This error usually means `PATH` leaves
-    out `/usr/bin`, or the system isn't macOS. Also a `FileNotFoundError`.
+    out `/usr/bin`, or the system isn't macOS. It stands in for `ToolNotFoundError` to
+    carry that hint. Also a `FileNotFoundError`.
     """
 
     def __init__(self, message: str) -> None:
@@ -238,10 +241,12 @@ class CodesignNotFoundError(CodesignError, FileNotFoundError):
 
 
 class ProcessError(SignersError):
-    """Base class of the errors from running an external tool.
+    """Base class of the failures of an external tool's process.
 
-    The tool couldn't run, or it rejected the job. Every action reports its generic
-    failures through a subclass of this one, whichever tool it wraps.
+    The tool couldn't run, exited non-zero, or printed what this package can't read.
+    Every tool an action wraps reports these through a subclass of this one. For
+    `codesign` that is every failure of its process except a missing executable, which
+    is `CodesignNotFoundError`.
 
     Attributes:
         program: The executable that was run, e.g. `"codesign"`.
@@ -255,7 +260,7 @@ class ProcessError(SignersError):
 
 
 class ToolNotFoundError(ProcessError, FileNotFoundError):
-    """No executable of the tool was found on `PATH`.
+    """No executable called `program` was found on `PATH`.
 
     Also a `FileNotFoundError`.
     """
@@ -269,9 +274,10 @@ class ToolNotFoundError(ProcessError, FileNotFoundError):
 
 
 class SpawnError(ProcessError, OSError):
-    """The tool was found but couldn't start, e.g. because it isn't executable.
+    """`program` was found but couldn't start, e.g. because it isn't executable.
 
-    Also an `OSError`.
+    Also raised when the runtime that drives the process can't be created. Also an
+    `OSError`.
     """
 
     def __init__(self, message: str, *, program: str, errno: int | None) -> None:
@@ -283,7 +289,7 @@ class SpawnError(ProcessError, OSError):
 
 
 class RunError(ProcessError, OSError):
-    """Waiting for the tool or reading its output failed.
+    """Waiting for `program` or reading its output failed.
 
     The outcome is unknown, so the targets may or may not have changed. Also an
     `OSError`.
@@ -298,14 +304,14 @@ class RunError(ProcessError, OSError):
 
 
 class ProcessFailedError(ProcessError):
-    """The tool exited with a non-zero code.
+    """`program` exited with a non-zero code.
 
     When one run covers several targets, the targets before the rejected one have
     already changed. See `signers.codesign`.
 
     Attributes:
         code: The exit code.
-        stdout: What the tool printed on standard output, trimmed.
+        stdout: What `program` printed on standard output, trimmed.
         stderr: Its diagnostics, trimmed. Only this is part of the message.
     """
 
@@ -323,11 +329,12 @@ class ProcessFailedError(ProcessError):
 
 
 class TerminatedError(ProcessError):
-    """The tool was killed by a signal before it could exit.
+    """`program` was killed by a signal before it could exit.
 
     Attributes:
         signal: The signal number, or `None` if the system gave none.
-        stdout: What the tool printed on standard output, trimmed.
+        stdout: What `program` printed on standard output, trimmed. It isn't part of the
+            message.
         stderr: Its diagnostics, trimmed; usually empty.
     """
 
@@ -351,7 +358,7 @@ class TerminatedError(ProcessError):
 
 
 class UnexpectedOutputError(ProcessError):
-    """The tool exited 0, but its output couldn't be read as the action's result.
+    """`program` exited 0, but its output couldn't be read as the action's result.
 
     Attributes:
         detail: What didn't match, e.g. the number of results against the number of

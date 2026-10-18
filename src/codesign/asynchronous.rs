@@ -148,13 +148,13 @@ pub fn verify<T: IntoTargets>(target: T) -> Verify<T::Shape> {
 ///
 /// # Errors
 ///
-/// An unsigned target fails with [`CodesignError::Failed`](crate::CodesignError::Failed), exit
+/// An unsigned target fails with [`ProcessError::Failed`](crate::ProcessError::Failed), exit
 /// code 1. With one `codesign` over several targets, its `stderr` also holds the reports of the
 /// targets before the unsigned one. A [`signature_slot`](Display::signature_slot)
 /// the code has no signature in fails with
 /// [`CodesignError::NoSignature`](crate::CodesignError::NoSignature). A report or entitlements
 /// that can't be read fails with
-/// [`CodesignError::UnexpectedOutput`](crate::CodesignError::UnexpectedOutput). The checks made
+/// [`ProcessError::UnexpectedOutput`](crate::ProcessError::UnexpectedOutput). The checks made
 /// before `codesign` starts are listed in [`codesign`](crate::codesign#errors).
 ///
 /// # Examples
@@ -243,7 +243,7 @@ pub fn remove_signature<T: IntoTargets>(target: T) -> RemoveSignature<T::Shape> 
 /// A constraint with an unknown key or an empty one fails with
 /// [`CodesignError::ConstraintInvalid`](crate::CodesignError::ConstraintInvalid). A plist that
 /// is missing, or isn't a dictionary, fails with
-/// [`CodesignError::Failed`](crate::CodesignError::Failed), exit code 1. The checks made before
+/// [`ProcessError::Failed`](crate::ProcessError::Failed), exit code 1. The checks made before
 /// `codesign` starts are listed in [`codesign`](crate::codesign#errors).
 ///
 /// # Examples
@@ -300,9 +300,9 @@ pub fn validate_constraint<T: IntoTargets>(plist: T) -> ValidateConstraint<T::Sh
 ///
 /// # Errors
 ///
-/// An unsigned target fails with [`CodesignError::Failed`](crate::CodesignError::Failed), exit
+/// An unsigned target fails with [`ProcessError::Failed`](crate::ProcessError::Failed), exit
 /// code 1. A line that can't be read as a requirement fails with
-/// [`CodesignError::UnexpectedOutput`](crate::CodesignError::UnexpectedOutput). The checks made
+/// [`ProcessError::UnexpectedOutput`](crate::ProcessError::UnexpectedOutput). The checks made
 /// before `codesign` starts are listed in [`codesign`](crate::codesign#errors).
 ///
 /// # Examples
@@ -337,7 +337,7 @@ pub fn requirements<T: IntoTargets>(target: T) -> Requirements<T::Shape> {
 ///
 /// # Errors
 ///
-/// An unsigned target fails with [`CodesignError::Failed`](crate::CodesignError::Failed), exit
+/// An unsigned target fails with [`ProcessError::Failed`](crate::ProcessError::Failed), exit
 /// code 1. A file that can't be read or written fails with [`Error::Io`](crate::Error::Io),
 /// also when the system's temporary directory can't be used. The checks made before `codesign`
 /// starts are listed in [`codesign`](crate::codesign#errors).
