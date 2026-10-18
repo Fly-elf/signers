@@ -3,9 +3,10 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use crate::codesign::action::action;
-use crate::codesign::action::sealed::{SharedRun, ToArgs};
-use crate::codesign::action::{PushArgs, joined};
+use crate::codesign::action::joined;
+use crate::codesign::tool::Codesign;
 use crate::codesign::{PreserveMetadata, SigningFlags, Timestamp};
+use crate::engine::{Operation, PushArgs, SharedRun};
 
 action! {
     /// Builder of a signing run, returned by [`sign`](crate::codesign::sign) and its presets.
@@ -236,9 +237,10 @@ impl Options {
 
 impl<S, R> SharedRun for Sign<S, R> {}
 
-impl ToArgs for Options {
+impl Operation for Options {
+    type Tool = Codesign;
     type Output = ();
-    const PER_TARGET: bool = false;
+    const BATCH: bool = false;
 
     fn validate(&self) -> crate::errors::Result<()> {
         if self.file_list.as_deref() == Some(Path::new("-")) {

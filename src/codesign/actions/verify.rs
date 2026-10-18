@@ -2,10 +2,10 @@ use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 
-use crate::codesign::action::PushArgs;
 use crate::codesign::action::action;
-use crate::codesign::action::sealed::{SharedRun, ToArgs};
+use crate::codesign::tool::Codesign;
 use crate::codesign::{SignatureSlot, Strict};
+use crate::engine::{Operation, PushArgs, SharedRun};
 use crate::errors::{Change, CodesignError, Error, ResourceChange};
 
 action! {
@@ -146,9 +146,10 @@ impl<S, R> Verify<S, R> {
 
 impl<S, R> SharedRun for Verify<S, R> {}
 
-impl ToArgs for Options {
+impl Operation for Options {
+    type Tool = Codesign;
     type Output = ();
-    const PER_TARGET: bool = true;
+    const BATCH: bool = true;
 
     fn validate(&self) -> crate::errors::Result<()> {
         match &self.test_requirement {
