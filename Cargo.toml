@@ -33,6 +33,8 @@ blocking = ["async", "tokio/rt"]
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+default-target = "aarch64-apple-darwin"
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin"]
 
 [dev-dependencies]
 signers = { path = ".", features = ["blocking"] }
