@@ -39,6 +39,7 @@ targets = ["aarch64-apple-darwin", "x86_64-apple-darwin"]
 [dev-dependencies]
 signers = { path = ".", features = ["blocking"] }
 tokio = { version = "1.53", features = ["macros", "rt-multi-thread"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["registry"] }
 
 # Opt-in test groups: tests needing an environment `cargo test` cannot assume
 # are ignored unless their group is set, e.g.
