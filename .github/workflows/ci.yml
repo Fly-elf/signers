@@ -78,17 +78,6 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo +1.88 check --all-features --all-targets
 
-  intel:
-    runs-on: macos-26
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
-      - run: rustup target add x86_64-apple-darwin
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - run: cargo check --all-features --all-targets --target x86_64-apple-darwin
-
   docs:
     runs-on: macos-26
     env:
@@ -97,10 +86,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: rustup toolchain install nightly --profile minimal --target aarch64-apple-darwin,x86_64-apple-darwin --no-self-update
+      - run: rustup toolchain install nightly --profile minimal --no-self-update
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo +nightly doc --no-deps --all-features --target aarch64-apple-darwin
-      - run: cargo +nightly doc --no-deps --all-features --target x86_64-apple-darwin
 
   python:
     runs-on: macos-26
