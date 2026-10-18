@@ -51,9 +51,17 @@
 #[cfg(not(feature = "async"))]
 compile_error!("signers needs the `async` or the `blocking` feature");
 
+#[cfg(not(target_os = "macos"))]
+compile_error!("signers currently supports only macOS");
+
+#[cfg(target_os = "macos")]
 pub mod codesign;
+#[cfg(target_os = "macos")]
 pub mod errors;
+#[cfg(target_os = "macos")]
 mod target;
 
+#[cfg(target_os = "macos")]
 pub use errors::{CodesignError, Error, Result};
+#[cfg(target_os = "macos")]
 pub use target::IntoTargets;
