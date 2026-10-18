@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 
+import signers
 from signers import _native, codesign
 from signers.codesign import (
     CertificateSignature,
@@ -76,7 +77,6 @@ def test_display_passes_every_option_to_codesign(workspace: Workspace) -> None:
         architecture=platform.machine(),
         bundle_version="B",
         deep=True,
-        signature_slot=SignatureSlot.FIRST,
     )
 
     assert signature.executable.name == "Hello"
@@ -84,6 +84,13 @@ def test_display_passes_every_option_to_codesign(workspace: Workspace) -> None:
 
     thin = codesign.display(APPLE_SIGNED, architecture="arm64e")
     assert thin.format == Format(FormatKind.MACHO_THIN, archs=("arm64e",))
+
+
+@pytest.mark.macos27
+def test_display_passes_the_signature_slot_to_codesign() -> None:
+    assert codesign.display(APPLE_SIGNED, signature_slot=SignatureSlot.FIRST).identifier is not None
+    with pytest.raises(signers.NoSignatureError):
+        codesign.display(APPLE_SIGNED, signature_slot=SignatureSlot.SECOND)
 
 
 def test_display_detached_reads_the_signature_from_a_file(workspace: Workspace) -> None:

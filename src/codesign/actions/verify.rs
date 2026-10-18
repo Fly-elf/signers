@@ -92,6 +92,8 @@ action! {
         ///
         /// Without it `codesign` picks the slot itself. On code that carries only one signature,
         /// [`Second`](SignatureSlot::Second) can fail as [`CodesignError::VerificationFailed`].
+        ///
+        /// Needs macOS 27 or later; older `codesign` rejects the option and the run fails.
         signature_slot: Option<SignatureSlot>,
         /// Verifies an unsigned file against a detached signature written for it (`--detached`).
         detached: Option<impl Into<PathBuf>>,

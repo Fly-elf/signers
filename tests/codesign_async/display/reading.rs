@@ -80,13 +80,24 @@ async fn an_ad_hoc_binary_is_read_back_as_codesign_prints_it() {
         cd_hash.full.as_deref(),
         oracle.field("CandidateCDHashFull sha256")
     );
+    assert!(signature.executable_segment.is_some());
+    assert!(signature.cms_digest.is_some());
+    assert!(signature.platform.is_some());
+}
+
+/// Older `codesign` prints no total or chosen signature line.
+#[tokio::test]
+#[cfg_attr(not(signers_test = "macos27"), ignore = "test group: macos27")]
+async fn an_ad_hoc_binary_has_one_signature_and_it_is_chosen() {
+    let workspace = Workspace::new();
+    let target = workspace.presigned("hello", &["-i", "com.example.hello"]);
+
+    let signature = display(&target).await.unwrap();
+
     assert_eq!(
         (signature.total_signatures, signature.chosen_signature),
         (Some(1), Some(1))
     );
-    assert!(signature.executable_segment.is_some());
-    assert!(signature.cms_digest.is_some());
-    assert!(signature.platform.is_some());
 }
 
 /// A freshly linked binary on Apple Silicon: the most common state a binary

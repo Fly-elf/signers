@@ -1,6 +1,7 @@
 //! `signature_slot`: which of a code object's signatures is verified. Every
 //! signature this machine can make is a single one, so the second slot is only
-//! ever checked against what `codesign` itself answers.
+//! ever checked against what `codesign` itself answers. `--signature-slot`
+//! first appears in the `codesign` of macOS 27.
 
 use signers::Error;
 use signers::codesign::SignatureSlot;
@@ -11,6 +12,7 @@ use crate::support::fixture::Workspace;
 use crate::support::inspect;
 
 #[tokio::test]
+#[cfg_attr(not(signers_test = "macos27"), ignore = "test group: macos27")]
 async fn the_first_slot_verifies_a_signed_binary() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
@@ -28,6 +30,7 @@ async fn the_first_slot_verifies_a_signed_binary() {
 /// The system binary has one signature, so asking for a second one fails the
 /// way `codesign` itself does.
 #[tokio::test]
+#[cfg_attr(not(signers_test = "macos27"), ignore = "test group: macos27")]
 async fn the_second_slot_of_a_single_signature_binary_does_not_verify() {
     let oracle = inspect::codesign(&[
         "--verify".as_ref(),
@@ -47,6 +50,7 @@ async fn the_second_slot_of_a_single_signature_binary_does_not_verify() {
 }
 
 #[tokio::test]
+#[cfg_attr(not(signers_test = "macos27"), ignore = "test group: macos27")]
 async fn the_second_slot_of_an_ad_hoc_binary_follows_codesign() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
@@ -63,6 +67,7 @@ async fn the_second_slot_of_an_ad_hoc_binary_follows_codesign() {
 }
 
 #[tokio::test]
+#[cfg_attr(not(signers_test = "macos27"), ignore = "test group: macos27")]
 async fn an_unsigned_binary_fails_in_either_slot() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");
@@ -78,6 +83,7 @@ async fn an_unsigned_binary_fails_in_either_slot() {
 }
 
 #[tokio::test]
+#[cfg_attr(not(signers_test = "macos27"), ignore = "test group: macos27")]
 async fn a_broken_signature_fails_in_the_first_slot() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
@@ -92,6 +98,7 @@ async fn a_broken_signature_fails_in_the_first_slot() {
 }
 
 #[tokio::test]
+#[cfg_attr(not(signers_test = "macos27"), ignore = "test group: macos27")]
 async fn the_last_slot_wins() {
     let result = verify("/bin/ls")
         .signature_slot(SignatureSlot::Second)
@@ -108,6 +115,7 @@ async fn the_last_slot_wins() {
 }
 
 #[tokio::test]
+#[cfg_attr(not(signers_test = "macos27"), ignore = "test group: macos27")]
 async fn a_slot_combines_with_a_requirement() {
     let workspace = Workspace::new();
     let requirement = workspace.write("req.txt", "anchor apple\n");
@@ -133,6 +141,7 @@ async fn a_slot_combines_with_a_requirement() {
 
 /// With one target per process, each target is judged on its own slot result.
 #[tokio::test]
+#[cfg_attr(not(signers_test = "macos27"), ignore = "test group: macos27")]
 async fn a_slot_applies_to_every_target_of_a_batch() {
     let workspace = Workspace::new();
     let unsigned = workspace.unsigned("unsigned");
