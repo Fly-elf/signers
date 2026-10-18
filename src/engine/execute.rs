@@ -15,8 +15,8 @@ use crate::errors::{Error, ProcessError, Result};
 pub(crate) async fn check_exists(path: &Path) -> Result<()> {
     match tokio::fs::try_exists(path).await {
         Ok(true) => Ok(()),
-        Ok(false) => Err(Error::TargetNotFound(path.to_owned())),
-        Err(source) => Err(Error::TargetAccess {
+        Ok(false) => Err(Error::PathNotFound(path.to_owned())),
+        Err(source) => Err(Error::PathAccess {
             path: path.to_owned(),
             source,
         }),
