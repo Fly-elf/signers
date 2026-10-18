@@ -133,17 +133,23 @@ def errors(error: Exception) -> None:
         assert_type(error.failures, tuple[tuple[Path, signers.SignersError], ...])
     if isinstance(error, signers.EmptyTargetError):
         assert_type(error.index, int)
-    if isinstance(error, signers.TargetNotFoundError):
+    if isinstance(error, signers.PathNotFoundError):
         assert_type(error.path, Path)
     if isinstance(error, signers.StdioPathError):
         assert_type(error.option, str)
-    if isinstance(error, signers.CodesignFailedError):
+    if isinstance(error, signers.PathAccessError):
+        assert_type(error.path, Path)
+    if isinstance(error, signers.ProcessError):
+        assert_type(error.program, str)
+    if isinstance(error, signers.ProcessFailedError):
         assert_type(error.code, int)
         assert_type(error.stderr, str)
     if isinstance(error, signers.TerminatedError):
         assert_type(error.signal, int | None)
     if isinstance(error, signers.UnexpectedOutputError):
         assert_type(error.detail, str)
+    if isinstance(error, codesign.ToolNotFoundError):
+        assert_type(error.program, str)
     if isinstance(error, signers.VerificationFailedError):
         assert_type(error.resources, tuple[signers.ResourceChange, ...])
         assert_type(error.resources[0].change, signers.Change)

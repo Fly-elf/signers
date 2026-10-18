@@ -355,7 +355,8 @@ mod tests {
 
     #[test]
     fn a_failure_carries_its_diagnostics() {
-        let error = CodesignError::Failed {
+        let error = ProcessError::Failed {
+            program: "codesign",
             stdout: "printed on stdout".into(),
             code: 1,
             stderr: "hello: no identity found".into(),
@@ -370,7 +371,8 @@ mod tests {
     /// message that trails off after its colon reads like truncated output.
     #[test]
     fn a_failure_with_nothing_to_say_still_reads_as_a_sentence() {
-        let silent = CodesignError::Failed {
+        let silent = ProcessError::Failed {
+            program: "codesign",
             stdout: "printed on stdout".into(),
             code: 3,
             stderr: String::new(),
@@ -384,7 +386,8 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn a_terminated_process_reports_the_signal_that_killed_it() {
-        let error = CodesignError::Terminated {
+        let error = ProcessError::Terminated {
+            program: "codesign",
             stdout: "printed on stdout".into(),
             status: killed_by(9),
             stderr: String::new(),
@@ -418,12 +421,63 @@ mod tests {
 
     /// A failing run of `code`, as a batch entry holds it.
     fn failed(code: i32, stderr: &str) -> Error {
-        CodesignError::Failed {
+        ProcessError::Failed {
+            program: "codesign",
             stdout: "printed on stdout".into(),
             code,
             stderr: stderr.into(),
         }
         .into()
+    }
+
+    #[test]
+    fn a_missing_program_is_named_in_the_message() {
+        let error = Error::from(ProcessError::NotFound { program: "pkgutil" });
+        assert_eq!(error.to_string(), "`pkgutil` was not found on PATH");
+    }
+
+    #[test]
+    fn a_spawn_failure_names_the_program_and_the_cause() {
+        let error = ProcessError::Spawn {
+            program: "codesign",
+            source: std::io::Error::other("no fork"),
+        };
+        assert_eq!(
+            error.to_string(),
+            "failed to spawn the `codesign` process or the Tokio runtime: no fork",
+        );
+    }
+
+    #[test]
+    fn a_run_failure_names_the_program_and_the_cause() {
+        let error = ProcessError::Run {
+            program: "codesign",
+            source: std::io::Error::other("no wait"),
+        };
+        assert_eq!(
+            error.to_string(),
+            "failed while running the `codesign` process: no wait",
+        );
+    }
+
+    #[test]
+    fn a_missing_path_is_named_in_the_message() {
+        assert_eq!(
+            Error::PathNotFound(PathBuf::from("My App.app")).to_string(),
+            "path does not exist: My App.app",
+        );
+    }
+
+    #[test]
+    fn an_unreadable_path_carries_the_cause() {
+        let error = Error::PathAccess {
+            path: PathBuf::from("/locked/a.app"),
+            source: std::io::Error::from(std::io::ErrorKind::PermissionDenied),
+        };
+        assert_eq!(
+            error.to_string(),
+            "could not access /locked/a.app: permission denied",
+        );
     }
 
     #[test]
@@ -452,7 +506,8 @@ mod tests {
 
     #[test]
     fn unreadable_output_says_what_was_wrong_with_it() {
-        let error = CodesignError::UnexpectedOutput {
+        let error = ProcessError::UnexpectedOutput {
+            program: "codesign",
             detail: "2 outputs for 3 targets".into(),
         };
         assert_eq!(
@@ -469,7 +524,7 @@ mod tests {
             (PathBuf::from("b.dylib"), failed(1, "b.dylib: nope")),
             (
                 PathBuf::from("My App.app"),
-                Error::TargetNotFound(PathBuf::from("My App.app")),
+                Error::PathNotFound(PathBuf::from("My App.app")),
             ),
             (PathBuf::from("a"), failed(3, "")),
         ]);
@@ -481,7 +536,7 @@ mod tests {
                  b.dylib: `codesign` exited with code 1: b.dylib: nope; \
                  My App.app: {}; \
                  a: `codesign` exited with code 3: no diagnostics",
-                Error::TargetNotFound(PathBuf::from("My App.app")),
+                Error::PathNotFound(PathBuf::from("My App.app")),
             ),
         );
     }

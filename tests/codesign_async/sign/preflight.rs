@@ -113,7 +113,11 @@ async fn a_dash_entitlements_path_reaches_codesign_as_a_file_name() {
     let error = sign(&target, "-").entitlements("-").await.unwrap_err();
 
     match error {
-        Error::Codesign(signers::CodesignError::Failed { stderr, .. }) => {
+        Error::Process(signers::ProcessError::Failed {
+            program: "codesign",
+            stderr,
+            ..
+        }) => {
             assert!(
                 stderr.contains("cannot read entitlement data"),
                 "got {stderr}"

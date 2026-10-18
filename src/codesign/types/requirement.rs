@@ -69,7 +69,7 @@ impl Requirement {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::errors::CodesignError;
+    use crate::errors::ProcessError;
 
     fn requirement(line: &str) -> Requirement {
         Requirement::parse(line).unwrap_or_else(|e| panic!("{line:?}: {e}"))
@@ -152,9 +152,10 @@ mod tests {
             assert!(
                 matches!(
                     result,
-                    Err(crate::Error::Codesign(
-                        CodesignError::UnexpectedOutput { .. }
-                    ))
+                    Err(crate::Error::Process(ProcessError::UnexpectedOutput {
+                        program: "codesign",
+                        ..
+                    }))
                 ),
                 "{line:?}: {result:?}"
             );

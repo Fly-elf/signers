@@ -752,6 +752,7 @@ fn missing(key: &str) -> Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::errors::ProcessError;
 
     /// `codesign -dvvvv` on a binary signed ad hoc, as printed on macOS 27.
     const ADHOC: &str = "\
@@ -823,7 +824,10 @@ Chosen signature=1
     /// The `detail` of the `UnexpectedOutput` that parsing `report` must fail with.
     fn rejection(report: &str) -> String {
         match parse_report(report) {
-            Err(Error::Codesign(CodesignError::UnexpectedOutput { detail })) => detail,
+            Err(Error::Process(ProcessError::UnexpectedOutput { program, detail })) => {
+                assert_eq!(program, "codesign");
+                detail
+            }
             other => panic!("expected UnexpectedOutput, got {other:?}\nfor report:\n{report}"),
         }
     }

@@ -201,11 +201,13 @@ mod tests {
                 "file modified: /x".into(),
                 "app: bundle format unrecognized".into(),
             ) {
-                crate::errors::Error::Codesign(crate::errors::CodesignError::Failed {
+                crate::errors::Error::Process(crate::errors::ProcessError::Failed {
+                    program,
                     code: reported,
                     stdout,
                     stderr,
                 }) => {
+                    assert_eq!(program, "codesign");
                     assert_eq!(reported, code);
                     assert_eq!(stdout, "file modified: /x");
                     assert_eq!(stderr, "app: bundle format unrecognized");

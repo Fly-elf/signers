@@ -16,7 +16,7 @@ mod validating;
 
 use std::path::Path;
 
-use signers::{CodesignError, Error};
+use signers::{CodesignError, Error, ProcessError};
 
 use crate::support::inspect;
 
@@ -56,7 +56,12 @@ fn constraint_invalid(error: Error) -> String {
 /// returning its exit code and stderr.
 fn unreadable(error: Error) -> (i32, String) {
     match error {
-        Error::Codesign(CodesignError::Failed { code, stderr, .. }) => (code, stderr),
+        Error::Process(ProcessError::Failed {
+            program: "codesign",
+            code,
+            stderr,
+            ..
+        }) => (code, stderr),
         other => panic!("expected Failed, got {other:?}"),
     }
 }
