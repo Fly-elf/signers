@@ -6,9 +6,9 @@ logging.getLogger("signers").addHandler(logging.NullHandler())
 
 
 def refresh_log_levels() -> None:
-    """Make the Rust side re-read the levels of the `signers` loggers.
+    """Make the Rust side re-read the level of the `signers` logger.
 
-    Needed only after you lower the level of a `signers` logger once events have been
+    Needed only after you lower the level of the `signers` logger once events have been
     emitted, for example from `INFO` to `DEBUG`: the previous level is cached and the
     new one is ignored until you call this. Raising a level takes effect at once.
 

@@ -15,6 +15,7 @@
     reason = "every test binary uses a different subset"
 )]
 
+pub mod events;
 pub mod fixture;
 pub mod identity;
 pub mod inspect;
