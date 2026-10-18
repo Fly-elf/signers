@@ -546,12 +546,14 @@ class Signature:
     total_signatures: int | None
     """The number of signatures in the code (`Total signatures`).
 
-    `None` when the report has no such line, as for code signed by the linker.
+    `None` when the report has no such line, as for code signed by the linker and on macOS
+    before 27.
     """
     chosen_signature: int | None
     """The index of the signature this report describes (`Chosen signature`).
 
-    `None` when the report has no such line, as for code signed by the linker.
+    `None` when the report has no such line, as for code signed by the linker and on macOS
+    before 27.
     """
     nested: tuple[str, ...]
     """The code nested directly in a bundle, as `codesign` prints each path (`Nested`).
