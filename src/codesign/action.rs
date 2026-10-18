@@ -17,7 +17,7 @@ pub(crate) fn joined<F: Flags + Copy>(flags: F) -> String {
     tokens
 }
 
-// Emits an action's public type over `Core`, its private `Options`, a private `new`, one setter
+// Emits an action's public type over the engine's `Job`, its private `Options`, a private `new`, one setter
 // per field of the `setters` block, `per_target`, `IntoFuture` (async) and `run` (blocking).
 // Fields in the first block get no setter. Setter forms: `Option<impl Into<T>>` takes
 // `impl Into<T>` and stores `Some`; `Option<T>` takes `T` and stores `Some`; `T` takes `T`.
@@ -36,8 +36,8 @@ macro_rules! action {
 
         #[derive(Debug, Clone)]
         $(#[$attr])*
-        pub struct $name<S = $crate::target::One, R = $crate::codesign::asynchronous::Async> {
-            core: $crate::codesign::core::Core<S, R>,
+        pub struct $name<S = $crate::target::One, R = $crate::engine::Async> {
+            job: $crate::engine::Job<S, R>,
             options: Options,
         }
 
@@ -49,7 +49,7 @@ macro_rules! action {
             where
                 T: $crate::IntoTargets<Shape = S>,
             {
-                Self { core: $crate::codesign::core::Core::new::<Options, T>(target), options }
+                Self { job: $crate::engine::Job::new::<Options, T>(target), options }
             }
         }
 
@@ -115,14 +115,14 @@ macro_rules! action {
                 S: $crate::target::Multi,
                 Self: $crate::engine::SharedRun,
             {
-                self.core.per_target = per_target;
+                self.job.batch = per_target;
                 self
             }
         }
 
         /// Runs the action when awaited. Its [errors](crate::codesign#errors) and
         /// [panics](crate::codesign#panics) are listed in [`codesign`](crate::codesign).
-        impl<S> ::std::future::IntoFuture for $name<S, $crate::codesign::asynchronous::Async>
+        impl<S> ::std::future::IntoFuture for $name<S, $crate::engine::Async>
         where
             S: $crate::target::Shape,
         {
@@ -137,12 +137,12 @@ macro_rules! action {
             /// target, shaped like the targets: one output for a single path, a `Vec` of them for a
             /// `Vec` or slice, an array of `N` for an array of `N`.
             fn into_future(self) -> Self::IntoFuture {
-                self.core.run(self.options)
+                self.job.run(self.options)
             }
         }
 
         #[cfg(feature = "blocking")]
-        impl<S> $name<S, $crate::codesign::blocking::Blocking>
+        impl<S> $name<S, $crate::engine::Blocking>
         where
             S: $crate::target::Shape,
         {
@@ -174,7 +174,7 @@ macro_rules! action {
             /// # Ok(()) }
             /// ```
             pub fn run(self) -> $crate::Result<<S as $crate::target::Shape>::Out<$output>> {
-                self.core.run(self.options)
+                self.job.run(self.options)
             }
         }
     };
