@@ -23,9 +23,10 @@ A call blocks until `codesign` finishes. A failure raises a subclass of
 `import signers` also loads `signers.codesign`, so `signers.codesign.sign_adhoc(...)`
 works without a second import.
 
-Events from the Rust side go to the standard `logging` module, under loggers named
-`signers.…`, at debug and trace level (`DEBUG`, and level 5 for trace). Configure them through
-`logging.getLogger("signers")`. Lowering the level of a `signers` logger after events
+Events from the Rust side go to the standard `logging` module, under the single logger
+`signers`, at debug and trace level (`DEBUG`, and level 5 for trace). Debug events report
+each tool being spawned and exiting; trace events add the tool's output. Configure them
+through `logging.getLogger("signers")`. Lowering the level of that logger after events
 have been emitted needs a call to `refresh_log_levels`; raising it takes effect at once.
 
 Where to go next:
@@ -33,7 +34,7 @@ Where to go next:
 - `signers.codesign`: the actions, what they check before running anything, and
   running one `codesign` per target of a sequence.
 - `SignersError`: what can fail, and the attributes each error carries.
-- `refresh_log_levels`: applying a lowered logger level.
+- `refresh_log_levels`: applying a lowered `signers` logger level.
 """
 
 from importlib.metadata import version
