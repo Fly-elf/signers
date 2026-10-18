@@ -3,9 +3,9 @@ use std::ffi::OsStr;
 use std::path::PathBuf;
 
 use crate::codesign::Requirement;
-use crate::codesign::action::PushArgs;
 use crate::codesign::action::action;
-use crate::codesign::action::sealed::ToArgs;
+use crate::codesign::tool::Codesign;
+use crate::engine::{Operation, PushArgs};
 use crate::errors::Result;
 
 action! {
@@ -48,9 +48,10 @@ action! {
     setters {}
 }
 
-impl ToArgs for Options {
+impl Operation for Options {
+    type Tool = Codesign;
     type Output = Vec<Requirement>;
-    const PER_TARGET: bool = true;
+    const BATCH: bool = true;
 
     fn to_args<'a>(&'a self, targets: &'a [PathBuf]) -> Vec<Cow<'a, OsStr>> {
         let mut args: Vec<Cow<'a, OsStr>> = Vec::new();
@@ -104,7 +105,7 @@ mod tests {
     fn args_of<S>(builder: &Requirements<S>) -> Vec<OsString> {
         builder
             .options
-            .to_args(&builder.core.targets)
+            .to_args(&builder.job.targets)
             .into_iter()
             .map(Cow::into_owned)
             .collect()
@@ -146,9 +147,9 @@ mod tests {
 
     #[test]
     fn collections_default_to_one_run_per_target() {
-        assert!(requirements(vec!["a", "b"]).core.per_target);
-        assert!(requirements(["a", "b"]).core.per_target);
-        assert!(!requirements("a").core.per_target);
+        assert!(requirements(vec!["a", "b"]).job.batch);
+        assert!(requirements(["a", "b"]).job.batch);
+        assert!(!requirements("a").job.batch);
     }
 
     #[test]
@@ -288,7 +289,7 @@ mod tests {
             fn check() {}
         }
         impl<T: ?Sized> AmbiguousIfShared<()> for T {}
-        impl<T: ?Sized + crate::codesign::action::sealed::SharedRun> AmbiguousIfShared<u8> for T {}
+        impl<T: ?Sized + crate::engine::SharedRun> AmbiguousIfShared<u8> for T {}
 
         <Requirements as AmbiguousIfShared<_>>::check();
     }
