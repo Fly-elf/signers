@@ -2,11 +2,11 @@ use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 
-use crate::codesign::action::PushArgs;
 use crate::codesign::action::action;
-use crate::codesign::action::sealed::{SharedRun, ToArgs};
+use crate::codesign::tool::Codesign;
 use crate::codesign::types::parse_report;
 use crate::codesign::{Signature, SignatureSlot};
+use crate::engine::{Operation, PushArgs, SharedRun};
 use crate::errors::{CodesignError, Result};
 
 action! {
@@ -69,9 +69,10 @@ action! {
 
 impl<S, R> SharedRun for Display<S, R> {}
 
-impl ToArgs for Options {
+impl Operation for Options {
+    type Tool = Codesign;
     type Output = Signature;
-    const PER_TARGET: bool = true;
+    const BATCH: bool = true;
 
     fn to_args<'a>(&'a self, targets: &'a [PathBuf]) -> Vec<Cow<'a, OsStr>> {
         let mut args: Vec<Cow<'a, OsStr>> = Vec::new();
@@ -202,7 +203,7 @@ mod tests {
     fn args_of<S>(builder: &Display<S>) -> Vec<OsString> {
         builder
             .options
-            .to_args(&builder.core.targets)
+            .to_args(&builder.job.targets)
             .into_iter()
             .map(Cow::into_owned)
             .collect()
@@ -352,21 +353,23 @@ Chosen signature=1
 
     #[test]
     fn collections_default_to_one_run_per_target() {
-        assert!(display(vec!["a", "b"]).core.per_target);
-        assert!(display(["a", "b"]).core.per_target);
+        const { assert!(Options::BATCH) };
+
+        assert!(display(vec!["a", "b"]).job.batch);
+        assert!(display(["a", "b"]).job.batch);
     }
 
     /// The setter is typed on the shape, not on the length.
     #[test]
     fn a_one_element_collection_keeps_the_per_target_setter() {
-        assert!(!display(vec!["a"]).per_target(false).core.per_target);
-        assert!(!display(["a"]).per_target(false).core.per_target);
+        assert!(!display(vec!["a"]).per_target(false).job.batch);
+        assert!(!display(["a"]).per_target(false).job.batch);
         assert!(
             display(vec!["a"])
                 .per_target(false)
                 .per_target(true)
-                .core
-                .per_target
+                .job
+                .batch
         );
     }
 
@@ -552,12 +555,15 @@ Chosen signature=1
     }
 
     #[test]
-    fn whitespace_around_either_stream_does_not_matter() {
-        let stdout = format!("\n\n{ENTITLEMENTS}\n\n");
-        let stderr = format!("\n{}\n\n", report("/x/a", "first"));
+    fn streams_trimmed_by_the_process_run_parse_as_they_are() {
+        let stderr = report("/x/a", "first");
 
         let signatures = Options::default()
-            .output_bytes(&paths(&["a"]), stdout.into_bytes(), stderr.into_bytes())
+            .output(
+                &paths(&["a"]),
+                ENTITLEMENTS.trim().to_owned(),
+                stderr.trim().to_owned(),
+            )
             .unwrap();
 
         assert_eq!(signatures[0].identifier, "first");
@@ -577,10 +583,10 @@ Chosen signature=1
         );
 
         let signatures = Options::default()
-            .output_bytes(
+            .output(
                 &[PathBuf::from(OsStr::from_bytes(b"caf\xE9"))],
-                Vec::new(),
-                stderr,
+                String::new(),
+                String::from_utf8_lossy(&stderr).into_owned(),
             )
             .unwrap();
 

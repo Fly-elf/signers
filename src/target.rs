@@ -18,7 +18,7 @@ pub(crate) mod sealed {
 
         /// Gives `outputs`, one per target in order, this shape.
         ///
-        /// The runner always passes exactly one output per target.
+        /// The engine always passes exactly one output per target.
         ///
         /// # Panics
         ///
@@ -288,7 +288,7 @@ mod tests {
     }
 
     /// An empty path is still a target: dropping it would leave fewer outputs
-    /// than inputs. Refusing it is the runner's job (`Error::EmptyTarget`).
+    /// than inputs. Refusing it is the engine's job (`Error::EmptyTarget`).
     #[test]
     fn an_empty_single_target_is_kept() {
         let expected = vec![PathBuf::new()];
