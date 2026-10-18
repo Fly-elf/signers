@@ -47,11 +47,11 @@ action! {
         ///
         /// Without it a universal binary is reported whole, as
         /// [`Format::MachOUniversal`](crate::codesign::Format::MachOUniversal). A slice the binary
-        /// doesn't have fails with [`CodesignError::Failed`].
+        /// doesn't have fails with [`ProcessError::Failed`](crate::ProcessError::Failed).
         architecture: Option<impl Into<String>>,
         /// Reads this version of a versioned bundle instead of `Current` (`--bundle-version`).
         ///
-        /// A version the bundle doesn't have fails with [`CodesignError::Failed`].
+        /// A version the bundle doesn't have fails with [`ProcessError::Failed`](crate::ProcessError::Failed).
         bundle_version: Option<impl Into<String>>,
         /// Lists the code nested in a bundle, in [`Signature::nested`] (`--deep`).
         ///

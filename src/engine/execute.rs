@@ -11,7 +11,7 @@ use super::process::{RunError, spawn};
 use super::tool::Tool;
 use crate::errors::{Error, ProcessError, Result};
 
-/// Fails with [`Error::PathNotFound`] or [`Error::TargetAccess`] unless `path` exists.
+/// Fails with [`Error::PathNotFound`] or [`Error::PathAccess`] unless `path` exists.
 pub(crate) async fn check_exists(path: &Path) -> Result<()> {
     match tokio::fs::try_exists(path).await {
         Ok(true) => Ok(()),

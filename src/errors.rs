@@ -1,5 +1,5 @@
-//! Why an action failed: [`Error`](enum@Error), with [`CodesignError`] for `codesign` and
-//! [`ProcessError`] for the other external tools.
+//! Why an action failed: [`Error`](enum@Error). [`ProcessError`] says what went wrong with the
+//! external tool's process, and [`CodesignError`] holds what only `codesign` reports.
 
 use std::path::PathBuf;
 use std::process::ExitStatus;
@@ -12,19 +12,20 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Why an action failed.
 ///
 /// Every variant except [`Codesign`](Error::Codesign), [`Process`](Error::Process),
-/// [`Batch`](Error::Batch) and [`Io`](Error::Io) comes from a check made before `codesign`
-/// starts, so no target has been touched. The order of the checks is listed in [`codesign`](crate::codesign#errors).
+/// [`Batch`](Error::Batch) and [`Io`](Error::Io) comes from a check made before the tool
+/// starts, so no target has been touched. The order of the checks is listed in
+/// [`codesign`](crate::codesign#errors).
 ///
 /// # Examples
 ///
 /// ```no_run
 /// # async fn run() {
-/// use signers::{CodesignError, Error, codesign};
+/// use signers::{Error, ProcessError, codesign};
 ///
 /// match codesign::sign_adhoc("mytool").force(true).await {
 ///     Ok(()) => {}
-///     Err(Error::TargetNotFound(path)) => eprintln!("no such file: {}", path.display()),
-///     Err(Error::Codesign(CodesignError::Failed { stderr, .. })) => eprintln!("{stderr}"),
+///     Err(Error::PathNotFound(path)) => eprintln!("no such file: {}", path.display()),
+///     Err(Error::Process(ProcessError::Failed { stderr, .. })) => eprintln!("{stderr}"),
 ///     Err(error) => eprintln!("{error}"),
 /// }
 /// # }
@@ -93,19 +94,28 @@ pub enum Error {
     #[error("{} target(s) failed: {}", .0.len(), failures(.0))]
     Batch(Vec<(PathBuf, Error)>),
 
-    /// The `codesign` tool couldn't run, or it rejected the job.
+    /// `codesign` is missing, or it rejected the job with a verdict.
+    ///
+    /// Only what is specific to `codesign` comes here: [`NotFound`](CodesignError::NotFound) and
+    /// the verdicts of [`verify`](crate::codesign::verify),
+    /// [`validate_constraint`](crate::codesign::validate_constraint) and
+    /// [`display`](crate::codesign::display). Any other failure of its process is
+    /// [`Process`](Error::Process).
     #[error(transparent)]
     Codesign(#[from] CodesignError),
 
-    /// An external tool couldn't run, or it rejected the job.
+    /// An external tool's process failed: it couldn't run, exited non-zero, or printed what
+    /// this crate can't read.
     ///
-    /// For a tool whose module has no error type of its own. The `codesign` actions never
-    /// return it: they report through [`Codesign`](Error::Codesign).
+    /// `program` in the [`ProcessError`] names the tool. For `codesign` it is every such failure
+    /// except a missing executable, which is [`Codesign`](Error::Codesign).
     #[error(transparent)]
     Process(#[from] ProcessError),
 }
 
-/// Why running the `codesign` tool failed.
+/// What only `codesign` reports: a missing executable, and the verdicts of some actions.
+///
+/// Every other failure of its process is a [`ProcessError`] in [`Error::Process`].
 #[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum CodesignError {
@@ -168,7 +178,7 @@ pub enum CodesignError {
     ///
     /// Code with one signature has nothing in the second slot. `codesign` exits 0 for it, and
     /// reports `no signature` in place of the signature, so this crate fails instead of returning
-    /// one with nothing in it. Unsigned code is a different failure: [`CodesignError::Failed`].
+    /// one with nothing in it. Unsigned code is a different failure: [`ProcessError::Failed`].
     /// `stderr` and `stdout` hold what `codesign` printed on each stream during the whole run,
     /// trimmed, so with one run over several targets they also cover targets that read fine. Only
     /// `stderr` is part of the message.
@@ -178,10 +188,10 @@ pub enum CodesignError {
 
 /// Why running an external tool failed.
 ///
-/// The general form of [`CodesignError`]'s process failures, for tools whose module has no error
-/// type of its own. Each variant names the tool in `program`, the executable looked up on `PATH`,
-/// e.g. `"codesign"`. No action returns it yet; the `codesign` ones report through
-/// [`CodesignError`].
+/// Each variant names the tool in `program`, the executable looked up on `PATH`, e.g.
+/// `"codesign"`. It comes wrapped in [`Error::Process`]. The `codesign` actions return every
+/// variant but [`NotFound`](ProcessError::NotFound), which is
+/// [`CodesignError::NotFound`] so that it can hint at `/usr/bin`.
 ///
 /// # Examples
 ///

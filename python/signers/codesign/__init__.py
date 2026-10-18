@@ -46,19 +46,25 @@ Before starting `codesign`, an action checks, in this order:
    `SharedOutputPerTargetError`;
 3. that there is a target at all, else `NoTargetsError`;
 4. that no target is an empty path, else `EmptyTargetError`;
-5. that every target exists, else `TargetNotFoundError` or `TargetAccessError`.
+5. that every target exists, else `PathNotFoundError` or `PathAccessError`.
 
 So far no target has been touched. Then `codesign` runs:
 
 - once over all the targets, for a single path and by default for the actions that
-  change them (`sign` and its presets, `remove_signature`). Its failure raises a
-  `CodesignError`, such as `CodesignFailedError`. It stops at the first target it
-  rejects: the targets before that one have already been changed, the ones after it
-  haven't.
+  change them (`sign` and its presets, `remove_signature`). It stops at the first
+  target it rejects: the targets before that one have already been changed, the ones
+  after it haven't.
 - once per target, with `per_target=True`, which is the default for the actions that
   only read them. Every target runs, and the failures come together as `BatchError`.
   If `codesign` can't start at all (`CodesignNotFoundError`, `SpawnError`), that error
   is raised alone instead.
+
+What `codesign` does wrong raises a `ProcessError` with `program` `"codesign"`: it
+couldn't start or be waited on (`SpawnError`, `RunError`), it exited non-zero
+(`ProcessFailedError`), a signal killed it (`TerminatedError`), or its output couldn't
+be read (`UnexpectedOutputError`). A missing executable is the exception: it raises
+`CodesignNotFoundError`, which adds a hint about `/usr/bin`. The other `CodesignError`
+subclasses are the verdicts of `verify`, `validate_constraint` and `display`.
 
 `per_target` is ignored for a single path, which always runs one `codesign`.
 `requirements` and `extract_certificates` have no `per_target`: they always run one
