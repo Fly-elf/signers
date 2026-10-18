@@ -15,7 +15,7 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["codesign", "code-signing", "macos", "signing", "apple"]
 categories = ["os::macos-apis", "development-tools"]
-include = ["src/**", "README.md", "LICENSE-*", "CHANGELOG.md"]
+include = ["/src/**", "/README.md", "/LICENSE-*", "/CHANGELOG.md"]
 
 [dependencies]
 base64 = "0.23"
