@@ -3,7 +3,7 @@ use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use signers::errors::{Change, ResourceChange};
-use signers::{CodesignError, Error};
+use signers::{CodesignError, Error, ProcessError};
 
 create_exception!(_native, NativeError, PyException);
 
@@ -23,14 +23,14 @@ fn payload<'py>(py: Python<'py>, err: &Error) -> PyResult<Bound<'py, PyDict>> {
             d.set_item("index", index)?;
             "EmptyTarget"
         }
-        Error::TargetNotFound(path) => {
+        Error::PathNotFound(path) => {
             d.set_item("path", path.as_os_str())?;
-            "TargetNotFound"
+            "PathNotFound"
         }
-        Error::TargetAccess { path, source } => {
+        Error::PathAccess { path, source } => {
             d.set_item("path", path.as_os_str())?;
             d.set_item("errno", source.raw_os_error())?;
-            "TargetAccess"
+            "PathAccess"
         }
         Error::Io { path, source } => {
             d.set_item("path", path.as_os_str())?;
@@ -57,6 +57,10 @@ fn payload<'py>(py: Python<'py>, err: &Error) -> PyResult<Bound<'py, PyDict>> {
             d.set_item("codesign", true)?;
             codesign_fields(&d, err)?
         }
+        Error::Process(err) => {
+            d.set_item("process", true)?;
+            process_fields(&d, err)?
+        }
         _ => "Other",
     };
     d.set_item("kind", kind)?;
@@ -66,40 +70,6 @@ fn payload<'py>(py: Python<'py>, err: &Error) -> PyResult<Bound<'py, PyDict>> {
 fn codesign_fields(d: &Bound<'_, PyDict>, err: &CodesignError) -> PyResult<&'static str> {
     let kind = match err {
         CodesignError::NotFound => "NotFound",
-        CodesignError::Spawn(source) => {
-            d.set_item("errno", source.raw_os_error())?;
-            "Spawn"
-        }
-        CodesignError::Run(source) => {
-            d.set_item("errno", source.raw_os_error())?;
-            "Run"
-        }
-        CodesignError::Failed {
-            code,
-            stdout,
-            stderr,
-        } => {
-            d.set_item("code", code)?;
-            streams(d, stdout, stderr)?;
-            "Failed"
-        }
-        CodesignError::Terminated {
-            status,
-            stdout,
-            stderr,
-        } => {
-            #[cfg(unix)]
-            let signal = std::os::unix::process::ExitStatusExt::signal(status);
-            #[cfg(not(unix))]
-            let signal: Option<i32> = None;
-            d.set_item("signal", signal)?;
-            streams(d, stdout, stderr)?;
-            "Terminated"
-        }
-        CodesignError::UnexpectedOutput { detail } => {
-            d.set_item("detail", detail)?;
-            "UnexpectedOutput"
-        }
         CodesignError::VerificationFailed {
             stdout,
             stderr,
@@ -130,6 +100,58 @@ fn codesign_fields(d: &Bound<'_, PyDict>, err: &CodesignError) -> PyResult<&'sta
         CodesignError::NoSignature { stdout, stderr } => {
             streams(d, stdout, stderr)?;
             "NoSignature"
+        }
+        _ => "Other",
+    };
+    Ok(kind)
+}
+
+fn process_fields(d: &Bound<'_, PyDict>, err: &ProcessError) -> PyResult<&'static str> {
+    let kind = match err {
+        ProcessError::NotFound { program } => {
+            d.set_item("program", program)?;
+            "NotFound"
+        }
+        ProcessError::Spawn { program, source } => {
+            d.set_item("program", program)?;
+            d.set_item("errno", source.raw_os_error())?;
+            "Spawn"
+        }
+        ProcessError::Run { program, source } => {
+            d.set_item("program", program)?;
+            d.set_item("errno", source.raw_os_error())?;
+            "Run"
+        }
+        ProcessError::Failed {
+            program,
+            code,
+            stdout,
+            stderr,
+        } => {
+            d.set_item("program", program)?;
+            d.set_item("code", code)?;
+            streams(d, stdout, stderr)?;
+            "Failed"
+        }
+        ProcessError::Terminated {
+            program,
+            status,
+            stdout,
+            stderr,
+        } => {
+            #[cfg(unix)]
+            let signal = std::os::unix::process::ExitStatusExt::signal(status);
+            #[cfg(not(unix))]
+            let signal: Option<i32> = None;
+            d.set_item("program", program)?;
+            d.set_item("signal", signal)?;
+            streams(d, stdout, stderr)?;
+            "Terminated"
+        }
+        ProcessError::UnexpectedOutput { program, detail } => {
+            d.set_item("program", program)?;
+            d.set_item("detail", detail)?;
+            "UnexpectedOutput"
         }
         _ => "Other",
     };
