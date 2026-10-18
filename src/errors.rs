@@ -95,6 +95,9 @@ pub enum Error {
     /// The `codesign` tool couldn't run, or it rejected the job.
     #[error(transparent)]
     Codesign(#[from] CodesignError),
+
+    #[error(transparent)]
+    Process(#[from] ProcessError),
 }
 
 /// Why running the `codesign` tool failed.
@@ -210,6 +213,47 @@ pub enum CodesignError {
     /// `stderr` is part of the message.
     #[error("no signature: {}", diagnostics(.stderr))]
     NoSignature { stdout: String, stderr: String },
+}
+
+#[non_exhaustive]
+#[derive(Debug, Error)]
+pub enum ProcessError {
+    #[error("`{program}` was not found on PATH")]
+    NotFound { program: &'static str },
+
+    #[error("failed to spawn the `{program}` process or the Tokio runtime: {source}")]
+    Spawn {
+        program: &'static str,
+        source: std::io::Error,
+    },
+
+    #[error("failed while running the `{program}` process: {source}")]
+    Run {
+        program: &'static str,
+        source: std::io::Error,
+    },
+
+    #[error("`{program}` exited with code {code}: {}", diagnostics(.stderr))]
+    Failed {
+        program: &'static str,
+        code: i32,
+        stdout: String,
+        stderr: String,
+    },
+
+    #[error("the `{program}` process terminated abnormally ({status}): {}", diagnostics(.stderr))]
+    Terminated {
+        program: &'static str,
+        status: ExitStatus,
+        stdout: String,
+        stderr: String,
+    },
+
+    #[error("`{program}` produced output this crate can't read: {detail}")]
+    UnexpectedOutput {
+        program: &'static str,
+        detail: String,
+    },
 }
 
 /// A sealed resource that [`verify`](crate::codesign::verify) found altered.

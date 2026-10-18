@@ -1,20 +1,19 @@
 use std::future::Future;
-use std::io::ErrorKind;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::pin::Pin;
-use std::process::Stdio;
 
 use futures_util::StreamExt;
 
 use super::actions::sign;
 use super::core::Core;
-use crate::codesign::action;
+use super::tool::Codesign;
 use crate::codesign::action::sealed::ToArgs;
 use crate::codesign::{
     Display, ExtractCertificates, RemoveSignature, Requirements, Sign, ValidateConstraint, Verify,
 };
-use crate::errors::{CodesignError, Error, Result};
+use crate::engine::{RunError, Tool, spawn};
+use crate::errors::{CodesignError, Error, ProcessError, Result};
 use crate::target::{IntoTargets, Shape};
 
 #[derive(Debug, Clone, Copy)]
@@ -461,55 +460,19 @@ async fn execute<A: ToArgs>(
 
 /// Runs one `codesign` over `targets` and turns its exit into outputs or an error.
 async fn run<A: ToArgs>(action: &A, targets: &[PathBuf]) -> Result<Vec<A::Output>> {
-    let args = action.to_args(targets);
-    tracing::trace!(
-        "running codesign {}",
-        args.iter()
-            .map(|a| a.to_string_lossy())
-            .collect::<Vec<_>>()
-            .join(" ")
-    );
-
-    // Spawning and waiting are kept apart so that a failure to *start*
-    // `codesign` is never reported as one of its results. That means
-    // configuring the streams by hand, which `Command::output` would
-    // otherwise do: no inherited stdin for `codesign` to block on, and
-    // both of its streams captured rather than leaking into the
-    // caller's terminal.
-    let child = tokio::process::Command::new("codesign")
-        .args(&args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|source| match source.kind() {
-            ErrorKind::NotFound => CodesignError::NotFound,
-            _ => CodesignError::Spawn(source),
-        })?;
-
-    let output = child.wait_with_output().await.map_err(CodesignError::Run)?;
-    if output.status.success() {
-        let outputs = action.output_bytes(targets, output.stdout, output.stderr)?;
-        if outputs.len() != targets.len() {
-            return Err(CodesignError::UnexpectedOutput {
-                detail: format!("{} outputs for {} targets", outputs.len(), targets.len()),
-            }
-            .into());
-        }
-        return Ok(outputs);
+    let exit = spawn::<Codesign>(&action.to_args(targets))
+        .await
+        .map_err(RunError::into_error)?;
+    let (stdout, stderr) =
+        exit.success::<Codesign>(|code, stdout, stderr| action.failure(code, stdout, stderr))?;
+    let outputs = action.output(targets, stdout, stderr)?;
+    if outputs.len() != targets.len() {
+        return Err(Codesign::error(ProcessError::UnexpectedOutput {
+            program: Codesign::PROGRAM,
+            detail: format!("{} outputs for {} targets", outputs.len(), targets.len()),
+        }));
     }
-
-    Err(match output.status.code() {
-        Some(code) => action.failure_bytes(code, output.stdout, output.stderr),
-        // No exit code at all: the process was killed before it could
-        // exit, so this is not `codesign` rejecting anything.
-        None => CodesignError::Terminated {
-            status: output.status,
-            stdout: action::decode(output.stdout),
-            stderr: action::decode(output.stderr),
-        }
-        .into(),
-    })
+    Ok(outputs)
 }
 
 /// The runner's side of its contract with an action, which no shipped action

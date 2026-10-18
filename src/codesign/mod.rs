@@ -85,6 +85,7 @@ mod asynchronous;
 #[cfg(feature = "blocking")]
 pub mod blocking;
 mod core;
+mod tool;
 mod types;
 
 pub use actions::{
