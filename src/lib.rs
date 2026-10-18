@@ -34,6 +34,24 @@
 //! [`codesign`]; `blocking` adds `codesign::blocking` and turns `async` on too, since `.run()`
 //! drives the same async code on a runtime of its own. At least one of them must be enabled.
 //!
+//! # Logging
+//!
+//! Every `codesign` run is reported as [`tracing`](https://docs.rs/tracing) events with the target
+//! `signers`; the field `program` names the tool (`codesign`). At `debug` level the events say
+//! that the tool is being spawned, with its arguments, and that it exited, with its status and
+//! the time it took; a run over several targets adds one event with the number of runs and how
+//! many go at once. At `trace` level the tool's standard output and error follow. Nothing is
+//! emitted at `info` or above, and failures are not logged: they come back as an [`Error`].
+//!
+//! The crate sets no level cap; what gets recorded is up to the subscriber you install.
+//! For example, with `tracing-subscriber` and its `env-filter` feature:
+//!
+//! ```ignore
+//! tracing_subscriber::fmt()
+//!     .with_env_filter("warn,signers=debug")
+//!     .init();
+//! ```
+//!
 //! Where to go next:
 //!
 //! - [`codesign`]: the actions, what `.await` checks before running anything, and running one
