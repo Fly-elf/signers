@@ -1,3 +1,5 @@
+//! What an action tells the engine: its arguments, how to read a run's output, and its hooks.
+
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
@@ -5,27 +7,28 @@ use std::path::PathBuf;
 use super::tool::Tool;
 use crate::errors::{Error, Result};
 
-/// Marks the action types that can run several targets in one `codesign`; bounds `per_target`.
+/// Marks the action types whose targets can share one run of the tool; bounds `per_target`.
 pub trait SharedRun {}
 
-/// Renders an action into `codesign` arguments and reads the result of its run.
+/// Renders an action into the tool's arguments and reads the result of its run.
 ///
 /// `Sync` because per-target runs share one action concurrently.
 pub trait Operation: Sync {
+    /// The program this operation runs.
     type Tool: Tool;
 
-    /// What a run yields for each target when `codesign` succeeds.
+    /// What a run yields for each target when the tool succeeds.
     ///
     /// It depends on the action type only, never on the option values.
     type Output: Send + 'static;
 
     /// The action's `per_target` default, for a collection of targets.
     ///
-    /// `true` suits read-only actions; mutating ones keep `false`, so `codesign` handles their
+    /// `true` suits read-only actions; mutating ones keep `false`, so the tool handles their
     /// targets in order. A single target always runs once, whatever this says.
     const BATCH: bool;
 
-    /// Rejects options this crate can't honour, before any target is checked or `codesign`
+    /// Rejects options this crate can't honour, before any target is checked or the tool
     /// runs.
     fn validate(&self) -> Result<()> {
         Ok(())
@@ -33,7 +36,7 @@ pub trait Operation: Sync {
 
     /// Names the setter of an option set to write one file for all targets, if any.
     ///
-    /// With `per_target(true)` the runner refuses it with [`Error::SharedOutputPerTarget`].
+    /// With `per_target(true)` the engine refuses it with [`Error::SharedOutputPerTarget`].
     /// [`validate`](Self::validate) can't see `per_target`, hence a hook of its own.
     fn shared_output(&self) -> Option<&'static str> {
         None
@@ -49,7 +52,7 @@ pub trait Operation: Sync {
     ///
     /// `targets` are the ones this run covered: all of them, or one per run with
     /// `per_target`. The outputs must follow them in order; any other count becomes
-    /// [`CodesignError::UnexpectedOutput`]. Both streams are lossy-decoded and trimmed. A
+    /// [`ProcessError::UnexpectedOutput`](crate::errors::ProcessError::UnexpectedOutput). Both streams are lossy-decoded and trimmed. A
     /// failed run goes to [`failure`](Self::failure) instead.
     fn output(
         &self,
@@ -59,7 +62,7 @@ pub trait Operation: Sync {
     ) -> Result<Vec<Self::Output>>;
 
     /// Turns a non-zero exit code into this action's error; by default
-    /// [`CodesignError::Failed`].
+    /// the tool's [`failed`](Tool::failed).
     ///
     /// Both streams are already lossy-decoded and trimmed; the default keeps them as they
     /// are. A process killed by a signal has no exit code and never gets here.
@@ -68,7 +71,7 @@ pub trait Operation: Sync {
     }
 }
 
-/// Appends `codesign` arguments, so that each option renders in one line.
+/// Appends the tool's arguments, so that each option renders in one line.
 pub trait PushArgs<'a> {
     /// Appends an argument known at compile time, e.g. `--force` or `--timestamp=none`.
     fn flag(&mut self, name: &'static str);
