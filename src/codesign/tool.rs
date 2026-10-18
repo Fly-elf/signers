@@ -8,34 +8,18 @@ impl Tool for Codesign {
 
     fn error(error: ProcessError) -> Error {
         match error {
-            ProcessError::NotFound { .. } => CodesignError::NotFound,
-            ProcessError::Spawn { source, .. } => CodesignError::Spawn(source),
-            ProcessError::Run { source, .. } => CodesignError::Run(source),
-            ProcessError::Failed {
-                code,
-                stdout,
-                stderr,
-                ..
-            } => CodesignError::Failed {
-                code,
-                stdout,
-                stderr,
-            },
-            ProcessError::Terminated {
-                status,
-                stdout,
-                stderr,
-                ..
-            } => CodesignError::Terminated {
-                status,
-                stdout,
-                stderr,
-            },
-            ProcessError::UnexpectedOutput { detail, .. } => {
-                CodesignError::UnexpectedOutput { detail }
-            }
+            ProcessError::NotFound { .. } => CodesignError::NotFound.into(),
+            other => Error::Process(other),
         }
-        .into()
+    }
+}
+
+impl Codesign {
+    pub(crate) fn unexpected_output(detail: impl Into<String>) -> Error {
+        Self::error(ProcessError::UnexpectedOutput {
+            program: Self::PROGRAM,
+            detail: detail.into(),
+        })
     }
 }
 
@@ -67,14 +51,16 @@ mod tests {
         });
 
         match spawn {
-            Error::Codesign(CodesignError::Spawn(source)) => {
-                assert_eq!(source.to_string(), "no fork")
+            Error::Process(ProcessError::Spawn { program, source }) => {
+                assert_eq!(program, "codesign");
+                assert_eq!(source.to_string(), "no fork");
             }
             other => panic!("expected Spawn, got {other:?}"),
         }
         match run {
-            Error::Codesign(CodesignError::Run(source)) => {
-                assert_eq!(source.to_string(), "no wait")
+            Error::Process(ProcessError::Run { program, source }) => {
+                assert_eq!(program, "codesign");
+                assert_eq!(source.to_string(), "no wait");
             }
             other => panic!("expected Run, got {other:?}"),
         }
@@ -85,11 +71,13 @@ mod tests {
         let error = Codesign::failed(3, "out".into(), "err".into());
 
         match error {
-            Error::Codesign(CodesignError::Failed {
+            Error::Process(ProcessError::Failed {
+                program,
                 code,
                 stdout,
                 stderr,
             }) => {
+                assert_eq!(program, "codesign");
                 assert_eq!(code, 3);
                 assert_eq!(stdout, "out");
                 assert_eq!(stderr, "err");
@@ -108,11 +96,13 @@ mod tests {
         });
 
         match error {
-            Error::Codesign(CodesignError::Terminated {
+            Error::Process(ProcessError::Terminated {
+                program,
                 status,
                 stdout,
                 stderr,
             }) => {
+                assert_eq!(program, "codesign");
                 assert_eq!(status.signal(), Some(9));
                 assert_eq!(stdout, "out");
                 assert_eq!(stderr, "err");
@@ -122,21 +112,32 @@ mod tests {
     }
 
     #[test]
-    fn unexpected_output_keeps_its_detail() {
-        let error = Codesign::error(ProcessError::UnexpectedOutput {
-            program: "codesign",
-            detail: "2 outputs for 3 targets".into(),
-        });
+    fn unexpected_output_names_codesign_and_keeps_its_detail() {
+        let error = Codesign::unexpected_output("2 outputs for 3 targets");
 
         match error {
-            Error::Codesign(CodesignError::UnexpectedOutput { detail }) => {
+            Error::Process(ProcessError::UnexpectedOutput { program, detail }) => {
+                assert_eq!(program, "codesign");
                 assert_eq!(detail, "2 outputs for 3 targets");
             }
             other => panic!("expected UnexpectedOutput, got {other:?}"),
         }
     }
 
-    /// Every message a `codesign` user already saw stays the same through the mapping.
+    #[test]
+    fn unexpected_output_through_the_mapping_is_the_same_error() {
+        let error = Codesign::error(ProcessError::UnexpectedOutput {
+            program: "codesign",
+            detail: "no plist".into(),
+        });
+
+        assert!(matches!(
+            error,
+            Error::Process(ProcessError::UnexpectedOutput { program: "codesign", ref detail })
+                if detail == "no plist"
+        ));
+    }
+
     #[test]
     fn the_mapped_errors_read_as_codesign_errors() {
         let error = Codesign::failed(1, String::new(), "A.app: bad".into());
@@ -144,6 +145,19 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "`codesign` exited with code 1: A.app: bad"
+        );
+    }
+
+    #[test]
+    fn the_not_found_message_keeps_the_usr_bin_hint() {
+        let error = Codesign::error(ProcessError::NotFound {
+            program: "codesign",
+        });
+
+        assert_eq!(
+            error.to_string(),
+            "`codesign` was not found on PATH; it ships with macOS in /usr/bin, \
+             so check that PATH includes /usr/bin"
         );
     }
 }
