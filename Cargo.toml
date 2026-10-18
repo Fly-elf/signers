@@ -8,12 +8,14 @@ version = "0.1.0"
 name = "signers"
 version.workspace = true
 edition = "2024"
+rust-version = "1.88"
 description = "Hard-to-misuse Rust API over code signing tools, starting with macOS codesign"
 repository = "https://github.com/Fly-elf/signers.git"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["codesign", "code-signing", "macos", "signing", "apple"]
 categories = ["os::macos-apis", "development-tools"]
+include = ["src/**", "README.md", "LICENSE-*", "CHANGELOG.md"]
 
 [dependencies]
 base64 = "0.23"
