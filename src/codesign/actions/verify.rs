@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use crate::codesign::action::action;
 use crate::codesign::tool::Codesign;
 use crate::codesign::{SignatureSlot, Strict};
-use crate::engine::{Operation, PushArgs, SharedRun};
+use crate::engine::{Operation, PushArgs, SharedRun, Tool};
 use crate::errors::{Change, CodesignError, Error, ResourceChange};
 
 action! {
@@ -225,15 +225,11 @@ impl Operation for Options {
                     stderr,
                     resources,
                 }
+                .into()
             }
-            3 => CodesignError::RequirementUnsatisfied { stdout, stderr },
-            _ => CodesignError::Failed {
-                code,
-                stdout,
-                stderr,
-            },
+            3 => CodesignError::RequirementUnsatisfied { stdout, stderr }.into(),
+            _ => Codesign::failed(code, stdout, stderr),
         }
-        .into()
     }
 }
 
@@ -263,6 +259,7 @@ mod tests {
 
     use super::*;
     use crate::codesign::verify;
+    use crate::errors::ProcessError;
 
     fn os(strings: &[&str]) -> Vec<OsString> {
         strings.iter().map(OsString::from).collect()
@@ -279,7 +276,12 @@ mod tests {
 
     fn code_of(error: Error) -> Option<(i32, String)> {
         match error {
-            Error::Codesign(CodesignError::Failed { code, stderr, .. }) => Some((code, stderr)),
+            Error::Process(ProcessError::Failed {
+                program: "codesign",
+                code,
+                stderr,
+                ..
+            }) => Some((code, stderr)),
             _ => None,
         }
     }

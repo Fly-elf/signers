@@ -3,7 +3,7 @@ use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use signers::errors::{Change, ResourceChange};
-use signers::{CodesignError, Error};
+use signers::{CodesignError, Error, ProcessError};
 
 create_exception!(_native, NativeError, PyException);
 
@@ -23,14 +23,14 @@ fn payload<'py>(py: Python<'py>, err: &Error) -> PyResult<Bound<'py, PyDict>> {
             d.set_item("index", index)?;
             "EmptyTarget"
         }
-        Error::TargetNotFound(path) => {
+        Error::PathNotFound(path) => {
             d.set_item("path", path.as_os_str())?;
-            "TargetNotFound"
+            "PathNotFound"
         }
-        Error::TargetAccess { path, source } => {
+        Error::PathAccess { path, source } => {
             d.set_item("path", path.as_os_str())?;
             d.set_item("errno", source.raw_os_error())?;
-            "TargetAccess"
+            "PathAccess"
         }
         Error::Io { path, source } => {
             d.set_item("path", path.as_os_str())?;
@@ -57,6 +57,10 @@ fn payload<'py>(py: Python<'py>, err: &Error) -> PyResult<Bound<'py, PyDict>> {
             d.set_item("codesign", true)?;
             codesign_fields(&d, err)?
         }
+        Error::Process(err) => {
+            d.set_item("process", true)?;
+            process_fields(&d, err)?
+        }
         _ => "Other",
     };
     d.set_item("kind", kind)?;
@@ -66,40 +70,6 @@ fn payload<'py>(py: Python<'py>, err: &Error) -> PyResult<Bound<'py, PyDict>> {
 fn codesign_fields(d: &Bound<'_, PyDict>, err: &CodesignError) -> PyResult<&'static str> {
     let kind = match err {
         CodesignError::NotFound => "NotFound",
-        CodesignError::Spawn(source) => {
-            d.set_item("errno", source.raw_os_error())?;
-            "Spawn"
-        }
-        CodesignError::Run(source) => {
-            d.set_item("errno", source.raw_os_error())?;
-            "Run"
-        }
-        CodesignError::Failed {
-            code,
-            stdout,
-            stderr,
-        } => {
-            d.set_item("code", code)?;
-            streams(d, stdout, stderr)?;
-            "Failed"
-        }
-        CodesignError::Terminated {
-            status,
-            stdout,
-            stderr,
-        } => {
-            #[cfg(unix)]
-            let signal = std::os::unix::process::ExitStatusExt::signal(status);
-            #[cfg(not(unix))]
-            let signal: Option<i32> = None;
-            d.set_item("signal", signal)?;
-            streams(d, stdout, stderr)?;
-            "Terminated"
-        }
-        CodesignError::UnexpectedOutput { detail } => {
-            d.set_item("detail", detail)?;
-            "UnexpectedOutput"
-        }
         CodesignError::VerificationFailed {
             stdout,
             stderr,
@@ -130,6 +100,58 @@ fn codesign_fields(d: &Bound<'_, PyDict>, err: &CodesignError) -> PyResult<&'sta
         CodesignError::NoSignature { stdout, stderr } => {
             streams(d, stdout, stderr)?;
             "NoSignature"
+        }
+        _ => "Other",
+    };
+    Ok(kind)
+}
+
+fn process_fields(d: &Bound<'_, PyDict>, err: &ProcessError) -> PyResult<&'static str> {
+    let kind = match err {
+        ProcessError::NotFound { program } => {
+            d.set_item("program", program)?;
+            "NotFound"
+        }
+        ProcessError::Spawn { program, source } => {
+            d.set_item("program", program)?;
+            d.set_item("errno", source.raw_os_error())?;
+            "Spawn"
+        }
+        ProcessError::Run { program, source } => {
+            d.set_item("program", program)?;
+            d.set_item("errno", source.raw_os_error())?;
+            "Run"
+        }
+        ProcessError::Failed {
+            program,
+            code,
+            stdout,
+            stderr,
+        } => {
+            d.set_item("program", program)?;
+            d.set_item("code", code)?;
+            streams(d, stdout, stderr)?;
+            "Failed"
+        }
+        ProcessError::Terminated {
+            program,
+            status,
+            stdout,
+            stderr,
+        } => {
+            #[cfg(unix)]
+            let signal = std::os::unix::process::ExitStatusExt::signal(status);
+            #[cfg(not(unix))]
+            let signal: Option<i32> = None;
+            d.set_item("program", program)?;
+            d.set_item("signal", signal)?;
+            streams(d, stdout, stderr)?;
+            "Terminated"
+        }
+        ProcessError::UnexpectedOutput { program, detail } => {
+            d.set_item("program", program)?;
+            d.set_item("detail", detail)?;
+            "UnexpectedOutput"
         }
         _ => "Other",
     };
@@ -208,21 +230,28 @@ mod tests {
         Error::Codesign(err)
     }
 
+    fn process(err: ProcessError) -> Error {
+        Error::Process(err)
+    }
+
     #[test]
     fn every_constructible_variant_maps_to_its_kind_and_fields() {
         let cases: Vec<(Error, &str)> = vec![
-            (Error::NoTargets, "{'kind': 'NoTargets', 'codesign': None}"),
+            (
+                Error::NoTargets,
+                "{'kind': 'NoTargets', 'codesign': None, 'process': None}",
+            ),
             (Error::EmptyTarget(2), "{'kind': 'EmptyTarget', 'index': 2}"),
             (
-                Error::TargetNotFound("/t/a b".into()),
-                "{'kind': 'TargetNotFound', 'path': '/t/a b'}",
+                Error::PathNotFound("/t/a b".into()),
+                "{'kind': 'PathNotFound', 'path': '/t/a b', 'errno': None}",
             ),
             (
-                Error::TargetAccess {
+                Error::PathAccess {
                     path: "/t/x".into(),
                     source: io::Error::from_raw_os_error(13),
                 },
-                "{'kind': 'TargetAccess', 'path': '/t/x', 'errno': 13}",
+                "{'kind': 'PathAccess', 'path': '/t/x', 'errno': 13}",
             ),
             (
                 Error::Io {
@@ -241,35 +270,50 @@ mod tests {
             ),
             (
                 codesign(CodesignError::NotFound),
-                "{'kind': 'NotFound', 'codesign': True}",
+                "{'kind': 'NotFound', 'codesign': True, 'process': None, 'program': None}",
             ),
             (
-                codesign(CodesignError::Spawn(io::Error::from_raw_os_error(1))),
-                "{'kind': 'Spawn', 'codesign': True, 'errno': 1}",
+                process(ProcessError::NotFound { program: "pkgutil" }),
+                "{'kind': 'NotFound', 'process': True, 'codesign': None, 'program': 'pkgutil'}",
             ),
             (
-                codesign(CodesignError::Run(io::Error::other("pipe"))),
-                "{'kind': 'Run', 'codesign': True, 'errno': None}",
+                process(ProcessError::Spawn {
+                    program: "codesign",
+                    source: io::Error::from_raw_os_error(1),
+                }),
+                "{'kind': 'Spawn', 'process': True, 'codesign': None, 'program': 'codesign', 'errno': 1}",
             ),
             (
-                codesign(CodesignError::Failed {
+                process(ProcessError::Run {
+                    program: "codesign",
+                    source: io::Error::other("pipe"),
+                }),
+                "{'kind': 'Run', 'process': True, 'program': 'codesign', 'errno': None}",
+            ),
+            (
+                process(ProcessError::Failed {
+                    program: "codesign",
                     code: 3,
                     stdout: "o".into(),
                     stderr: "e".into(),
                 }),
-                "{'kind': 'Failed', 'codesign': True, 'code': 3, 'stdout': 'o', 'stderr': 'e'}",
+                "{'kind': 'Failed', 'process': True, 'codesign': None, 'program': 'codesign', 'code': 3, 'stdout': 'o', 'stderr': 'e'}",
             ),
             (
-                codesign(CodesignError::Terminated {
+                process(ProcessError::Terminated {
+                    program: "codesign",
                     status: ExitStatus::from_raw(9),
                     stdout: "o".into(),
                     stderr: "e".into(),
                 }),
-                "{'kind': 'Terminated', 'codesign': True, 'signal': 9, 'stdout': 'o', 'stderr': 'e'}",
+                "{'kind': 'Terminated', 'process': True, 'program': 'codesign', 'signal': 9, 'stdout': 'o', 'stderr': 'e'}",
             ),
             (
-                codesign(CodesignError::UnexpectedOutput { detail: "d".into() }),
-                "{'kind': 'UnexpectedOutput', 'codesign': True, 'detail': 'd'}",
+                process(ProcessError::UnexpectedOutput {
+                    program: "codesign",
+                    detail: "d".into(),
+                }),
+                "{'kind': 'UnexpectedOutput', 'process': True, 'program': 'codesign', 'detail': 'd'}",
             ),
             (
                 codesign(CodesignError::VerificationFailed {
@@ -309,13 +353,14 @@ mod tests {
     #[test]
     fn a_non_utf8_path_crosses_as_a_surrogate_escaped_str() {
         let path = PathBuf::from(OsStr::from_bytes(b"/t/\xff"));
-        assert_payload(Error::TargetNotFound(path), r"{'path': '/t/\udcff'}");
+        assert_payload(Error::PathNotFound(path), r"{'path': '/t/\udcff'}");
     }
 
     #[test]
     fn batch_failures_are_path_payload_pairs_in_order_and_nest() {
         let inner = Error::Batch(vec![("/t/c".into(), Error::NoTargets)]);
-        let failed = codesign(CodesignError::Failed {
+        let failed = process(ProcessError::Failed {
+            program: "codesign",
             code: 1,
             stdout: String::new(),
             stderr: "e".into(),
@@ -324,7 +369,12 @@ mod tests {
         assert_payload(err, "{'kind': 'Batch', 'codesign': None}");
 
         let err = Error::Batch(vec![
-            ("/t/a".into(), codesign(CodesignError::NotFound)),
+            (
+                "/t/a".into(),
+                process(ProcessError::NotFound {
+                    program: "codesign",
+                }),
+            ),
             (
                 "/t/b".into(),
                 Error::Batch(vec![("/t/c".into(), Error::NoTargets)]),

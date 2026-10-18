@@ -151,8 +151,8 @@ macro_rules! preflight_tests {
             let missing = workspace.join("nowhere.bin");
 
             match $constructor(missing.clone()).await.unwrap_err() {
-                signers::Error::TargetNotFound(path) => assert_eq!(path, missing),
-                other => panic!("expected TargetNotFound, got {other:?}"),
+                signers::Error::PathNotFound(path) => assert_eq!(path, missing),
+                other => panic!("expected PathNotFound, got {other:?}"),
             }
 
             for &per_target in MODES {
@@ -161,8 +161,8 @@ macro_rules! preflight_tests {
                     .unwrap_err();
 
                 match error {
-                    signers::Error::TargetNotFound(path) => assert_eq!(path, missing),
-                    other => panic!("per_target({per_target}): expected TargetNotFound, got {other:?}"),
+                    signers::Error::PathNotFound(path) => assert_eq!(path, missing),
+                    other => panic!("per_target({per_target}): expected PathNotFound, got {other:?}"),
                 }
             }
         }
@@ -197,7 +197,7 @@ macro_rules! preflight_tests {
                     .await
                     .unwrap_err();
                 assert!(
-                    matches!(&error, signers::Error::TargetNotFound(path) if *path == missing),
+                    matches!(&error, signers::Error::PathNotFound(path) if *path == missing),
                     "per_target({per_target}): got {error:?}",
                 );
 
@@ -206,7 +206,7 @@ macro_rules! preflight_tests {
                     .await
                     .unwrap_err();
                 assert!(
-                    matches!(&error, signers::Error::TargetNotFound(path) if *path == missing),
+                    matches!(&error, signers::Error::PathNotFound(path) if *path == missing),
                     "per_target({per_target}): got {error:?}",
                 );
             }
@@ -238,11 +238,11 @@ macro_rules! preflight_tests {
             // Reopen before asserting, so a failure still leaves a removable workspace.
             std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
             match error {
-                signers::Error::TargetAccess { path, source } => {
+                signers::Error::PathAccess { path, source } => {
                     assert_eq!(path, target);
                     assert_eq!(source.kind(), std::io::ErrorKind::PermissionDenied);
                 }
-                other => panic!("expected TargetAccess, got {other:?}"),
+                other => panic!("expected PathAccess, got {other:?}"),
             }
         }
     };

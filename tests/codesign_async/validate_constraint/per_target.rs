@@ -5,7 +5,7 @@
 use signers::codesign::validate_constraint;
 use std::path::PathBuf;
 
-use signers::{CodesignError, Error};
+use signers::{Error, ProcessError};
 
 use super::{constraint_invalid, unreadable};
 use crate::support::fixture::{Workspace, fixture};
@@ -174,7 +174,11 @@ async fn together_an_unreadable_plist_fails_the_whole_run_with_exit_one() {
     assert!(
         matches!(
             error,
-            Error::Codesign(CodesignError::Failed { code: 1, .. })
+            Error::Process(ProcessError::Failed {
+                program: "codesign",
+                code: 1,
+                ..
+            })
         ),
         "{error:?}"
     );

@@ -4,7 +4,8 @@ use std::str::FromStr;
 use bitflags::bitflags;
 
 use super::options::SigningFlags;
-use crate::errors::{CodesignError, Error, Result};
+use crate::codesign::tool::Codesign;
+use crate::errors::{Error, Result};
 
 /// The signature of one target, as `codesign --display` reports it.
 ///
@@ -741,22 +742,17 @@ fn hex<T: TryFrom<u64>>(line: &str, digits: &str) -> Result<T> {
 }
 
 fn unreadable(line: &str) -> Error {
-    CodesignError::UnexpectedOutput {
-        detail: format!("unreadable report line {line:?}"),
-    }
-    .into()
+    Codesign::unexpected_output(format!("unreadable report line {line:?}"))
 }
 
 fn missing(key: &str) -> Error {
-    CodesignError::UnexpectedOutput {
-        detail: format!("the report has no {key} line"),
-    }
-    .into()
+    Codesign::unexpected_output(format!("the report has no {key} line"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::errors::ProcessError;
 
     /// `codesign -dvvvv` on a binary signed ad hoc, as printed on macOS 27.
     const ADHOC: &str = "\
@@ -828,7 +824,10 @@ Chosen signature=1
     /// The `detail` of the `UnexpectedOutput` that parsing `report` must fail with.
     fn rejection(report: &str) -> String {
         match parse_report(report) {
-            Err(Error::Codesign(CodesignError::UnexpectedOutput { detail })) => detail,
+            Err(Error::Process(ProcessError::UnexpectedOutput { program, detail })) => {
+                assert_eq!(program, "codesign");
+                detail
+            }
             other => panic!("expected UnexpectedOutput, got {other:?}\nfor report:\n{report}"),
         }
     }

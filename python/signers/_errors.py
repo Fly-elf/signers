@@ -11,13 +11,16 @@ __all__ = [
     "BatchError",
     "Change",
     "CodesignError",
-    "CodesignFailedError",
     "CodesignNotFoundError",
     "ConstraintInvalidError",
     "EmptyTargetError",
     "IoError",
     "NoSignatureError",
     "NoTargetsError",
+    "PathAccessError",
+    "PathNotFoundError",
+    "ProcessError",
+    "ProcessFailedError",
     "RequirementUnsatisfiedError",
     "ResourceChange",
     "RunError",
@@ -25,9 +28,8 @@ __all__ = [
     "SignersError",
     "SpawnError",
     "StdioPathError",
-    "TargetAccessError",
-    "TargetNotFoundError",
     "TerminatedError",
+    "ToolNotFoundError",
     "UnexpectedOutputError",
     "VerificationFailedError",
     "_acall",
@@ -52,7 +54,7 @@ class SignersError(Exception):
 
         try:
             codesign.sign_adhoc("mytool", force=True)
-        except codesign.TargetNotFoundError as error:
+        except codesign.PathNotFoundError as error:
             print(f"no such file: {error.path}")
         except codesign.SignersError as error:
             print(error)
@@ -86,7 +88,7 @@ class EmptyTargetError(SignersError, ValueError):
         self.index = index
 
 
-class TargetNotFoundError(SignersError, FileNotFoundError):
+class PathNotFoundError(SignersError, FileNotFoundError):
     """A target doesn't exist.
 
     Also a `FileNotFoundError`.
@@ -105,7 +107,7 @@ class TargetNotFoundError(SignersError, FileNotFoundError):
         return str(self.strerror)
 
 
-class TargetAccessError(SignersError, OSError):
+class PathAccessError(SignersError, OSError):
     """Whether a target exists couldn't be checked.
 
     The usual cause is a parent directory that denies access. Also an `OSError`.
@@ -215,9 +217,11 @@ class BatchError(SignersError):
 
 
 class CodesignError(SignersError):
-    """Base class of the errors from running `codesign` itself.
+    """Base class of what only `codesign` reports.
 
-    `codesign` couldn't run, or it rejected the job.
+    That is a missing executable (`CodesignNotFoundError`) and the verdicts of `verify`,
+    `validate_constraint` and `display`. Any other failure of its process is a
+    `ProcessError`.
     """
 
 
@@ -225,7 +229,8 @@ class CodesignNotFoundError(CodesignError, FileNotFoundError):
     """No `codesign` was found on `PATH`.
 
     `codesign` ships with macOS in `/usr/bin`. This error usually means `PATH` leaves
-    out `/usr/bin`, or the system isn't macOS. Also a `FileNotFoundError`.
+    out `/usr/bin`, or the system isn't macOS. It stands in for `ToolNotFoundError` to
+    carry that hint. Also a `FileNotFoundError`.
     """
 
     def __init__(self, message: str) -> None:
@@ -235,42 +240,78 @@ class CodesignNotFoundError(CodesignError, FileNotFoundError):
         return str(self.strerror)
 
 
-class SpawnError(CodesignError, OSError):
-    """`codesign` was found but couldn't start, e.g. because it isn't executable.
+class ProcessError(SignersError):
+    """Base class of the failures of an external tool's process.
 
-    Also an `OSError`.
+    The tool couldn't run, exited non-zero, or printed what this package can't read.
+    Every tool an action wraps reports these through a subclass of this one. For
+    `codesign` that is every failure of its process except a missing executable, which
+    is `CodesignNotFoundError`.
+
+    Attributes:
+        program: The executable that was run, e.g. `"codesign"`.
     """
 
-    def __init__(self, message: str, *, errno: int | None) -> None:
-        OSError.__init__(self, errno, message)
+    program: str
+
+    def __init__(self, message: str, *, program: str) -> None:
+        super().__init__(message)
+        self.program = program
+
+
+class ToolNotFoundError(ProcessError, FileNotFoundError):
+    """No executable called `program` was found on `PATH`.
+
+    Also a `FileNotFoundError`.
+    """
+
+    def __init__(self, message: str, *, program: str) -> None:
+        FileNotFoundError.__init__(self, ENOENT, message)
+        self.program = program
 
     def __str__(self) -> str:
         return str(self.strerror)
 
 
-class RunError(CodesignError, OSError):
-    """Waiting for `codesign` or reading its output failed.
+class SpawnError(ProcessError, OSError):
+    """`program` was found but couldn't start, e.g. because it isn't executable.
+
+    Also raised when the runtime that drives the process can't be created. Also an
+    `OSError`.
+    """
+
+    def __init__(self, message: str, *, program: str, errno: int | None) -> None:
+        OSError.__init__(self, errno, message)
+        self.program = program
+
+    def __str__(self) -> str:
+        return str(self.strerror)
+
+
+class RunError(ProcessError, OSError):
+    """Waiting for `program` or reading its output failed.
 
     The outcome is unknown, so the targets may or may not have changed. Also an
     `OSError`.
     """
 
-    def __init__(self, message: str, *, errno: int | None) -> None:
+    def __init__(self, message: str, *, program: str, errno: int | None) -> None:
         OSError.__init__(self, errno, message)
+        self.program = program
 
     def __str__(self) -> str:
         return str(self.strerror)
 
 
-class CodesignFailedError(CodesignError):
-    """`codesign` exited with a non-zero code.
+class ProcessFailedError(ProcessError):
+    """`program` exited with a non-zero code.
 
-    When one `codesign` runs over several targets, the targets before the rejected one
-    have already changed. See `signers.codesign`.
+    When one run covers several targets, the targets before the rejected one have
+    already changed. See `signers.codesign`.
 
     Attributes:
         code: The exit code.
-        stdout: What `codesign` printed on standard output, trimmed.
+        stdout: What `program` printed on standard output, trimmed.
         stderr: Its diagnostics, trimmed. Only this is part of the message.
     """
 
@@ -278,19 +319,22 @@ class CodesignFailedError(CodesignError):
     stdout: str
     stderr: str
 
-    def __init__(self, message: str, *, code: int, stdout: str, stderr: str) -> None:
-        super().__init__(message)
+    def __init__(
+        self, message: str, *, program: str, code: int, stdout: str, stderr: str
+    ) -> None:
+        super().__init__(message, program=program)
         self.code = code
         self.stdout = stdout
         self.stderr = stderr
 
 
-class TerminatedError(CodesignError):
-    """`codesign` was killed by a signal before it could exit.
+class TerminatedError(ProcessError):
+    """`program` was killed by a signal before it could exit.
 
     Attributes:
         signal: The signal number, or `None` if the system gave none.
-        stdout: What `codesign` printed on standard output, trimmed.
+        stdout: What `program` printed on standard output, trimmed. It isn't part of the
+            message.
         stderr: Its diagnostics, trimmed; usually empty.
     """
 
@@ -299,16 +343,22 @@ class TerminatedError(CodesignError):
     stderr: str
 
     def __init__(
-        self, message: str, *, signal: int | None, stdout: str, stderr: str
+        self,
+        message: str,
+        *,
+        program: str,
+        signal: int | None,
+        stdout: str,
+        stderr: str,
     ) -> None:
-        super().__init__(message)
+        super().__init__(message, program=program)
         self.signal = signal
         self.stdout = stdout
         self.stderr = stderr
 
 
-class UnexpectedOutputError(CodesignError):
-    """`codesign` exited 0, but its output couldn't be read as the action's result.
+class UnexpectedOutputError(ProcessError):
+    """`program` exited 0, but its output couldn't be read as the action's result.
 
     Attributes:
         detail: What didn't match, e.g. the number of results against the number of
@@ -317,8 +367,8 @@ class UnexpectedOutputError(CodesignError):
 
     detail: str
 
-    def __init__(self, message: str, *, detail: str) -> None:
-        super().__init__(message)
+    def __init__(self, message: str, *, program: str, detail: str) -> None:
+        super().__init__(message, program=program)
         self.detail = detail
 
 
@@ -441,7 +491,7 @@ class NoSignatureError(CodesignError):
 
     Code with one signature has nothing in the second slot. `codesign` exits 0 for it
     and reports `no signature`, so this error is raised instead of returning an empty
-    `Signature`. Unsigned code is a different failure: `CodesignFailedError`.
+    `Signature`. Unsigned code is a different failure: `ProcessFailedError`.
 
     Attributes:
         stdout: What `codesign` printed on standard output during the whole run,
@@ -465,24 +515,42 @@ def _from_native(payload: dict[str, object]) -> SignersError:
     kind = p["kind"]
     message: str = p["message"]
 
+    if p.get("process"):
+        program: str = p["program"]
+        match kind:
+            case "NotFound":
+                return ToolNotFoundError(message, program=program)
+            case "Spawn":
+                return SpawnError(message, program=program, errno=p["errno"])
+            case "Run":
+                return RunError(message, program=program, errno=p["errno"])
+            case "Failed":
+                return ProcessFailedError(
+                    message,
+                    program=program,
+                    code=p["code"],
+                    stdout=p["stdout"],
+                    stderr=p["stderr"],
+                )
+            case "Terminated":
+                return TerminatedError(
+                    message,
+                    program=program,
+                    signal=p["signal"],
+                    stdout=p["stdout"],
+                    stderr=p["stderr"],
+                )
+            case "UnexpectedOutput":
+                return UnexpectedOutputError(
+                    message, program=program, detail=p["detail"]
+                )
+            case _:
+                return ProcessError(message, program=program)
+
     if p.get("codesign"):
         match kind:
             case "NotFound":
                 return CodesignNotFoundError(message)
-            case "Spawn":
-                return SpawnError(message, errno=p["errno"])
-            case "Run":
-                return RunError(message, errno=p["errno"])
-            case "Failed":
-                return CodesignFailedError(
-                    message, code=p["code"], stdout=p["stdout"], stderr=p["stderr"]
-                )
-            case "Terminated":
-                return TerminatedError(
-                    message, signal=p["signal"], stdout=p["stdout"], stderr=p["stderr"]
-                )
-            case "UnexpectedOutput":
-                return UnexpectedOutputError(message, detail=p["detail"])
             case "VerificationFailed":
                 resources = tuple(
                     ResourceChange(Change[r["change"].upper()], Path(r["path"]))
@@ -509,10 +577,10 @@ def _from_native(payload: dict[str, object]) -> SignersError:
             return NoTargetsError(message)
         case "EmptyTarget":
             return EmptyTargetError(message, index=p["index"])
-        case "TargetNotFound":
-            return TargetNotFoundError(message, path=Path(p["path"]))
-        case "TargetAccess":
-            return TargetAccessError(message, path=Path(p["path"]), errno=p["errno"])
+        case "PathNotFound":
+            return PathNotFoundError(message, path=Path(p["path"]))
+        case "PathAccess":
+            return PathAccessError(message, path=Path(p["path"]), errno=p["errno"])
         case "Io":
             return IoError(message, path=Path(p["path"]), errno=p["errno"])
         case "StdioPath":

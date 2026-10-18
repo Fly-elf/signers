@@ -62,7 +62,7 @@ mod tests {
 
     use super::*;
     use crate::codesign::validate_constraint;
-    use crate::errors::Error;
+    use crate::errors::{Error, ProcessError};
 
     const BOGUS_FAILED: &str = "Constraint validation failed";
     const ERROR_REPORT: &str = "error: Lightweight Code requirement failed validation for category Launch\n\tError Domain=LWCRVerificationError Code=1 \"Error: Unknown Key, Context: bogus-key-xyz\" UserInfo={NSLocalizedDescription=Error: Unknown Key, Context: bogus-key-xyz}";
@@ -180,11 +180,13 @@ mod tests {
                 "out".to_owned(),
                 "Error reading constraint from x.plist".to_owned(),
             ) {
-                Error::Codesign(CodesignError::Failed {
+                Error::Process(ProcessError::Failed {
+                    program,
                     code: got,
                     stdout,
                     stderr,
                 }) => {
+                    assert_eq!(program, "codesign");
                     assert_eq!(got, code);
                     assert_eq!(stdout, "out");
                     assert_eq!(stderr, "Error reading constraint from x.plist");
