@@ -63,6 +63,8 @@ action! {
         ///
         /// Code with one signature has only [`SignatureSlot::First`]. Asking for the second fails with
         /// [`CodesignError::NoSignature`].
+        ///
+        /// Needs macOS 27 or later; older `codesign` rejects the option and the run fails.
         signature_slot: Option<SignatureSlot>,
     }
 }

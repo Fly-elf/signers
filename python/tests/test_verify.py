@@ -32,10 +32,16 @@ def test_verify_passes_every_option_to_codesign(workspace: Workspace) -> None:
             bundle_version="B",
             check_designated_requirement=True,
             test_requirement=f'identifier "{identifier}"',
-            signature_slot=SignatureSlot.FIRST,
         )
 
         assert result is None
+
+
+@pytest.mark.macos27
+def test_verify_passes_the_signature_slot_to_codesign() -> None:
+    assert codesign.verify("/bin/ls", signature_slot=SignatureSlot.FIRST) is None
+    with pytest.raises(signers.VerificationFailedError):
+        codesign.verify("/bin/ls", signature_slot=SignatureSlot.SECOND)
 
 
 def test_verify_test_requirement_file_reads_the_requirement_from_a_file(workspace: Workspace) -> None:

@@ -64,4 +64,4 @@ path = "examples/rust/codesign/sign_for_distribution.rs"
 # are ignored unless their group is set, e.g.
 # RUSTFLAGS='--cfg signers_test="keychain"' cargo test
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(signers_test, values("keychain", "network"))'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(signers_test, values("keychain", "macos27", "network"))'] }

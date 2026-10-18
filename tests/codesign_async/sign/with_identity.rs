@@ -36,8 +36,8 @@ async fn a_certificate_signature_names_its_signer() {
     assert_eq!(signature.flags() & super::ADHOC, 0, "signed ad hoc");
 }
 
-/// The identity's keychain is not on the search list, so the keychain setter is
-/// the only way `codesign` can find it.
+/// `codesign` looks for the identity in the given keychain only, so another
+/// keychain does not find it, whatever is on the search list.
 #[tokio::test]
 #[cfg_attr(not(signers_test = "keychain"), ignore = "test group: keychain")]
 async fn the_identity_is_looked_up_in_the_given_keychain() {
@@ -45,8 +45,12 @@ async fn the_identity_is_looked_up_in_the_given_keychain() {
     let unfound = workspace.unsigned("unfound");
     let found = workspace.unsigned("found");
     let identity = Identity::new();
+    let other = Identity::new();
 
-    let error = sign(&unfound, identity.name()).await.unwrap_err();
+    let error = sign(&unfound, identity.name())
+        .keychain(other.keychain())
+        .await
+        .unwrap_err();
     sign(&found, identity.name())
         .keychain(identity.keychain())
         .await
