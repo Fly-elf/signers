@@ -1,3 +1,5 @@
+//! Starts the tool's process and captures its exit, with each way it can fail to run kept apart.
+
 use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::io::ErrorKind;
@@ -6,6 +8,7 @@ use std::process::{ExitStatus, Stdio};
 use super::tool::Tool;
 use crate::errors::{Error, ProcessError, Result};
 
+/// How a process ended, with both streams decoded.
 pub struct Exit {
     pub status: ExitStatus,
     pub stdout: String,
@@ -13,6 +16,10 @@ pub struct Exit {
 }
 
 impl Exit {
+    /// Gives the streams of a run that exited 0.
+    ///
+    /// A non-zero exit goes through `failure`, which can read it as it likes. A kill by a signal
+    /// has no exit code, so it is [`ProcessError::Terminated`] whatever `failure` does.
     pub fn success<T: Tool>(
         self,
         failure: impl FnOnce(i32, String, String) -> Error,
@@ -34,8 +41,11 @@ impl Exit {
     }
 }
 
+/// A failed run, split by whether the tool started at all.
 pub(crate) enum RunError {
+    /// The tool never ran, so nothing is known about any target; a batch stops on it.
     Unstarted(Error),
+    /// The tool ran and failed; a batch collects it against its target.
     Failed(Error),
 }
 
@@ -47,6 +57,7 @@ impl RunError {
     }
 }
 
+/// Runs the tool with `args` and waits for it, with no standard input.
 pub(crate) async fn spawn<T: Tool>(args: &[Cow<'_, OsStr>]) -> std::result::Result<Exit, RunError> {
     tracing::trace!(
         "running {} {}",
@@ -96,7 +107,7 @@ pub(crate) async fn spawn<T: Tool>(args: &[Cow<'_, OsStr>]) -> std::result::Resu
 
 /// Turns a stream into text: invalid UTF-8 becomes U+FFFD, surrounding whitespace is dropped.
 ///
-/// The only place the crate decodes `codesign` output.
+/// The only place the crate decodes a tool's output.
 fn decode(bytes: Vec<u8>) -> String {
     String::from_utf8_lossy(&bytes).trim().to_string()
 }

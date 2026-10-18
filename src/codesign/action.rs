@@ -1,5 +1,5 @@
-//! What every `codesign` action shares: the sealed traits, argument rendering and the
-//! `action!` macro that defines each action's public type.
+//! What every `codesign` action shares: argument rendering helpers and the `action!` macro that
+//! defines each action's public type over the engine's `Job`.
 
 use bitflags::Flags;
 
@@ -67,16 +67,15 @@ macro_rules! action {
             /// [`display`](crate::codesign::display) and
             /// [`validate_constraint`](crate::codesign::validate_constraint), which only read them.
             ///
-            /// Only a `Vec`, slice or array of targets has this setter, even with one element: that is
-            /// the `S: Multi` bound. A single target always runs one `codesign`:
+            /// Only a `Vec`, slice or array of targets has this setter, even with one element. A single
+            /// target always runs one `codesign`:
             ///
             /// ```compile_fail,E0277
             /// signers::codesign::sign("a", "-").per_target(true);
             /// ```
             ///
             /// [`requirements`](crate::codesign::requirements) and
-            /// [`extract_certificates`](crate::codesign::extract_certificates) can't take it either, as
-            /// the `Self: SharedRun` bound says: they always run one `codesign` per target.
+            /// [`extract_certificates`](crate::codesign::extract_certificates) can't take it either: they always run one `codesign` per target.
             ///
             /// An option that writes one shared file, [`file_list`](crate::codesign::Sign::file_list) or
             /// [`detached`](crate::codesign::Sign::detached), makes `.await` fail with

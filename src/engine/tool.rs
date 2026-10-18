@@ -1,12 +1,23 @@
+//! The external program an action runs, and how its failures reach the caller.
+
 use crate::errors::{Error, ProcessError};
 
+/// An external program that actions run, looked up on `PATH`.
+///
+/// A tool with its own error type overrides [`error`](Self::error) to map every
+/// [`ProcessError`] onto it; the default wraps it as [`Error::Process`].
 pub trait Tool: 'static {
+    /// The executable name; also what [`ProcessError`] reports as `program`.
     const PROGRAM: &'static str;
 
+    /// Turns a process failure into the error this tool reports.
+    ///
+    /// An override must cover every [`ProcessError`] variant, so a new one can't go unmapped.
     fn error(error: ProcessError) -> Error {
         Error::Process(error)
     }
 
+    /// The error for a non-zero exit, as [`ProcessError::Failed`] of this tool.
     fn failed(code: i32, stdout: String, stderr: String) -> Error {
         Self::error(ProcessError::Failed {
             program: Self::PROGRAM,

@@ -1,3 +1,6 @@
+//! The checks that come before a run, and the run itself: once over all targets or once per
+//! target, concurrently.
+
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
@@ -8,6 +11,7 @@ use super::process::{RunError, spawn};
 use super::tool::Tool;
 use crate::errors::{Error, ProcessError, Result};
 
+/// Fails with [`Error::TargetNotFound`] or [`Error::TargetAccess`] unless `path` exists.
 pub(crate) async fn check_exists(path: &Path) -> Result<()> {
     match tokio::fs::try_exists(path).await {
         Ok(true) => Ok(()),
@@ -19,7 +23,8 @@ pub(crate) async fn check_exists(path: &Path) -> Result<()> {
     }
 }
 
-/// Checks the options and targets, then runs `codesign` once over all targets or once per target.
+/// Checks the options and targets, then runs the tool once over all targets or, with `batch`, once
+/// per target.
 pub(crate) async fn execute<O: Operation>(
     op: &O,
     targets: &[PathBuf],
@@ -76,7 +81,7 @@ pub(crate) async fn execute<O: Operation>(
     }
 }
 
-/// Runs one `codesign` over `targets` and turns its exit into outputs or an error.
+/// Runs the tool once over `targets` and turns its exit into outputs or an error.
 async fn run_once<O: Operation>(
     op: &O,
     targets: &[PathBuf],
@@ -97,11 +102,11 @@ async fn run_once<O: Operation>(
     Ok(outputs)
 }
 
-/// The runner's side of its contract with an action, which no shipped action
+/// The runner's side of its contract with an operation, which no shipped action
 /// can show from outside: both yield `()`, keep the default `failure` and
 /// always return one output per target.
 ///
-/// A stand-in action fills the gap. It runs the real `codesign`, read-only,
+/// A stand-in operation fills the gap. It runs the real `codesign`, read-only,
 /// so these need macOS like the integration suite does.
 #[cfg(all(test, target_os = "macos"))]
 mod tests {

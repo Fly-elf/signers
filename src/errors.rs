@@ -1,4 +1,5 @@
-//! Why an action failed: [`Error`](enum@Error), and [`CodesignError`] for the `codesign` backend.
+//! Why an action failed: [`Error`](enum@Error), with [`CodesignError`] for `codesign` and
+//! [`ProcessError`] for the other external tools.
 
 use std::path::PathBuf;
 use std::process::ExitStatus;
@@ -10,9 +11,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Why an action failed.
 ///
-/// Every variant except [`Codesign`](Error::Codesign), [`Batch`](Error::Batch) and
-/// [`Io`](Error::Io) comes from a check made before `codesign` starts, so no target has been
-/// touched. The order of the checks is listed in [`codesign`](crate::codesign#errors).
+/// Every variant except [`Codesign`](Error::Codesign), [`Process`](Error::Process),
+/// [`Batch`](Error::Batch) and [`Io`](Error::Io) comes from a check made before `codesign`
+/// starts, so no target has been touched. The order of the checks is listed in [`codesign`](crate::codesign#errors).
 ///
 /// # Examples
 ///
@@ -96,6 +97,10 @@ pub enum Error {
     #[error(transparent)]
     Codesign(#[from] CodesignError),
 
+    /// An external tool couldn't run, or it rejected the job.
+    ///
+    /// For a tool whose module has no error type of its own. The `codesign` actions never
+    /// return it: they report through [`Codesign`](Error::Codesign).
     #[error(transparent)]
     Process(#[from] ProcessError),
 }
@@ -215,24 +220,58 @@ pub enum CodesignError {
     NoSignature { stdout: String, stderr: String },
 }
 
+/// Why running an external tool failed.
+///
+/// The general form of [`CodesignError`]'s process failures, for tools whose module has no error
+/// type of its own. Each variant names the tool in `program`, the executable looked up on `PATH`,
+/// e.g. `"codesign"`. No action returns it yet; the `codesign` ones report through
+/// [`CodesignError`].
+///
+/// # Examples
+///
+/// ```
+/// use signers::{Error, ProcessError};
+///
+/// fn explain(error: &Error) -> String {
+///     match error {
+///         Error::Process(ProcessError::NotFound { program }) => format!("install `{program}`"),
+///         Error::Process(ProcessError::Failed { stderr, .. }) => stderr.clone(),
+///         other => other.to_string(),
+///     }
+/// }
+/// ```
 #[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum ProcessError {
+    /// No executable called `program` was found on `PATH`.
     #[error("`{program}` was not found on PATH")]
     NotFound { program: &'static str },
 
+    /// `program` was found but couldn't start, e.g. because it isn't executable.
+    ///
+    /// The blocking `.run()` also returns it when it can't create its runtime.
     #[error("failed to spawn the `{program}` process or the Tokio runtime: {source}")]
     Spawn {
         program: &'static str,
         source: std::io::Error,
     },
 
+    /// Waiting for `program` or reading its output failed.
+    ///
+    /// The outcome is unknown, so the targets may or may not have changed.
     #[error("failed while running the `{program}` process: {source}")]
     Run {
         program: &'static str,
         source: std::io::Error,
     },
 
+    /// `program` exited with `code`.
+    ///
+    /// `stderr` holds its diagnostics and `stdout` what it printed on standard output, both
+    /// trimmed. Only `stderr` is part of the message.
+    ///
+    /// When one run covers several targets, the targets before the rejected one may already have
+    /// changed.
     #[error("`{program}` exited with code {code}: {}", diagnostics(.stderr))]
     Failed {
         program: &'static str,
@@ -241,6 +280,10 @@ pub enum ProcessError {
         stderr: String,
     },
 
+    /// `program` was killed by a signal before it could exit.
+    ///
+    /// `status` holds the signal (`ExitStatusExt::signal`). `stderr` is usually empty. `stdout`
+    /// holds what `program` printed on standard output, trimmed; it isn't part of the message.
     #[error("the `{program}` process terminated abnormally ({status}): {}", diagnostics(.stderr))]
     Terminated {
         program: &'static str,
@@ -249,6 +292,10 @@ pub enum ProcessError {
         stderr: String,
     },
 
+    /// `program` exited 0, but its output couldn't be read as the action's result.
+    ///
+    /// `detail` says what didn't match, e.g. the number of results against the number of
+    /// targets.
     #[error("`{program}` produced output this crate can't read: {detail}")]
     UnexpectedOutput {
         program: &'static str,
