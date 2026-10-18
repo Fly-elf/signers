@@ -1,3 +1,6 @@
+#[cfg(not(target_os = "macos"))]
+compile_error!("signers' Python bindings currently support only macOS");
+
 use pyo3::prelude::*;
 
 mod codesign;
