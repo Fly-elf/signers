@@ -1,4 +1,5 @@
-//! Why an action failed: [`Error`](enum@Error), and [`CodesignError`] for the `codesign` backend.
+//! Why an action failed: [`Error`](enum@Error), with [`CodesignError`] for `codesign` and
+//! [`ProcessError`] for the other external tools.
 
 use std::path::PathBuf;
 use std::process::ExitStatus;
@@ -10,9 +11,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Why an action failed.
 ///
-/// Every variant except [`Codesign`](Error::Codesign), [`Batch`](Error::Batch) and
-/// [`Io`](Error::Io) comes from a check made before `codesign` starts, so no target has been
-/// touched. The order of the checks is listed in [`codesign`](crate::codesign#errors).
+/// Every variant except [`Codesign`](Error::Codesign), [`Process`](Error::Process),
+/// [`Batch`](Error::Batch) and [`Io`](Error::Io) comes from a check made before `codesign`
+/// starts, so no target has been touched. The order of the checks is listed in [`codesign`](crate::codesign#errors).
 ///
 /// # Examples
 ///
@@ -95,6 +96,13 @@ pub enum Error {
     /// The `codesign` tool couldn't run, or it rejected the job.
     #[error(transparent)]
     Codesign(#[from] CodesignError),
+
+    /// An external tool couldn't run, or it rejected the job.
+    ///
+    /// For a tool whose module has no error type of its own. The `codesign` actions never
+    /// return it: they report through [`Codesign`](Error::Codesign).
+    #[error(transparent)]
+    Process(#[from] ProcessError),
 }
 
 /// Why running the `codesign` tool failed.
@@ -210,6 +218,89 @@ pub enum CodesignError {
     /// `stderr` is part of the message.
     #[error("no signature: {}", diagnostics(.stderr))]
     NoSignature { stdout: String, stderr: String },
+}
+
+/// Why running an external tool failed.
+///
+/// The general form of [`CodesignError`]'s process failures, for tools whose module has no error
+/// type of its own. Each variant names the tool in `program`, the executable looked up on `PATH`,
+/// e.g. `"codesign"`. No action returns it yet; the `codesign` ones report through
+/// [`CodesignError`].
+///
+/// # Examples
+///
+/// ```
+/// use signers::{Error, ProcessError};
+///
+/// fn explain(error: &Error) -> String {
+///     match error {
+///         Error::Process(ProcessError::NotFound { program }) => format!("install `{program}`"),
+///         Error::Process(ProcessError::Failed { stderr, .. }) => stderr.clone(),
+///         other => other.to_string(),
+///     }
+/// }
+/// ```
+#[non_exhaustive]
+#[derive(Debug, Error)]
+pub enum ProcessError {
+    /// No executable called `program` was found on `PATH`.
+    #[error("`{program}` was not found on PATH")]
+    NotFound { program: &'static str },
+
+    /// `program` was found but couldn't start, e.g. because it isn't executable.
+    ///
+    /// The blocking `.run()` also returns it when it can't create its runtime.
+    #[error("failed to spawn the `{program}` process or the Tokio runtime: {source}")]
+    Spawn {
+        program: &'static str,
+        source: std::io::Error,
+    },
+
+    /// Waiting for `program` or reading its output failed.
+    ///
+    /// The outcome is unknown, so the targets may or may not have changed.
+    #[error("failed while running the `{program}` process: {source}")]
+    Run {
+        program: &'static str,
+        source: std::io::Error,
+    },
+
+    /// `program` exited with `code`.
+    ///
+    /// `stderr` holds its diagnostics and `stdout` what it printed on standard output, both
+    /// trimmed. Only `stderr` is part of the message.
+    ///
+    /// When one run covers several targets, the targets before the rejected one may already have
+    /// changed.
+    #[error("`{program}` exited with code {code}: {}", diagnostics(.stderr))]
+    Failed {
+        program: &'static str,
+        code: i32,
+        stdout: String,
+        stderr: String,
+    },
+
+    /// `program` was killed by a signal before it could exit.
+    ///
+    /// `status` holds the signal (`ExitStatusExt::signal`). `stderr` is usually empty. `stdout`
+    /// holds what `program` printed on standard output, trimmed; it isn't part of the message.
+    #[error("the `{program}` process terminated abnormally ({status}): {}", diagnostics(.stderr))]
+    Terminated {
+        program: &'static str,
+        status: ExitStatus,
+        stdout: String,
+        stderr: String,
+    },
+
+    /// `program` exited 0, but its output couldn't be read as the action's result.
+    ///
+    /// `detail` says what didn't match, e.g. the number of results against the number of
+    /// targets.
+    #[error("`{program}` produced output this crate can't read: {detail}")]
+    UnexpectedOutput {
+        program: &'static str,
+        detail: String,
+    },
 }
 
 /// A sealed resource that [`verify`](crate::codesign::verify) found altered.
@@ -626,5 +717,144 @@ mod tests {
             let text = inner.to_string();
             assert_eq!(Error::from(inner).to_string(), text);
         }
+    }
+
+    #[test]
+    fn a_process_error_names_the_program_in_every_variant() {
+        let io = || std::io::Error::other("boom");
+        let cases = [
+            (
+                ProcessError::NotFound { program: "tool" },
+                "`tool` was not found on PATH",
+            ),
+            (
+                ProcessError::Spawn {
+                    program: "tool",
+                    source: io(),
+                },
+                "failed to spawn the `tool` process or the Tokio runtime: boom",
+            ),
+            (
+                ProcessError::Run {
+                    program: "tool",
+                    source: io(),
+                },
+                "failed while running the `tool` process: boom",
+            ),
+            (
+                ProcessError::Failed {
+                    program: "tool",
+                    code: 2,
+                    stdout: "printed on stdout".into(),
+                    stderr: "bad input".into(),
+                },
+                "`tool` exited with code 2: bad input",
+            ),
+            (
+                ProcessError::UnexpectedOutput {
+                    program: "tool",
+                    detail: "2 outputs for 3 targets".into(),
+                },
+                "`tool` produced output this crate can't read: 2 outputs for 3 targets",
+            ),
+        ];
+        for (error, message) in cases {
+            assert_eq!(error.to_string(), message);
+        }
+    }
+
+    #[test]
+    fn a_process_failure_with_nothing_to_say_still_reads_as_a_sentence() {
+        let silent = ProcessError::Failed {
+            program: "tool",
+            code: 3,
+            stdout: "printed on stdout".into(),
+            stderr: String::new(),
+        };
+        assert_eq!(
+            silent.to_string(),
+            "`tool` exited with code 3: no diagnostics"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_terminated_process_error_reports_the_signal_and_its_diagnostics() {
+        let with = ProcessError::Terminated {
+            program: "tool",
+            status: killed_by(9),
+            stdout: "printed on stdout".into(),
+            stderr: "Killed".into(),
+        };
+        assert_eq!(
+            with.to_string(),
+            "the `tool` process terminated abnormally (signal: 9 (SIGKILL)): Killed",
+        );
+
+        let silent = ProcessError::Terminated {
+            program: "tool",
+            status: killed_by(9),
+            stdout: String::new(),
+            stderr: String::new(),
+        };
+        assert_eq!(
+            silent.to_string(),
+            "the `tool` process terminated abnormally (signal: 9 (SIGKILL)): no diagnostics",
+        );
+    }
+
+    #[test]
+    fn a_process_error_keeps_its_io_source() {
+        use std::error::Error as _;
+
+        let spawn = ProcessError::Spawn {
+            program: "tool",
+            source: std::io::Error::other("boom"),
+        };
+        assert_eq!(spawn.source().unwrap().to_string(), "boom");
+
+        let run = ProcessError::Run {
+            program: "tool",
+            source: std::io::Error::other("bang"),
+        };
+        assert_eq!(run.source().unwrap().to_string(), "bang");
+
+        assert!(
+            ProcessError::NotFound { program: "tool" }
+                .source()
+                .is_none()
+        );
+    }
+
+    /// `Error::Process` is transparent like `Error::Codesign`, and `?` converts into it.
+    #[test]
+    fn the_process_wrapper_forwards_display_unchanged() {
+        let inner = ProcessError::Failed {
+            program: "tool",
+            code: 4,
+            stdout: String::new(),
+            stderr: "nope".into(),
+        };
+        let text = inner.to_string();
+
+        let error = Error::from(inner);
+
+        assert!(matches!(
+            error,
+            Error::Process(ProcessError::Failed { code: 4, .. })
+        ));
+        assert_eq!(error.to_string(), text);
+    }
+
+    #[test]
+    fn the_process_wrapper_forwards_the_source_of_the_inner_error() {
+        use std::error::Error as _;
+
+        let error = Error::from(ProcessError::Run {
+            program: "tool",
+            source: std::io::Error::other("bang"),
+        });
+        // Transparent: the wrapper's source is the inner error's source, not the inner error.
+        assert_eq!(error.source().unwrap().to_string(), "bang");
     }
 }
