@@ -51,6 +51,7 @@ pub(crate) async fn execute<O: Operation>(
     }
 
     let cap = std::thread::available_parallelism().map_or(1, NonZeroUsize::get);
+    tracing::debug!(target: "signers", program = O::Tool::PROGRAM, runs = targets.len(), concurrency = cap, "batch");
     // The runs are built before they are buffered: mapping the stream
     // itself doesn't compile inside a `Send` boxed future (higher-ranked
     // lifetime limitation).
