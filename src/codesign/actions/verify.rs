@@ -259,6 +259,7 @@ mod tests {
 
     use super::*;
     use crate::codesign::verify;
+    use crate::errors::ProcessError;
 
     fn os(strings: &[&str]) -> Vec<OsString> {
         strings.iter().map(OsString::from).collect()
@@ -275,7 +276,12 @@ mod tests {
 
     fn code_of(error: Error) -> Option<(i32, String)> {
         match error {
-            Error::Codesign(CodesignError::Failed { code, stderr, .. }) => Some((code, stderr)),
+            Error::Process(ProcessError::Failed {
+                program: "codesign",
+                code,
+                stderr,
+                ..
+            }) => Some((code, stderr)),
             _ => None,
         }
     }

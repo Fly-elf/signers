@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 use signers::codesign::blocking::{sign_adhoc, verify};
-use signers::{CodesignError, Error};
+use signers::{CodesignError, Error, ProcessError};
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect;
@@ -22,7 +22,13 @@ fn one_process_fails_as_a_whole_at_the_first_refused_target() {
         .unwrap_err();
 
     assert!(
-        matches!(error, Error::Codesign(CodesignError::Failed { .. })),
+        matches!(
+            error,
+            Error::Process(ProcessError::Failed {
+                program: "codesign",
+                ..
+            })
+        ),
         "got {error:?}"
     );
     assert!(!inspect::is_signed(&after), "the run went past the failure");
@@ -48,7 +54,13 @@ fn per_target_runs_every_target_and_collects_the_failures() {
     };
     assert_eq!(*path, refused);
     assert!(
-        matches!(error, Error::Codesign(CodesignError::Failed { .. })),
+        matches!(
+            error,
+            Error::Process(ProcessError::Failed {
+                program: "codesign",
+                ..
+            })
+        ),
         "got {error:?}"
     );
     inspect::assert_valid(&before);

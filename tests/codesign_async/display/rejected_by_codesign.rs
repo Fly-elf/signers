@@ -2,7 +2,7 @@
 //! refuses: each a plain `codesign` failure carrying its diagnostics.
 
 use signers::codesign::display;
-use signers::{CodesignError, Error};
+use signers::{Error, ProcessError};
 
 use crate::support::fixture::Workspace;
 use crate::support::inspect;
@@ -10,8 +10,11 @@ use crate::support::inspect;
 /// The diagnostics of a run `codesign` ended with exit code 1.
 fn exit_1(error: Error) -> String {
     match error {
-        Error::Codesign(CodesignError::Failed {
-            code: 1, stderr, ..
+        Error::Process(ProcessError::Failed {
+            program: "codesign",
+            code: 1,
+            stderr,
+            ..
         }) => stderr,
         other => panic!("expected `codesign` to exit 1, got {other:?}"),
     }
@@ -114,7 +117,12 @@ async fn a_failed_one_process_run_carries_the_empty_stdout_codesign_left() {
         .unwrap_err();
 
     match error {
-        Error::Codesign(CodesignError::Failed { stdout, stderr, .. }) => {
+        Error::Process(ProcessError::Failed {
+            program: "codesign",
+            stdout,
+            stderr,
+            ..
+        }) => {
             assert_eq!(stdout, oracle.stdout.trim());
             assert!(stdout.is_empty(), "{stdout}");
             assert!(stderr.contains(&unsigned.display().to_string()), "{stderr}");

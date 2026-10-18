@@ -4,7 +4,7 @@
 use std::io;
 
 use signers::codesign::blocking::{display, sign_adhoc};
-use signers::{CodesignError, Error};
+use signers::{CodesignError, Error, ProcessError};
 
 use crate::executable_path::{ScopedPath, fake_codesign, plain_targets};
 use crate::support::fixture::Workspace;
@@ -50,7 +50,8 @@ fn a_codesign_that_cannot_be_executed_is_a_spawn_failure() {
     };
 
     match result.unwrap_err() {
-        Error::Codesign(CodesignError::Spawn(source)) => {
+        Error::Process(ProcessError::Spawn { program, source }) => {
+            assert_eq!(program, "codesign");
             assert_eq!(source.kind(), io::ErrorKind::PermissionDenied)
         }
         other => panic!("expected Spawn, got {other:?}"),
@@ -73,7 +74,8 @@ fn a_codesign_killed_by_a_signal_is_reported_as_terminated() {
     };
 
     match result.unwrap_err() {
-        Error::Codesign(CodesignError::Terminated {
+        Error::Process(ProcessError::Terminated {
+            program: "codesign",
             status,
             stdout,
             stderr,
@@ -101,7 +103,8 @@ fn a_report_short_of_the_targets_is_unexpected_output() {
     };
 
     match result.unwrap_err() {
-        Error::Codesign(CodesignError::UnexpectedOutput { detail }) => {
+        Error::Process(ProcessError::UnexpectedOutput { program, detail }) => {
+            assert_eq!(program, "codesign");
             assert!(!detail.is_empty(), "the error does not say what was wrong");
         }
         other => panic!("expected UnexpectedOutput, got {other:?}"),

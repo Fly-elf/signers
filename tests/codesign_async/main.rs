@@ -24,7 +24,7 @@ mod verify;
 
 use std::path::PathBuf;
 
-use signers::{CodesignError, Error};
+use signers::{Error, ProcessError};
 
 /// Unwraps the `Error::Codesign` a failed run must produce, returning the
 /// diagnostics it captured.
@@ -33,7 +33,11 @@ use signers::{CodesignError, Error};
 /// outside is a property of the backend, not of the action that triggered it.
 fn codesign_error(error: Error) -> String {
     match error {
-        Error::Codesign(CodesignError::Failed { stderr, .. }) => {
+        Error::Process(ProcessError::Failed {
+            program: "codesign",
+            stderr,
+            ..
+        }) => {
             assert!(
                 !stderr.is_empty(),
                 "the failure was reported with no diagnostics"

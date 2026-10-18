@@ -194,6 +194,7 @@ mod tests {
     use super::*;
     use crate::codesign::SignatureKind;
     use crate::codesign::display;
+    use crate::errors::ProcessError;
 
     fn os(strings: &[&str]) -> Vec<OsString> {
         strings.iter().map(OsString::from).collect()
@@ -236,7 +237,10 @@ Chosen signature=1
 
     fn unexpected_output(result: Result<Vec<Signature>>) -> String {
         match result {
-            Err(crate::Error::Codesign(CodesignError::UnexpectedOutput { detail })) => detail,
+            Err(crate::Error::Process(ProcessError::UnexpectedOutput { program, detail })) => {
+                assert_eq!(program, "codesign");
+                detail
+            }
             other => panic!("expected UnexpectedOutput, got {other:?}"),
         }
     }
