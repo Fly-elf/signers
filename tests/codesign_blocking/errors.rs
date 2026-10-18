@@ -84,6 +84,7 @@ fn an_invalid_constraint_is_constraint_invalid() {
 }
 
 #[test]
+#[cfg_attr(not(signers_test = "macos27"), ignore = "test group: macos27")]
 fn an_empty_signature_slot_is_no_signature() {
     let error = display("/bin/ls")
         .signature_slot(SignatureSlot::Second)
