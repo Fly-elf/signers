@@ -23,7 +23,7 @@ plist = "1.10"
 tempfile = "3.27"
 thiserror = "2.0"
 tokio = { version = "1.53", features = ["process", "fs"], optional = true }
-tracing = { version = "0.1", features = ["release_max_level_info"] }
+tracing = "0.1"
 
 [features]
 default = ["async"]
