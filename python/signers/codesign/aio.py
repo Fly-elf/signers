@@ -1109,7 +1109,8 @@ async def verify(
             with it (`--check-notarization`).
         signature_slot: Verifies this `SignatureSlot` when the code carries two. Without
             it `codesign` picks the slot itself. On code with only one signature,
-            `SECOND` can fail as `VerificationFailedError` (`--signature-slot`).
+            `SECOND` can fail as `VerificationFailedError`. Needs macOS 27 or later
+            (`--signature-slot`).
 
     Returns:
         `None`, for one path and for a sequence alike: every target verified.
@@ -1326,7 +1327,7 @@ async def display(
             (`--deep`).
         signature_slot: Reads this `SignatureSlot` when the code carries two. Code with
             one signature has only `FIRST`; asking for `SECOND` raises
-            `NoSignatureError` (`--signature-slot`).
+            `NoSignatureError`. Needs macOS 27 or later (`--signature-slot`).
         detached: Reads the signature from a detached signature file instead of from the
             code (`--detached`).
 
