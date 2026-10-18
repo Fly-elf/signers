@@ -59,14 +59,7 @@ impl RunError {
 
 /// Runs the tool with `args` and waits for it, with no standard input.
 pub(crate) async fn spawn<T: Tool>(args: &[Cow<'_, OsStr>]) -> std::result::Result<Exit, RunError> {
-    tracing::trace!(
-        "running {} {}",
-        T::PROGRAM,
-        args.iter()
-            .map(|a| a.to_string_lossy())
-            .collect::<Vec<_>>()
-            .join(" ")
-    );
+    tracing::debug!(target: "signers", program = T::PROGRAM, args = ?args, "spawning");
 
     // Spawning and waiting are kept apart so that a failure to *start*
     // the tool is never reported as one of its results. That means
@@ -74,6 +67,7 @@ pub(crate) async fn spawn<T: Tool>(args: &[Cow<'_, OsStr>]) -> std::result::Resu
     // otherwise do: no inherited stdin for the tool to block on, and
     // both of its streams captured rather than leaking into the
     // caller's terminal.
+    let started = std::time::Instant::now();
     let child = tokio::process::Command::new(T::PROGRAM)
         .args(args)
         .stdin(Stdio::null())
@@ -98,10 +92,20 @@ pub(crate) async fn spawn<T: Tool>(args: &[Cow<'_, OsStr>]) -> std::result::Resu
             source,
         }))
     })?;
+    tracing::debug!(
+        target: "signers",
+        program = T::PROGRAM,
+        status = %output.status,
+        elapsed = ?started.elapsed(),
+        "exited"
+    );
+    let stdout = decode(output.stdout);
+    let stderr = decode(output.stderr);
+    tracing::trace!(target: "signers", program = T::PROGRAM, stdout = %stdout, stderr = %stderr, "output");
     Ok(Exit {
         status: output.status,
-        stdout: decode(output.stdout),
-        stderr: decode(output.stderr),
+        stdout,
+        stderr,
     })
 }
 

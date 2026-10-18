@@ -13,6 +13,7 @@
 mod support;
 
 mod blocking;
+mod events;
 mod executable_path;
 mod temp_dir;
 mod working_directory;

@@ -1,4 +1,4 @@
-"""The Rust -> `logging` bridge: events arrive under `signers.*` loggers, levels are cached until refreshed."""
+"""The Rust -> `logging` bridge: events arrive on the `signers` logger, levels are cached until refreshed."""
 
 import asyncio
 import logging
@@ -15,6 +15,7 @@ from signers.codesign import aio
 from .conftest import Workspace
 
 TRACE = 5
+DEBUG = logging.DEBUG
 
 
 class Records(logging.Handler):
@@ -28,7 +29,7 @@ class Records(logging.Handler):
         self.records.append(record)
 
     def from_rust(self) -> list[logging.LogRecord]:
-        return [r for r in self.records if r.name.startswith("signers.")]
+        return [r for r in self.records if r.name == "signers"]
 
 
 @pytest.fixture
@@ -48,18 +49,20 @@ def records() -> Iterator[Records]:
         signers.refresh_log_levels()
 
 
-def test_a_rust_event_reaches_a_signers_logger_at_level_5(records: Records, workspace: Workspace) -> None:
+def test_the_events_of_a_run_reach_the_signers_logger_with_their_levels(records: Records, workspace: Workspace) -> None:
     codesign.sign_adhoc(workspace.unsigned("t"), force=True)
 
-    assert records.from_rust()
-    assert {r.levelno for r in records.from_rust()} == {TRACE}
+    assert [(r.getMessage().split()[0], r.levelno) for r in records.from_rust()] == [
+        ("spawning", DEBUG),
+        ("exited", DEBUG),
+        ("output", TRACE),
+    ]
 
 
 def test_the_async_path_delivers_the_record_too(records: Records, workspace: Workspace) -> None:
     asyncio.run(aio.sign_adhoc(workspace.unsigned("t"), force=True))
 
-    assert records.from_rust()
-    assert all(r.levelno == TRACE for r in records.from_rust())
+    assert [r.levelno for r in records.from_rust()] == [DEBUG, DEBUG, TRACE]
 
 
 def test_the_blocking_path_run_off_the_main_thread_delivers_the_record(records: Records, workspace: Workspace) -> None:
