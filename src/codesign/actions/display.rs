@@ -124,10 +124,11 @@ impl Operation for Options {
     ) -> Result<Vec<Signature>> {
         let reports = reports(&stderr);
         if reports.len() != targets.len() {
-            return Err(CodesignError::UnexpectedOutput {
-                detail: format!("{} reports for {} targets", reports.len(), targets.len()),
-            }
-            .into());
+            return Err(Codesign::unexpected_output(format!(
+                "{} reports for {} targets",
+                reports.len(),
+                targets.len()
+            )));
         }
 
         // `--signature-slot` past the last signature exits 0 and prints
@@ -148,9 +149,7 @@ impl Operation for Options {
             && let Some(plist) = plist_start(&stdout)
         {
             let entitlements = plist::from_bytes(&stdout.as_bytes()[plist..]).map_err(|error| {
-                CodesignError::UnexpectedOutput {
-                    detail: format!("unreadable entitlements: {error}"),
-                }
+                Codesign::unexpected_output(format!("unreadable entitlements: {error}"))
             })?;
             signature.entitlements = Some(entitlements);
         }

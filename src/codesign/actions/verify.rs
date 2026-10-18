@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use crate::codesign::action::action;
 use crate::codesign::tool::Codesign;
 use crate::codesign::{SignatureSlot, Strict};
-use crate::engine::{Operation, PushArgs, SharedRun};
+use crate::engine::{Operation, PushArgs, SharedRun, Tool};
 use crate::errors::{Change, CodesignError, Error, ResourceChange};
 
 action! {
@@ -225,15 +225,11 @@ impl Operation for Options {
                     stderr,
                     resources,
                 }
+                .into()
             }
-            3 => CodesignError::RequirementUnsatisfied { stdout, stderr },
-            _ => CodesignError::Failed {
-                code,
-                stdout,
-                stderr,
-            },
+            3 => CodesignError::RequirementUnsatisfied { stdout, stderr }.into(),
+            _ => Codesign::failed(code, stdout, stderr),
         }
-        .into()
     }
 }
 

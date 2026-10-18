@@ -1,4 +1,5 @@
-use crate::errors::{CodesignError, Result};
+use crate::codesign::tool::Codesign;
+use crate::errors::Result;
 
 /// A code requirement of a signature: what it is for, and the expression to satisfy.
 ///
@@ -46,11 +47,9 @@ impl Requirement {
             Some(rest) => (rest, true),
             None => (line, false),
         };
-        let (kind, expression) =
-            line.split_once(" => ")
-                .ok_or_else(|| CodesignError::UnexpectedOutput {
-                    detail: format!("unreadable requirement: {line}"),
-                })?;
+        let (kind, expression) = line.split_once(" => ").ok_or_else(|| {
+            Codesign::unexpected_output(format!("unreadable requirement: {line}"))
+        })?;
         let kind = match kind {
             "designated" => RequirementKind::Designated,
             "host" => RequirementKind::Host,

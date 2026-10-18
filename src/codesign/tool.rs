@@ -8,34 +8,18 @@ impl Tool for Codesign {
 
     fn error(error: ProcessError) -> Error {
         match error {
-            ProcessError::NotFound { .. } => CodesignError::NotFound,
-            ProcessError::Spawn { source, .. } => CodesignError::Spawn(source),
-            ProcessError::Run { source, .. } => CodesignError::Run(source),
-            ProcessError::Failed {
-                code,
-                stdout,
-                stderr,
-                ..
-            } => CodesignError::Failed {
-                code,
-                stdout,
-                stderr,
-            },
-            ProcessError::Terminated {
-                status,
-                stdout,
-                stderr,
-                ..
-            } => CodesignError::Terminated {
-                status,
-                stdout,
-                stderr,
-            },
-            ProcessError::UnexpectedOutput { detail, .. } => {
-                CodesignError::UnexpectedOutput { detail }
-            }
+            ProcessError::NotFound { .. } => CodesignError::NotFound.into(),
+            other => Error::Process(other),
         }
-        .into()
+    }
+}
+
+impl Codesign {
+    pub(crate) fn unexpected_output(detail: impl Into<String>) -> Error {
+        Self::error(ProcessError::UnexpectedOutput {
+            program: Self::PROGRAM,
+            detail: detail.into(),
+        })
     }
 }
 
