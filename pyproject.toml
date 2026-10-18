@@ -39,7 +39,7 @@ cache-keys = [
 ]
 
 [tool.pyright]
-include = ["python/signers", "python/tests"]
+include = ["python/signers", "python/tests", "examples/python"]
 pythonVersion = "3.11"
 typeCheckingMode = "strict"
 

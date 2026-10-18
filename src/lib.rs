@@ -64,6 +64,10 @@
 //! - [`IntoTargets`]: what you can pass as targets. One path yields one result; a `Vec`, slice
 //!   or array yields one per target, in a `Vec` or an array.
 //! - [`Error`]: what can fail.
+//! - [Examples][examples]: complete programs for re-signing a patched binary, inspecting
+//!   several targets, signing a bundle and signing for distribution, in Rust and Python.
+//!
+#![doc = concat!("[examples]: https://github.com/Fly-elf/signers/tree/v", env!("CARGO_PKG_VERSION"), "/examples")]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[cfg(not(feature = "async"))]

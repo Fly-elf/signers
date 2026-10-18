@@ -21,6 +21,15 @@ returns follows the targets: the action's result for a single path, a `list` of
 results for a sequence, even one with a single element. Every path is kept, order and
 duplicates too, and a path starting with `-` is never read as an option.
 
+Complete scripts for the common jobs:
+
+- [Re-signing a patched binary](https://github.com/Fly-elf/signers/blob/v0.1.0/examples/python/codesign/resign_patched.py), keeping its identifier and
+  entitlements.
+- [Inspecting several targets](https://github.com/Fly-elf/signers/blob/v0.1.0/examples/python/codesign/inspect_targets.py) at once: signature, requirements and
+  verification (asyncio).
+- [Signing an app bundle](https://github.com/Fly-elf/signers/blob/v0.1.0/examples/python/codesign/sign_bundle.py), nested code first.
+- [Signing for distribution](https://github.com/Fly-elf/signers/blob/v0.1.0/examples/python/codesign/sign_for_distribution.py) and checking the result (asyncio).
+
 Actions:
 
 - `sign`, `sign_adhoc`, `sign_for_distribution`: sign the targets.
