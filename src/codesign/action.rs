@@ -13,7 +13,9 @@ pub(crate) mod sealed {
     use std::ffi::OsStr;
     use std::path::PathBuf;
 
-    use crate::errors::{CodesignError, Error, Result};
+    use crate::codesign::tool::Codesign;
+    use crate::engine::Tool;
+    use crate::errors::{Error, Result};
 
     /// Marks the action types that can run several targets in one `codesign`; bounds `per_target`.
     pub trait SharedRun {}
@@ -72,40 +74,9 @@ pub(crate) mod sealed {
         /// Both streams are already lossy-decoded and trimmed; the default keeps them as they
         /// are. A process killed by a signal has no exit code and never gets here.
         fn failure(&self, code: i32, stdout: String, stderr: String) -> Error {
-            CodesignError::Failed {
-                code,
-                stdout,
-                stderr,
-            }
-            .into()
-        }
-
-        /// Decodes both streams with [`decode`](super::decode), then calls
-        /// [`output`](Self::output).
-        ///
-        /// The runner calls this, never `output`; actions don't override it.
-        fn output_bytes(
-            &self,
-            targets: &[PathBuf],
-            stdout: Vec<u8>,
-            stderr: Vec<u8>,
-        ) -> Result<Vec<Self::Output>> {
-            self.output(targets, super::decode(stdout), super::decode(stderr))
-        }
-
-        /// Decodes both streams with [`decode`](super::decode), then calls
-        /// [`failure`](Self::failure). The runner calls this; actions don't override it.
-        fn failure_bytes(&self, code: i32, stdout: Vec<u8>, stderr: Vec<u8>) -> Error {
-            self.failure(code, super::decode(stdout), super::decode(stderr))
+            Codesign::failed(code, stdout, stderr)
         }
     }
-}
-
-/// Turns a stream into text: invalid UTF-8 becomes U+FFFD, surrounding whitespace is dropped.
-///
-/// The only place the crate decodes `codesign` output.
-pub(crate) fn decode(bytes: Vec<u8>) -> String {
-    String::from_utf8_lossy(&bytes).trim().to_string()
 }
 
 /// Appends `codesign` arguments, so that each option renders in one line.
