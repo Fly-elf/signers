@@ -1,4 +1,5 @@
-use crate::errors::{CodesignError, Result};
+use crate::codesign::tool::Codesign;
+use crate::errors::Result;
 
 /// A code requirement of a signature: what it is for, and the expression to satisfy.
 ///
@@ -39,18 +40,16 @@ pub enum RequirementKind {
 impl Requirement {
     /// Parses one line of `--display -r-`: `kind => expression`, prefixed with `# ` when implicit.
     ///
-    /// A line without ` => ` fails with [`CodesignError::UnexpectedOutput`]. An unknown kind
+    /// A line without ` => ` fails with `ProcessError::UnexpectedOutput`. An unknown kind
     /// becomes [`RequirementKind::Other`].
     pub(crate) fn parse(line: &str) -> Result<Self> {
         let (line, implicit) = match line.strip_prefix("# ") {
             Some(rest) => (rest, true),
             None => (line, false),
         };
-        let (kind, expression) =
-            line.split_once(" => ")
-                .ok_or_else(|| CodesignError::UnexpectedOutput {
-                    detail: format!("unreadable requirement: {line}"),
-                })?;
+        let (kind, expression) = line.split_once(" => ").ok_or_else(|| {
+            Codesign::unexpected_output(format!("unreadable requirement: {line}"))
+        })?;
         let kind = match kind {
             "designated" => RequirementKind::Designated,
             "host" => RequirementKind::Host,
@@ -70,7 +69,7 @@ impl Requirement {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::errors::CodesignError;
+    use crate::errors::ProcessError;
 
     fn requirement(line: &str) -> Requirement {
         Requirement::parse(line).unwrap_or_else(|e| panic!("{line:?}: {e}"))
@@ -153,9 +152,10 @@ mod tests {
             assert!(
                 matches!(
                     result,
-                    Err(crate::Error::Codesign(
-                        CodesignError::UnexpectedOutput { .. }
-                    ))
+                    Err(crate::Error::Process(ProcessError::UnexpectedOutput {
+                        program: "codesign",
+                        ..
+                    }))
                 ),
                 "{line:?}: {result:?}"
             );

@@ -101,7 +101,7 @@ def test_verify_returns_none_for_valid_signatures(workspace: Workspace) -> None:
 
 
 def test_verify_raises_the_mapped_exception_when_awaited(workspace: Workspace) -> None:
-    with pytest.raises(signers.TargetNotFoundError) as raised:
+    with pytest.raises(signers.PathNotFoundError) as raised:
         run(aio.verify(workspace.join("missing")))
 
     assert raised.value.path == workspace.join("missing")

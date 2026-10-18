@@ -89,7 +89,7 @@ mod tests {
     use super::*;
     use crate::codesign::RequirementKind;
     use crate::codesign::requirements;
-    use crate::errors::CodesignError;
+    use crate::errors::ProcessError;
 
     const DESIGNATED: &str = r#"designated => identifier "com.apple.ls" and anchor apple"#;
     const DUMP: &str = "\t[Dict]\n\t\t[Key] ccat\n\t\t[Value]\n\t\t\t[Int] 0\n";
@@ -272,7 +272,7 @@ mod tests {
             assert!(
                 matches!(
                     &result,
-                    Err(crate::Error::Codesign(CodesignError::UnexpectedOutput { detail }))
+                    Err(crate::Error::Process(ProcessError::UnexpectedOutput { program: "codesign", detail }))
                         if detail.contains("requirement")
                 ),
                 "{stdout:?}: {result:?}"
@@ -301,7 +301,7 @@ mod tests {
         assert!(
             matches!(
                 &error,
-                crate::Error::Codesign(CodesignError::Failed { code: 1, stdout, stderr })
+                crate::Error::Process(ProcessError::Failed { program: "codesign", code: 1, stdout, stderr })
                     if stdout == "out" && stderr == "err"
             ),
             "{error:?}"

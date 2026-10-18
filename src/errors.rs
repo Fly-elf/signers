@@ -1,5 +1,5 @@
-//! Why an action failed: [`Error`](enum@Error), with [`CodesignError`] for `codesign` and
-//! [`ProcessError`] for the other external tools.
+//! Why an action failed: [`Error`](enum@Error). [`ProcessError`] says what went wrong with the
+//! external tool's process, and [`CodesignError`] holds what only `codesign` reports.
 
 use std::path::PathBuf;
 use std::process::ExitStatus;
@@ -12,19 +12,20 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Why an action failed.
 ///
 /// Every variant except [`Codesign`](Error::Codesign), [`Process`](Error::Process),
-/// [`Batch`](Error::Batch) and [`Io`](Error::Io) comes from a check made before `codesign`
-/// starts, so no target has been touched. The order of the checks is listed in [`codesign`](crate::codesign#errors).
+/// [`Batch`](Error::Batch) and [`Io`](Error::Io) comes from a check made before the tool
+/// starts, so no target has been touched. The order of the checks is listed in
+/// [`codesign`](crate::codesign#errors).
 ///
 /// # Examples
 ///
 /// ```no_run
 /// # async fn run() {
-/// use signers::{CodesignError, Error, codesign};
+/// use signers::{Error, ProcessError, codesign};
 ///
 /// match codesign::sign_adhoc("mytool").force(true).await {
 ///     Ok(()) => {}
-///     Err(Error::TargetNotFound(path)) => eprintln!("no such file: {}", path.display()),
-///     Err(Error::Codesign(CodesignError::Failed { stderr, .. })) => eprintln!("{stderr}"),
+///     Err(Error::PathNotFound(path)) => eprintln!("no such file: {}", path.display()),
+///     Err(Error::Process(ProcessError::Failed { stderr, .. })) => eprintln!("{stderr}"),
 ///     Err(error) => eprintln!("{error}"),
 /// }
 /// # }
@@ -43,13 +44,13 @@ pub enum Error {
     EmptyTarget(usize),
 
     /// This target doesn't exist.
-    #[error("target does not exist: {0}")]
-    TargetNotFound(PathBuf),
+    #[error("path does not exist: {0}")]
+    PathNotFound(PathBuf),
 
     /// Whether this target exists couldn't be checked, e.g. because a parent directory denies
     /// access.
-    #[error("could not access target {path}: {source}")]
-    TargetAccess {
+    #[error("could not access {path}: {source}")]
+    PathAccess {
         path: PathBuf,
         source: std::io::Error,
     },
@@ -93,19 +94,28 @@ pub enum Error {
     #[error("{} target(s) failed: {}", .0.len(), failures(.0))]
     Batch(Vec<(PathBuf, Error)>),
 
-    /// The `codesign` tool couldn't run, or it rejected the job.
+    /// `codesign` is missing, or it rejected the job with a verdict.
+    ///
+    /// Only what is specific to `codesign` comes here: [`NotFound`](CodesignError::NotFound) and
+    /// the verdicts of [`verify`](crate::codesign::verify),
+    /// [`validate_constraint`](crate::codesign::validate_constraint) and
+    /// [`display`](crate::codesign::display). Any other failure of its process is
+    /// [`Process`](Error::Process).
     #[error(transparent)]
     Codesign(#[from] CodesignError),
 
-    /// An external tool couldn't run, or it rejected the job.
+    /// An external tool's process failed: it couldn't run, exited non-zero, or printed what
+    /// this crate can't read.
     ///
-    /// For a tool whose module has no error type of its own. The `codesign` actions never
-    /// return it: they report through [`Codesign`](Error::Codesign).
+    /// `program` in the [`ProcessError`] names the tool. For `codesign` it is every such failure
+    /// except a missing executable, which is [`Codesign`](Error::Codesign).
     #[error(transparent)]
     Process(#[from] ProcessError),
 }
 
-/// Why running the `codesign` tool failed.
+/// What only `codesign` reports: a missing executable, and the verdicts of some actions.
+///
+/// Every other failure of its process is a [`ProcessError`] in [`Error::Process`].
 #[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum CodesignError {
@@ -118,50 +128,6 @@ pub enum CodesignError {
          so check that PATH includes /usr/bin"
     )]
     NotFound,
-
-    /// `codesign` was found but couldn't start, e.g. because it isn't executable.
-    ///
-    /// The blocking `.run()` also returns it when it can't create its runtime.
-    #[error("failed to spawn the `codesign` process or the Tokio runtime: {0}")]
-    Spawn(#[source] std::io::Error),
-
-    /// Waiting for `codesign` or reading its output failed.
-    ///
-    /// The outcome is unknown, so the targets may or may not have changed.
-    #[error("failed while running the `codesign` process: {0}")]
-    Run(#[source] std::io::Error),
-
-    /// `codesign` exited with `code`.
-    ///
-    /// `stderr` holds its diagnostics and `stdout` what it printed on standard output, both
-    /// trimmed. Only `stderr` is part of the message.
-    ///
-    /// When one `codesign` runs over several targets, the targets before the rejected one have
-    /// already changed. See [`codesign`](crate::codesign#errors).
-    #[error("`codesign` exited with code {code}: {}", diagnostics(.stderr))]
-    Failed {
-        code: i32,
-        stdout: String,
-        stderr: String,
-    },
-
-    /// `codesign` was killed by a signal before it could exit.
-    ///
-    /// `status` holds the signal (`ExitStatusExt::signal`). `stderr` is usually empty. `stdout`
-    /// holds what `codesign` printed on standard output, trimmed; it isn't part of the message.
-    #[error("the `codesign` process terminated abnormally ({status}): {}", diagnostics(.stderr))]
-    Terminated {
-        status: ExitStatus,
-        stdout: String,
-        stderr: String,
-    },
-
-    /// `codesign` exited 0, but its output couldn't be read as the action's result.
-    ///
-    /// `detail` says what didn't match, e.g. the number of results against the number of
-    /// targets.
-    #[error("`codesign` produced output this crate can't read: {detail}")]
-    UnexpectedOutput { detail: String },
 
     /// [`verify`](crate::codesign::verify) found the target's signature wanting.
     ///
@@ -212,7 +178,7 @@ pub enum CodesignError {
     ///
     /// Code with one signature has nothing in the second slot. `codesign` exits 0 for it, and
     /// reports `no signature` in place of the signature, so this crate fails instead of returning
-    /// one with nothing in it. Unsigned code is a different failure: [`CodesignError::Failed`].
+    /// one with nothing in it. Unsigned code is a different failure: [`ProcessError::Failed`].
     /// `stderr` and `stdout` hold what `codesign` printed on each stream during the whole run,
     /// trimmed, so with one run over several targets they also cover targets that read fine. Only
     /// `stderr` is part of the message.
@@ -222,10 +188,10 @@ pub enum CodesignError {
 
 /// Why running an external tool failed.
 ///
-/// The general form of [`CodesignError`]'s process failures, for tools whose module has no error
-/// type of its own. Each variant names the tool in `program`, the executable looked up on `PATH`,
-/// e.g. `"codesign"`. No action returns it yet; the `codesign` ones report through
-/// [`CodesignError`].
+/// Each variant names the tool in `program`, the executable looked up on `PATH`, e.g.
+/// `"codesign"`. It comes wrapped in [`Error::Process`]. The `codesign` actions return every
+/// variant but [`NotFound`](ProcessError::NotFound), which is
+/// [`CodesignError::NotFound`] so that it can hint at `/usr/bin`.
 ///
 /// # Examples
 ///
@@ -399,7 +365,8 @@ mod tests {
 
     #[test]
     fn a_failure_carries_its_diagnostics() {
-        let error = CodesignError::Failed {
+        let error = ProcessError::Failed {
+            program: "codesign",
             stdout: "printed on stdout".into(),
             code: 1,
             stderr: "hello: no identity found".into(),
@@ -414,7 +381,8 @@ mod tests {
     /// message that trails off after its colon reads like truncated output.
     #[test]
     fn a_failure_with_nothing_to_say_still_reads_as_a_sentence() {
-        let silent = CodesignError::Failed {
+        let silent = ProcessError::Failed {
+            program: "codesign",
             stdout: "printed on stdout".into(),
             code: 3,
             stderr: String::new(),
@@ -428,7 +396,8 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn a_terminated_process_reports_the_signal_that_killed_it() {
-        let error = CodesignError::Terminated {
+        let error = ProcessError::Terminated {
+            program: "codesign",
             stdout: "printed on stdout".into(),
             status: killed_by(9),
             stderr: String::new(),
@@ -462,12 +431,63 @@ mod tests {
 
     /// A failing run of `code`, as a batch entry holds it.
     fn failed(code: i32, stderr: &str) -> Error {
-        CodesignError::Failed {
+        ProcessError::Failed {
+            program: "codesign",
             stdout: "printed on stdout".into(),
             code,
             stderr: stderr.into(),
         }
         .into()
+    }
+
+    #[test]
+    fn a_missing_program_is_named_in_the_message() {
+        let error = Error::from(ProcessError::NotFound { program: "pkgutil" });
+        assert_eq!(error.to_string(), "`pkgutil` was not found on PATH");
+    }
+
+    #[test]
+    fn a_spawn_failure_names_the_program_and_the_cause() {
+        let error = ProcessError::Spawn {
+            program: "codesign",
+            source: std::io::Error::other("no fork"),
+        };
+        assert_eq!(
+            error.to_string(),
+            "failed to spawn the `codesign` process or the Tokio runtime: no fork",
+        );
+    }
+
+    #[test]
+    fn a_run_failure_names_the_program_and_the_cause() {
+        let error = ProcessError::Run {
+            program: "codesign",
+            source: std::io::Error::other("no wait"),
+        };
+        assert_eq!(
+            error.to_string(),
+            "failed while running the `codesign` process: no wait",
+        );
+    }
+
+    #[test]
+    fn a_missing_path_is_named_in_the_message() {
+        assert_eq!(
+            Error::PathNotFound(PathBuf::from("My App.app")).to_string(),
+            "path does not exist: My App.app",
+        );
+    }
+
+    #[test]
+    fn an_unreadable_path_carries_the_cause() {
+        let error = Error::PathAccess {
+            path: PathBuf::from("/locked/a.app"),
+            source: std::io::Error::from(std::io::ErrorKind::PermissionDenied),
+        };
+        assert_eq!(
+            error.to_string(),
+            "could not access /locked/a.app: permission denied",
+        );
     }
 
     #[test]
@@ -496,7 +516,8 @@ mod tests {
 
     #[test]
     fn unreadable_output_says_what_was_wrong_with_it() {
-        let error = CodesignError::UnexpectedOutput {
+        let error = ProcessError::UnexpectedOutput {
+            program: "codesign",
             detail: "2 outputs for 3 targets".into(),
         };
         assert_eq!(
@@ -513,7 +534,7 @@ mod tests {
             (PathBuf::from("b.dylib"), failed(1, "b.dylib: nope")),
             (
                 PathBuf::from("My App.app"),
-                Error::TargetNotFound(PathBuf::from("My App.app")),
+                Error::PathNotFound(PathBuf::from("My App.app")),
             ),
             (PathBuf::from("a"), failed(3, "")),
         ]);
@@ -525,7 +546,7 @@ mod tests {
                  b.dylib: `codesign` exited with code 1: b.dylib: nope; \
                  My App.app: {}; \
                  a: `codesign` exited with code 3: no diagnostics",
-                Error::TargetNotFound(PathBuf::from("My App.app")),
+                Error::PathNotFound(PathBuf::from("My App.app")),
             ),
         );
     }

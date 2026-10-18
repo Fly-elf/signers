@@ -52,8 +52,8 @@ pub trait Operation: Sync {
     ///
     /// `targets` are the ones this run covered: all of them, or one per run with
     /// `per_target`. The outputs must follow them in order; any other count becomes
-    /// [`ProcessError::UnexpectedOutput`](crate::errors::ProcessError::UnexpectedOutput). Both streams are lossy-decoded and trimmed. A
-    /// failed run goes to [`failure`](Self::failure) instead.
+    /// [`ProcessError::UnexpectedOutput`](crate::errors::ProcessError::UnexpectedOutput). Both streams
+    /// are lossy-decoded and trimmed. A failed run goes to [`failure`](Self::failure) instead.
     fn output(
         &self,
         targets: &[PathBuf],

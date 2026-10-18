@@ -5,7 +5,7 @@ use signers::codesign::extract_certificates;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use signers::{CodesignError, Error};
+use signers::{Error, ProcessError};
 
 use super::{PLATFORM_BINARY, SYSTEM_APP, ders, platform_copy};
 use crate::support::fixture::Workspace;
@@ -89,8 +89,11 @@ async fn an_unsigned_target_is_a_codesign_failure() {
     for target in targets {
         let error = extract_certificates(&target).await.unwrap_err();
 
-        let Error::Codesign(CodesignError::Failed {
-            code: 1, stderr, ..
+        let Error::Process(ProcessError::Failed {
+            program: "codesign",
+            code: 1,
+            stderr,
+            ..
         }) = error
         else {
             panic!("expected `codesign` to exit 1, got {error:?}");

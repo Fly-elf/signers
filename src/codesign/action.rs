@@ -155,7 +155,7 @@ macro_rules! action {
             /// # Errors
             ///
             /// Those listed in [`codesign`](crate::codesign#errors). A runtime that can't be created
-            /// fails with [`CodesignError::Spawn`](crate::CodesignError::Spawn).
+            /// fails with [`ProcessError::Spawn`](crate::ProcessError::Spawn).
             ///
             /// # Panics
             ///

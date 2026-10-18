@@ -47,11 +47,11 @@ action! {
         ///
         /// Without it a universal binary is reported whole, as
         /// [`Format::MachOUniversal`](crate::codesign::Format::MachOUniversal). A slice the binary
-        /// doesn't have fails with [`CodesignError::Failed`].
+        /// doesn't have fails with [`ProcessError::Failed`](crate::ProcessError::Failed).
         architecture: Option<impl Into<String>>,
         /// Reads this version of a versioned bundle instead of `Current` (`--bundle-version`).
         ///
-        /// A version the bundle doesn't have fails with [`CodesignError::Failed`].
+        /// A version the bundle doesn't have fails with [`ProcessError::Failed`](crate::ProcessError::Failed).
         bundle_version: Option<impl Into<String>>,
         /// Lists the code nested in a bundle, in [`Signature::nested`] (`--deep`).
         ///
@@ -124,10 +124,11 @@ impl Operation for Options {
     ) -> Result<Vec<Signature>> {
         let reports = reports(&stderr);
         if reports.len() != targets.len() {
-            return Err(CodesignError::UnexpectedOutput {
-                detail: format!("{} reports for {} targets", reports.len(), targets.len()),
-            }
-            .into());
+            return Err(Codesign::unexpected_output(format!(
+                "{} reports for {} targets",
+                reports.len(),
+                targets.len()
+            )));
         }
 
         // `--signature-slot` past the last signature exits 0 and prints
@@ -148,9 +149,7 @@ impl Operation for Options {
             && let Some(plist) = plist_start(&stdout)
         {
             let entitlements = plist::from_bytes(&stdout.as_bytes()[plist..]).map_err(|error| {
-                CodesignError::UnexpectedOutput {
-                    detail: format!("unreadable entitlements: {error}"),
-                }
+                Codesign::unexpected_output(format!("unreadable entitlements: {error}"))
             })?;
             signature.entitlements = Some(entitlements);
         }
@@ -195,6 +194,7 @@ mod tests {
     use super::*;
     use crate::codesign::SignatureKind;
     use crate::codesign::display;
+    use crate::errors::ProcessError;
 
     fn os(strings: &[&str]) -> Vec<OsString> {
         strings.iter().map(OsString::from).collect()
@@ -237,7 +237,10 @@ Chosen signature=1
 
     fn unexpected_output(result: Result<Vec<Signature>>) -> String {
         match result {
-            Err(crate::Error::Codesign(CodesignError::UnexpectedOutput { detail })) => detail,
+            Err(crate::Error::Process(ProcessError::UnexpectedOutput { program, detail })) => {
+                assert_eq!(program, "codesign");
+                detail
+            }
             other => panic!("expected UnexpectedOutput, got {other:?}"),
         }
     }
