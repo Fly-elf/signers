@@ -19,6 +19,8 @@ impl Codesign {
         Self::error(ProcessError::UnexpectedOutput {
             program: Self::PROGRAM,
             detail: detail.into(),
+            stdout: String::new(),
+            stderr: String::new(),
         })
     }
 }

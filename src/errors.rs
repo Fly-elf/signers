@@ -266,6 +266,8 @@ pub enum ProcessError {
     UnexpectedOutput {
         program: &'static str,
         detail: String,
+        stdout: String,
+        stderr: String,
     },
 }
 

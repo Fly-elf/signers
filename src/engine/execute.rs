@@ -105,15 +105,32 @@ async fn run_once<O: Operation>(
     targets: &[PathBuf],
 ) -> std::result::Result<Vec<O::Output>, RunError> {
     let exit = spawn::<O::Tool>(&op.to_args(targets)).await?;
-    let outputs = exit
+    let (stdout, stderr) = exit
         .success::<O::Tool>(|code, stdout, stderr| op.failure(code, stdout, stderr))
-        .and_then(|(stdout, stderr)| op.output(targets, stdout, stderr))
         .map_err(RunError::Failed)?;
+    let outputs = match op.output(targets, stdout.clone(), stderr.clone()) {
+        Ok(outputs) => outputs,
+        Err(Error::Process(ProcessError::UnexpectedOutput {
+            program, detail, ..
+        })) => {
+            return Err(RunError::Failed(Error::Process(
+                ProcessError::UnexpectedOutput {
+                    program,
+                    detail,
+                    stdout,
+                    stderr,
+                },
+            )));
+        }
+        Err(other) => return Err(RunError::Failed(other)),
+    };
     if outputs.len() != targets.len() {
         return Err(RunError::Failed(O::Tool::error(
             ProcessError::UnexpectedOutput {
                 program: O::Tool::PROGRAM,
                 detail: format!("{} outputs for {} targets", outputs.len(), targets.len()),
+                stdout,
+                stderr,
             },
         )));
     }

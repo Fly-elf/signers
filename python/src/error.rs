@@ -148,9 +148,15 @@ fn process_fields(d: &Bound<'_, PyDict>, err: &ProcessError) -> PyResult<&'stati
             streams(d, stdout, stderr)?;
             "Terminated"
         }
-        ProcessError::UnexpectedOutput { program, detail } => {
+        ProcessError::UnexpectedOutput {
+            program,
+            detail,
+            stdout,
+            stderr,
+        } => {
             d.set_item("program", program)?;
             d.set_item("detail", detail)?;
+            streams(d, stdout, stderr)?;
             "UnexpectedOutput"
         }
         _ => "Other",
