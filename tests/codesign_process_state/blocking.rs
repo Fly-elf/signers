@@ -103,7 +103,9 @@ fn a_report_short_of_the_targets_is_unexpected_output() {
     };
 
     match result.unwrap_err() {
-        Error::Process(ProcessError::UnexpectedOutput { program, detail }) => {
+        Error::Process(ProcessError::UnexpectedOutput {
+            program, detail, ..
+        }) => {
             assert_eq!(program, "codesign");
             assert!(!detail.is_empty(), "the error does not say what was wrong");
         }

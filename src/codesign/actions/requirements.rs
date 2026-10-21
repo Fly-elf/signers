@@ -272,7 +272,7 @@ mod tests {
             assert!(
                 matches!(
                     &result,
-                    Err(crate::Error::Process(ProcessError::UnexpectedOutput { program: "codesign", detail }))
+                    Err(crate::Error::Process(ProcessError::UnexpectedOutput { program: "codesign", detail, .. }))
                         if detail.contains("requirement")
                 ),
                 "{stdout:?}: {result:?}"

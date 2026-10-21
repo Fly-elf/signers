@@ -42,9 +42,9 @@ from signers._errors import _call, _from_native
             {"signal": None},
         ),
         (
-            {"kind": "UnexpectedOutput", "process": True, "program": "codesign", "detail": "d"},
+            {"kind": "UnexpectedOutput", "process": True, "program": "codesign", "detail": "d", "stdout": "o", "stderr": "e"},
             signers.UnexpectedOutputError,
-            {"program": "codesign", "detail": "d"},
+            {"program": "codesign", "detail": "d", "stdout": "o", "stderr": "e"},
         ),
         ({"kind": "Other", "process": True, "program": "pkgutil"}, signers.ProcessError, {"program": "pkgutil"}),
         ({"kind": "FutureVariant", "process": True, "program": "pkgutil"}, signers.ProcessError, {"program": "pkgutil"}),

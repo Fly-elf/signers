@@ -826,7 +826,9 @@ Chosen signature=1
     /// The `detail` of the `UnexpectedOutput` that parsing `report` must fail with.
     fn rejection(report: &str) -> String {
         match parse_report(report) {
-            Err(Error::Process(ProcessError::UnexpectedOutput { program, detail })) => {
+            Err(Error::Process(ProcessError::UnexpectedOutput {
+                program, detail, ..
+            })) => {
                 assert_eq!(program, "codesign");
                 detail
             }

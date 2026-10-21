@@ -521,6 +521,8 @@ mod tests {
         let error = ProcessError::UnexpectedOutput {
             program: "codesign",
             detail: "2 outputs for 3 targets".into(),
+            stdout: "printed on stdout".into(),
+            stderr: "printed on stderr".into(),
         };
         assert_eq!(
             error.to_string(),
@@ -777,6 +779,8 @@ mod tests {
                 ProcessError::UnexpectedOutput {
                     program: "tool",
                     detail: "2 outputs for 3 targets".into(),
+                    stdout: "printed on stdout".into(),
+                    stderr: "printed on stderr".into(),
                 },
                 "`tool` produced output this crate can't read: 2 outputs for 3 targets",
             ),

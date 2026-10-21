@@ -318,8 +318,10 @@ mod tests {
                 process(ProcessError::UnexpectedOutput {
                     program: "codesign",
                     detail: "d".into(),
+                    stdout: "o".into(),
+                    stderr: "e".into(),
                 }),
-                "{'kind': 'UnexpectedOutput', 'process': True, 'program': 'codesign', 'detail': 'd'}",
+                "{'kind': 'UnexpectedOutput', 'process': True, 'program': 'codesign', 'detail': 'd', 'stdout': 'o', 'stderr': 'e'}",
             ),
             (
                 codesign(CodesignError::VerificationFailed {
