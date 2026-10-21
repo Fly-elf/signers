@@ -65,14 +65,31 @@ pub(crate) async fn execute<O: Operation>(
             .collect()
             .await;
 
+    collect(targets, results)
+}
+
+/// Folds the runs of a batch into the outputs, or into the failures of every target.
+fn collect<T>(
+    targets: &[PathBuf],
+    results: Vec<std::result::Result<Vec<T>, RunError>>,
+) -> Result<Vec<T>> {
+    // Nothing started: the tool itself is unusable, which isn't about any target.
+    if results
+        .iter()
+        .all(|result| matches!(result, Err(RunError::Unstarted(_))))
+    {
+        return match results.into_iter().next() {
+            Some(Err(error)) => Err(error.into_error()),
+            _ => Ok(Vec::new()),
+        };
+    }
+
     let mut outputs = Vec::with_capacity(targets.len());
     let mut failures = Vec::new();
     for (target, result) in targets.iter().zip(results) {
         match result {
             Ok(output) => outputs.extend(output),
-            // The tool itself couldn't start: that isn't about this target.
-            Err(RunError::Unstarted(error)) => return Err(error),
-            Err(RunError::Failed(error)) => failures.push((target.clone(), error)),
+            Err(error) => failures.push((target.clone(), error.into_error())),
         }
     }
     if failures.is_empty() {
