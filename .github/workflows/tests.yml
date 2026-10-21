@@ -1,0 +1,97 @@
+name: Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      macos:
+        description: macOS version of the runner.
+        type: choice
+        options: ["27", "26"]
+        default: "27"
+      keychain:
+        description: Run the tests that sign with a throwaway identity.
+        type: boolean
+        default: true
+      network:
+        description: Run the tests that reach Apple's servers.
+        type: boolean
+        default: true
+      network-required:
+        description: Fail the run when the tests reaching Apple's servers fail.
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      macos:
+        description: macOS version of the runner.
+        type: string
+        default: "27"
+      keychain:
+        description: Run the tests that sign with a throwaway identity.
+        type: boolean
+        default: true
+      network:
+        description: Run the tests that reach Apple's servers.
+        type: boolean
+        default: true
+      network-required:
+        description: Fail the run when the tests reaching Apple's servers fail.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      runner: ${{ steps.plan.outputs.runner }}
+      rustflags: ${{ steps.plan.outputs.rustflags }}
+      rustflags_network: ${{ steps.plan.outputs.rustflags_network }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: plan
+        env:
+          MACOS: ${{ inputs.macos }}
+          KEYCHAIN: ${{ inputs.keychain }}
+          NETWORK: ${{ inputs.network }}
+        run: python3 .github/scripts/test_plan.py --macos "$MACOS" --keychain "$KEYCHAIN" --network "$NETWORK" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: plan
+    runs-on: ${{ needs.plan.outputs.runner }}
+    env:
+      RUSTFLAGS: ${{ needs.plan.outputs.rustflags }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: macos-${{ inputs.macos }}
+      - run: cargo test --workspace
+
+  network:
+    if: inputs.network
+    needs: plan
+    runs-on: ${{ needs.plan.outputs.runner }}
+    continue-on-error: ${{ !inputs.network-required }}
+    env:
+      RUSTFLAGS: ${{ needs.plan.outputs.rustflags_network }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: macos-${{ inputs.macos }}
+      # Apple's timestamp and notarization servers fail transiently now and then.
+      - run: cargo test || cargo test

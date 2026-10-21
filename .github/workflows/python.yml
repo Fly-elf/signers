@@ -1,0 +1,72 @@
+name: Python
+
+on:
+  workflow_dispatch:
+    inputs:
+      macos:
+        description: macOS version of the runner.
+        type: choice
+        options: ["27", "26"]
+        default: "27"
+      keychain:
+        description: Run the tests that sign with a throwaway identity.
+        type: boolean
+        default: true
+  workflow_call:
+    inputs:
+      macos:
+        description: macOS version of the runner.
+        type: string
+        default: "27"
+      keychain:
+        description: Run the tests that sign with a throwaway identity.
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      runner: ${{ steps.plan.outputs.runner }}
+      pytest_groups: ${{ steps.plan.outputs.pytest_groups }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: plan
+        env:
+          MACOS: ${{ inputs.macos }}
+          KEYCHAIN: ${{ inputs.keychain }}
+        run: python3 .github/scripts/test_plan.py --macos "$MACOS" --keychain "$KEYCHAIN" >> "$GITHUB_OUTPUT"
+
+  python:
+    needs: plan
+    runs-on: ${{ needs.plan.outputs.runner }}
+    strategy:
+      matrix:
+        python: ["3.11", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: python-${{ matrix.python }}-macos-${{ inputs.macos }}
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+      - run: uv run maturin develop
+      - run: uv run pytest
+        env:
+          SIGNERS_TEST_GROUPS: ${{ needs.plan.outputs.pytest_groups }}
+      # pyright checks against pyproject's `pythonVersion`, so one interpreter is enough.
+      - if: matrix.python == '3.11'
+        run: uv run pyright
