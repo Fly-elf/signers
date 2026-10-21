@@ -27,12 +27,12 @@ fn payload<'py>(py: Python<'py>, err: &Error) -> PyResult<Bound<'py, PyDict>> {
             d.set_item("path", path.as_os_str())?;
             "PathNotFound"
         }
-        Error::PathAccess { path, source } => {
+        Error::PathAccess { path, source, .. } => {
             d.set_item("path", path.as_os_str())?;
             d.set_item("errno", source.raw_os_error())?;
             "PathAccess"
         }
-        Error::Io { path, source } => {
+        Error::Io { path, source, .. } => {
             d.set_item("path", path.as_os_str())?;
             d.set_item("errno", source.raw_os_error())?;
             "Io"
@@ -74,6 +74,7 @@ fn codesign_fields(d: &Bound<'_, PyDict>, err: &CodesignError) -> PyResult<&'sta
             stdout,
             stderr,
             resources,
+            ..
         } => {
             streams(d, stdout, stderr)?;
             let resources = resources
@@ -89,15 +90,15 @@ fn codesign_fields(d: &Bound<'_, PyDict>, err: &CodesignError) -> PyResult<&'sta
             d.set_item("resources", resources)?;
             "VerificationFailed"
         }
-        CodesignError::RequirementUnsatisfied { stdout, stderr } => {
+        CodesignError::RequirementUnsatisfied { stdout, stderr, .. } => {
             streams(d, stdout, stderr)?;
             "RequirementUnsatisfied"
         }
-        CodesignError::ConstraintInvalid { stdout, stderr } => {
+        CodesignError::ConstraintInvalid { stdout, stderr, .. } => {
             streams(d, stdout, stderr)?;
             "ConstraintInvalid"
         }
-        CodesignError::NoSignature { stdout, stderr } => {
+        CodesignError::NoSignature { stdout, stderr, .. } => {
             streams(d, stdout, stderr)?;
             "NoSignature"
         }
@@ -108,16 +109,20 @@ fn codesign_fields(d: &Bound<'_, PyDict>, err: &CodesignError) -> PyResult<&'sta
 
 fn process_fields(d: &Bound<'_, PyDict>, err: &ProcessError) -> PyResult<&'static str> {
     let kind = match err {
-        ProcessError::NotFound { program } => {
+        ProcessError::NotFound { program, .. } => {
             d.set_item("program", program)?;
             "NotFound"
         }
-        ProcessError::Spawn { program, source } => {
+        ProcessError::Spawn {
+            program, source, ..
+        } => {
             d.set_item("program", program)?;
             d.set_item("errno", source.raw_os_error())?;
             "Spawn"
         }
-        ProcessError::Run { program, source } => {
+        ProcessError::Run {
+            program, source, ..
+        } => {
             d.set_item("program", program)?;
             d.set_item("errno", source.raw_os_error())?;
             "Run"
@@ -127,6 +132,7 @@ fn process_fields(d: &Bound<'_, PyDict>, err: &ProcessError) -> PyResult<&'stati
             code,
             stdout,
             stderr,
+            ..
         } => {
             d.set_item("program", program)?;
             d.set_item("code", code)?;
@@ -138,6 +144,7 @@ fn process_fields(d: &Bound<'_, PyDict>, err: &ProcessError) -> PyResult<&'stati
             status,
             stdout,
             stderr,
+            ..
         } => {
             #[cfg(unix)]
             let signal = std::os::unix::process::ExitStatusExt::signal(status);
@@ -153,6 +160,7 @@ fn process_fields(d: &Bound<'_, PyDict>, err: &ProcessError) -> PyResult<&'stati
             detail,
             stdout,
             stderr,
+            ..
         } => {
             d.set_item("program", program)?;
             d.set_item("detail", detail)?;
