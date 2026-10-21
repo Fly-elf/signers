@@ -46,10 +46,12 @@ RUSTFLAGS='--cfg signers_test="keychain" --cfg signers_test="network"' cargo tes
 To run one group, pass only its `--cfg`.
 
 - `keychain`: creates a throwaway self-signed identity in a temporary keychain, using the system `openssl`
-  and `security`. The keychain stays off the search list and is deleted afterwards; your keychains are not
-  touched.
+  and `security`. On macOS 27 the keychain stays off the search list; on macOS 26 `codesign` needs it there,
+  so it is added for the identity's lifetime and removed afterwards. The keychain is deleted at the end and
+  your own keychains are not touched.
 - `network`: reaches Apple's timestamp server.
-- `macos27`: needs the `codesign` of macOS 27 or later (`--signature-slot`, total and chosen signature lines).
+- `macos27`: needs the `codesign` of macOS 27 or later (`--signature-slot`, total and chosen signature lines,
+  the exclusive `--keychain` lookup). Groups of a newer macOS are named `macosNN`.
 
 Changing `RUSTFLAGS` rebuilds all dependencies.
 
@@ -61,7 +63,25 @@ uv run pyright
 ```
 
 `pytest` covers the bridge between Python and Rust; the library's behaviour is tested in Rust. `pyright`
-checks the types.
+checks the types. The Python test groups are enabled with `SIGNERS_TEST_GROUPS`, for example
+`SIGNERS_TEST_GROUPS=keychain,macos27 uv run pytest`.
+
+## Workflows
+
+- `ci.yml`: on pushes to `main` and `dev` and on pull requests. Runs fmt, clippy, the MSRV build, docs, the
+  Rust tests and the Python tests, all on macOS 27.
+- `tests.yml` and `python.yml`: the Rust and the Python test suites. `ci.yml` and `release.yml` call them,
+  and you can run them by hand with a macOS version (27 or 26) and the test groups to enable (`keychain`;
+  `network` and `network-required` for Rust). macOS 26 is the check against the previous macOS and never
+  runs on a push. The runner labels are `xcode-27` for macOS 27 and `macos-26` for macOS 26.
+- `release.yml`: on `v*` tags. Runs the tests, builds the wheels and the source distribution, then publishes.
+
+To run a suite by hand, for example on macOS 26 (manual runs may work only once the workflow is on the
+default branch):
+
+```sh
+gh workflow run tests.yml -f macos=26
+```
 
 ## Pull requests
 

@@ -288,9 +288,11 @@ async def sign(
         prefix: Prefixes a derived identifier that contains no dot, e.g. with
             `"com.example."`. Include the trailing dot. It has no effect when you set
             `identifier` (`--prefix`).
-        keychain: Looks up the signing identity in this keychain only. It doesn't need
-            to be on the search list, so a temporary one works, but the certificate
-            chain still comes from the search list only (`--keychain`).
+        keychain: Looks up the signing identity in this keychain (`--keychain`). On
+            macOS 27 or later it is the only keychain searched, so it needn't be on the
+            search list and a temporary one works. On macOS 26 `codesign` ignores it for
+            the lookup, and the keychain holding the identity must be on the search
+            list. The certificate chain always comes from the search list.
         entitlements: Embeds the entitlements in this plist. `codesign` leaves them out
             of libraries unless you also set `force_library_entitlements`
             (`--entitlements`).
@@ -566,9 +568,11 @@ async def sign_adhoc(
         prefix: Prefixes a derived identifier that contains no dot, e.g. with
             `"com.example."`. Include the trailing dot. It has no effect when you set
             `identifier` (`--prefix`).
-        keychain: Looks up the signing identity in this keychain only. It doesn't need
-            to be on the search list, so a temporary one works, but the certificate
-            chain still comes from the search list only (`--keychain`).
+        keychain: Looks up the signing identity in this keychain (`--keychain`). On
+            macOS 27 or later it is the only keychain searched, so it needn't be on the
+            search list and a temporary one works. On macOS 26 `codesign` ignores it for
+            the lookup, and the keychain holding the identity must be on the search
+            list. The certificate chain always comes from the search list.
         entitlements: Embeds the entitlements in this plist. `codesign` leaves them out
             of libraries unless you also set `force_library_entitlements`
             (`--entitlements`).
@@ -853,9 +857,11 @@ async def sign_for_distribution(
         prefix: Prefixes a derived identifier that contains no dot, e.g. with
             `"com.example."`. Include the trailing dot. It has no effect when you set
             `identifier` (`--prefix`).
-        keychain: Looks up the signing identity in this keychain only. It doesn't need
-            to be on the search list, so a temporary one works, but the certificate
-            chain still comes from the search list only (`--keychain`).
+        keychain: Looks up the signing identity in this keychain (`--keychain`). On
+            macOS 27 or later it is the only keychain searched, so it needn't be on the
+            search list and a temporary one works. On macOS 26 `codesign` ignores it for
+            the lookup, and the keychain holding the identity must be on the search
+            list. The certificate chain always comes from the search list.
         entitlements: Embeds the entitlements in this plist. `codesign` leaves them out
             of libraries unless you also set `force_library_entitlements`
             (`--entitlements`).

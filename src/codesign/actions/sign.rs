@@ -78,10 +78,12 @@ action! {
         /// Include the trailing dot. It has no effect when you set
         /// [`identifier`](Self::identifier).
         prefix: Option<impl Into<String>>,
-        /// Looks up the signing identity in this keychain only (`--keychain`).
+        /// Looks up the signing identity in this keychain (`--keychain`).
         ///
-        /// The keychain doesn't need to be on the search list, so a temporary one works. The
-        /// certificate chain still comes from the search list only.
+        /// On macOS 27 or later it is the only keychain searched, so it needn't be on the
+        /// search list and a temporary one works. On macOS 26 `codesign` ignores it for the
+        /// lookup, and the keychain holding the identity must be on the search list. The
+        /// certificate chain always comes from the search list.
         keychain: Option<impl Into<PathBuf>>,
 
         // Entitlements and security
