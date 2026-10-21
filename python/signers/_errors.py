@@ -59,6 +59,9 @@ class SignersError(Exception):
     `TypeError` instead. Some subclasses are also built-in exceptions (`ValueError`,
     `FileNotFoundError`, `OSError`), so code that catches those keeps working.
 
+    Every error can be pickled with its attributes, so it crosses `multiprocessing` and
+    `ProcessPoolExecutor` intact.
+
     Example:
         ```python
         from signers import codesign
