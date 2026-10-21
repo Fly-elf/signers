@@ -366,10 +366,16 @@ class UnexpectedOutputError(ProcessError):
     """
 
     detail: str
+    stdout: str
+    stderr: str
 
-    def __init__(self, message: str, *, program: str, detail: str) -> None:
+    def __init__(
+        self, message: str, *, program: str, detail: str, stdout: str, stderr: str
+    ) -> None:
         super().__init__(message, program=program)
         self.detail = detail
+        self.stdout = stdout
+        self.stderr = stderr
 
 
 class Change(enum.Enum):
@@ -542,7 +548,11 @@ def _from_native(payload: dict[str, object]) -> SignersError:
                 )
             case "UnexpectedOutput":
                 return UnexpectedOutputError(
-                    message, program=program, detail=p["detail"]
+                    message,
+                    program=program,
+                    detail=p["detail"],
+                    stdout=p["stdout"],
+                    stderr=p["stderr"],
                 )
             case _:
                 return ProcessError(message, program=program)
