@@ -34,7 +34,7 @@ INSTANCES: list[tuple[type[signers.SignersError], dict[str, Any]]] = [
     (signers.RunError, {**PROC, "errno": None}),
     (signers.ProcessFailedError, {**PROC, "code": 3, **STREAMS}),
     (signers.TerminatedError, {**PROC, "signal": 9, **STREAMS}),
-    (signers.UnexpectedOutputError, {**PROC, "detail": "d"}),
+    (signers.UnexpectedOutputError, {**PROC, "detail": "d", **STREAMS}),
     (signers.VerificationFailedError, {**STREAMS, "resources": (RESOURCE,)}),
     (signers.RequirementUnsatisfiedError, STREAMS),
     (signers.ConstraintInvalidError, STREAMS),
