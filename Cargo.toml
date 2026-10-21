@@ -31,6 +31,9 @@ tracing = "0.1"
 default = ["async"]
 async = ["dep:tokio", "dep:futures-util"]
 blocking = ["async", "tokio/rt"]
+# Internal: builds errors for the tests of crates in this repository. Not part of the public API,
+# no semver guarantee.
+__test-constructors = []
 
 [package.metadata.docs.rs]
 all-features = true

@@ -116,6 +116,19 @@ pub enum Error {
     Process(#[from] ProcessError),
 }
 
+#[cfg(feature = "__test-constructors")]
+impl Error {
+    #[doc(hidden)]
+    pub fn path_access(path: PathBuf, source: std::io::Error) -> Self {
+        Self::PathAccess { path, source }
+    }
+
+    #[doc(hidden)]
+    pub fn io(path: PathBuf, source: std::io::Error) -> Self {
+        Self::Io { path, source }
+    }
+}
+
 /// What only `codesign` reports: a missing executable, and the verdicts of some actions.
 ///
 /// Every other failure of its process is a [`ProcessError`] in [`Error::Process`].
@@ -191,6 +204,37 @@ pub enum CodesignError {
     #[error("no signature: {}", diagnostics(.stderr))]
     #[non_exhaustive]
     NoSignature { stdout: String, stderr: String },
+}
+
+#[cfg(feature = "__test-constructors")]
+impl CodesignError {
+    #[doc(hidden)]
+    pub fn verification_failed(
+        stdout: String,
+        stderr: String,
+        resources: Vec<ResourceChange>,
+    ) -> Self {
+        Self::VerificationFailed {
+            stdout,
+            stderr,
+            resources,
+        }
+    }
+
+    #[doc(hidden)]
+    pub fn requirement_unsatisfied(stdout: String, stderr: String) -> Self {
+        Self::RequirementUnsatisfied { stdout, stderr }
+    }
+
+    #[doc(hidden)]
+    pub fn constraint_invalid(stdout: String, stderr: String) -> Self {
+        Self::ConstraintInvalid { stdout, stderr }
+    }
+
+    #[doc(hidden)]
+    pub fn no_signature(stdout: String, stderr: String) -> Self {
+        Self::NoSignature { stdout, stderr }
+    }
 }
 
 /// Why running an external tool failed.
@@ -283,6 +327,64 @@ pub enum ProcessError {
         stdout: String,
         stderr: String,
     },
+}
+
+#[cfg(feature = "__test-constructors")]
+impl ProcessError {
+    #[doc(hidden)]
+    pub fn not_found(program: &'static str) -> Self {
+        Self::NotFound { program }
+    }
+
+    #[doc(hidden)]
+    pub fn spawn(program: &'static str, source: std::io::Error) -> Self {
+        Self::Spawn { program, source }
+    }
+
+    #[doc(hidden)]
+    pub fn run(program: &'static str, source: std::io::Error) -> Self {
+        Self::Run { program, source }
+    }
+
+    #[doc(hidden)]
+    pub fn failed(program: &'static str, code: i32, stdout: String, stderr: String) -> Self {
+        Self::Failed {
+            program,
+            code,
+            stdout,
+            stderr,
+        }
+    }
+
+    #[doc(hidden)]
+    pub fn terminated(
+        program: &'static str,
+        status: ExitStatus,
+        stdout: String,
+        stderr: String,
+    ) -> Self {
+        Self::Terminated {
+            program,
+            status,
+            stdout,
+            stderr,
+        }
+    }
+
+    #[doc(hidden)]
+    pub fn unexpected_output(
+        program: &'static str,
+        detail: String,
+        stdout: String,
+        stderr: String,
+    ) -> Self {
+        Self::UnexpectedOutput {
+            program,
+            detail,
+            stdout,
+            stderr,
+        }
+    }
 }
 
 /// A sealed resource that [`verify`](crate::codesign::verify) found altered.
