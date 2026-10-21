@@ -148,9 +148,15 @@ fn process_fields(d: &Bound<'_, PyDict>, err: &ProcessError) -> PyResult<&'stati
             streams(d, stdout, stderr)?;
             "Terminated"
         }
-        ProcessError::UnexpectedOutput { program, detail } => {
+        ProcessError::UnexpectedOutput {
+            program,
+            detail,
+            stdout,
+            stderr,
+        } => {
             d.set_item("program", program)?;
             d.set_item("detail", detail)?;
+            streams(d, stdout, stderr)?;
             "UnexpectedOutput"
         }
         _ => "Other",
@@ -312,8 +318,10 @@ mod tests {
                 process(ProcessError::UnexpectedOutput {
                     program: "codesign",
                     detail: "d".into(),
+                    stdout: "o".into(),
+                    stderr: "e".into(),
                 }),
-                "{'kind': 'UnexpectedOutput', 'process': True, 'program': 'codesign', 'detail': 'd'}",
+                "{'kind': 'UnexpectedOutput', 'process': True, 'program': 'codesign', 'detail': 'd', 'stdout': 'o', 'stderr': 'e'}",
             ),
             (
                 codesign(CodesignError::VerificationFailed {

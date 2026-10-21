@@ -174,12 +174,16 @@ mod tests {
                 Error::Process(ProcessError::UnexpectedOutput {
                     program: "hook",
                     detail: format!("{code}/{stdout}/{stderr}"),
+                    stdout: String::new(),
+                    stderr: String::new(),
                 })
             })
             .unwrap_err();
 
         match error {
-            Error::Process(ProcessError::UnexpectedOutput { program, detail }) => {
+            Error::Process(ProcessError::UnexpectedOutput {
+                program, detail, ..
+            }) => {
                 assert_eq!(program, "hook");
                 assert_eq!(detail, "7/out/err");
             }

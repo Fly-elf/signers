@@ -148,6 +148,8 @@ def errors(error: Exception) -> None:
         assert_type(error.signal, int | None)
     if isinstance(error, signers.UnexpectedOutputError):
         assert_type(error.detail, str)
+        assert_type(error.stdout, str)
+        assert_type(error.stderr, str)
     if isinstance(error, codesign.ToolNotFoundError):
         assert_type(error.program, str)
     if isinstance(error, signers.VerificationFailedError):

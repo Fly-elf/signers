@@ -35,6 +35,7 @@ macro_rules! action {
         $crate::codesign::action::action!(@options [$($field: $field_ty,)*] $($setters)*);
 
         #[derive(Debug, Clone)]
+        #[must_use = "an action does nothing until it is `.await`ed or `.run()`"]
         $(#[$attr])*
         pub struct $name<S = $crate::target::One, R = $crate::engine::Async> {
             job: $crate::engine::Job<S, R>,

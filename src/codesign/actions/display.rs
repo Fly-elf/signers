@@ -239,7 +239,9 @@ Chosen signature=1
 
     fn unexpected_output(result: Result<Vec<Signature>>) -> String {
         match result {
-            Err(crate::Error::Process(ProcessError::UnexpectedOutput { program, detail })) => {
+            Err(crate::Error::Process(ProcessError::UnexpectedOutput {
+                program, detail, ..
+            })) => {
                 assert_eq!(program, "codesign");
                 detail
             }

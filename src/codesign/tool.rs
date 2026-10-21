@@ -19,6 +19,8 @@ impl Codesign {
         Self::error(ProcessError::UnexpectedOutput {
             program: Self::PROGRAM,
             detail: detail.into(),
+            stdout: String::new(),
+            stderr: String::new(),
         })
     }
 }
@@ -116,9 +118,15 @@ mod tests {
         let error = Codesign::unexpected_output("2 outputs for 3 targets");
 
         match error {
-            Error::Process(ProcessError::UnexpectedOutput { program, detail }) => {
+            Error::Process(ProcessError::UnexpectedOutput {
+                program,
+                detail,
+                stdout,
+                stderr,
+            }) => {
                 assert_eq!(program, "codesign");
                 assert_eq!(detail, "2 outputs for 3 targets");
+                assert!(stdout.is_empty() && stderr.is_empty());
             }
             other => panic!("expected UnexpectedOutput, got {other:?}"),
         }
@@ -129,11 +137,13 @@ mod tests {
         let error = Codesign::error(ProcessError::UnexpectedOutput {
             program: "codesign",
             detail: "no plist".into(),
+            stdout: String::new(),
+            stderr: String::new(),
         });
 
         assert!(matches!(
             error,
-            Error::Process(ProcessError::UnexpectedOutput { program: "codesign", ref detail })
+            Error::Process(ProcessError::UnexpectedOutput { program: "codesign", ref detail, .. })
                 if detail == "no plist"
         ));
     }
