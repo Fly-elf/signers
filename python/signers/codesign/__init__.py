@@ -64,9 +64,9 @@ So far no target has been touched. Then `codesign` runs:
   target it rejects: the targets before that one have already been changed, the ones
   after it haven't.
 - once per target, with `per_target=True`, which is the default for the actions that
-  only read them. Every target runs, and the failures come together as `BatchError`.
-  If `codesign` can't start at all (`CodesignNotFoundError`, `SpawnError`), that error
-  is raised alone instead.
+  only read them. Every target runs, and the failures come together as `BatchError`,
+  including the targets for which `codesign` couldn't start. Only if it can't start for
+  any target (`CodesignNotFoundError`, `SpawnError`) is that error raised alone instead.
 
 What `codesign` does wrong raises a `ProcessError` with `program` `"codesign"`: it
 couldn't start or be waited on (`SpawnError`, `RunError`), it exited non-zero

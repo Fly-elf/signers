@@ -188,7 +188,8 @@ class SharedOutputPerTargetError(SignersError, ValueError):
 class BatchError(SignersError):
     """Some targets failed in a run per target, each with its own error.
 
-    Every target ran, so the ones not listed succeeded. One failing target is enough to
+    Every target was tried, so the ones not listed succeeded. A target for which
+    `codesign` couldn't start is listed with its spawn error. One failing target is enough to
     get this error rather than its own. The results of the targets that did succeed are
     dropped, `display`'s signatures included.
 
@@ -363,6 +364,10 @@ class UnexpectedOutputError(ProcessError):
     Attributes:
         detail: What didn't match, e.g. the number of results against the number of
             targets.
+        stdout: What the run printed on standard output, trimmed. With one run over
+            several targets it covers all of them. It isn't part of the message.
+        stderr: What the run printed on standard error, trimmed. With one run over
+            several targets it covers all of them.
     """
 
     detail: str

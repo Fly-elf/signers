@@ -88,7 +88,8 @@ pub enum Error {
     /// These targets failed in a [`per_target(true)`](crate::codesign::Sign::per_target) run, each
     /// with its own error, in input order.
     ///
-    /// Every target ran, so the ones not listed succeeded; their outputs are dropped. One failing
+    /// Every target was tried, so the ones not listed succeeded; their outputs are dropped. A target
+    /// for which the tool couldn't start is listed with its spawn error. One failing
     /// target is enough to get this variant rather than its plain error. See
     /// [`per_target`](crate::codesign::Sign::per_target) for an example.
     #[error("{} target(s) failed: {}", .0.len(), failures(.0))]
@@ -261,7 +262,8 @@ pub enum ProcessError {
     /// `program` exited 0, but its output couldn't be read as the action's result.
     ///
     /// `detail` says what didn't match, e.g. the number of results against the number of
-    /// targets.
+    /// targets. `stdout` and `stderr` hold what the run printed, trimmed; with one run over several
+    /// targets they cover all of them. Neither is part of the message.
     #[error("`{program}` produced output this crate can't read: {detail}")]
     UnexpectedOutput {
         program: &'static str,
