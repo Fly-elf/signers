@@ -5,12 +5,6 @@ on:
     branches: [main, dev]
   pull_request:
   workflow_dispatch:
-  workflow_call:
-    inputs:
-      network-required:
-        description: Fail the run when the tests reaching Apple's servers fail.
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -24,7 +18,7 @@ env:
 
 jobs:
   fmt:
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -33,7 +27,7 @@ jobs:
       - run: cargo fmt --all --check
 
   clippy:
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -42,34 +36,8 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
-  test:
-    runs-on: macos-26
-    env:
-      RUSTFLAGS: --cfg signers_test="keychain"
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - run: cargo test --workspace
-
-  network:
-    runs-on: macos-26
-    continue-on-error: ${{ !inputs.network-required }}
-    env:
-      RUSTFLAGS: --cfg signers_test="keychain" --cfg signers_test="network"
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      # Apple's timestamp and notarization servers fail transiently now and then.
-      - run: cargo test || cargo test
-
   msrv:
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -79,7 +47,7 @@ jobs:
       - run: cargo +1.88 check --all-features --all-targets
 
   docs:
-    runs-on: macos-26
+    runs-on: xcode-27
     env:
       RUSTDOCFLAGS: --cfg docsrs -D warnings
     steps:
@@ -90,28 +58,19 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo +nightly doc --no-deps --all-features --target aarch64-apple-darwin
 
+  tests:
+    uses: ./.github/workflows/tests.yml
+    with:
+      macos: "27"
+      keychain: true
+      network: true
+      network-required: false
+
   python:
-    runs-on: macos-26
-    strategy:
-      matrix:
-        python: ["3.11", "3.14"]
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          key: python-${{ matrix.python }}
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-        with:
-          python-version: ${{ matrix.python }}
-          enable-cache: true
-      - run: uv run maturin develop
-      - run: uv run pytest
-      # pyright checks against pyproject's `pythonVersion`, so one interpreter is enough.
-      - if: matrix.python == '3.11'
-        run: uv run pyright
+    uses: ./.github/workflows/python.yml
+    with:
+      macos: "27"
+      keychain: true
 
   preflight:
     if: github.event_name == 'pull_request' && github.base_ref == 'main'
