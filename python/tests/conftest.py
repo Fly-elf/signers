@@ -227,10 +227,9 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 class Identity:
     """A throwaway self-signed code-signing identity in a keychain of its own.
 
-    `codesign` finds the identity through `keychain=`; the user's keychains are never touched.
-    The `codesign` of the macOS 26 CI runner did not, most likely because the keychain was off
-    the user's search list: only where a first signature fails is it added to the list, until
-    `delete()`.
+    On macOS 27 `codesign` finds the identity through `keychain=`. On macOS 26 it ignores
+    `--keychain` and finds the identity only if its keychain is on the user's search list: only
+    where a first signature fails is it added to the list, until `delete()`.
     """
 
     _PASSWORD = "signers"

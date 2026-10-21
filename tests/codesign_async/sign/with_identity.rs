@@ -36,10 +36,14 @@ async fn a_certificate_signature_names_its_signer() {
     assert_eq!(signature.flags() & super::ADHOC, 0, "signed ad hoc");
 }
 
-/// `codesign` looks for the identity in the given keychain only, so another
-/// keychain does not find it, whatever is on the search list.
+/// The `codesign` of macOS 27 looks for the identity in the given keychain
+/// only, so another keychain does not find it, whatever is on the search list.
+/// That of macOS 26 ignores `--keychain` and uses the user search list.
 #[tokio::test]
-#[cfg_attr(not(signers_test = "keychain"), ignore = "test group: keychain")]
+#[cfg_attr(
+    not(all(signers_test = "keychain", signers_test = "macos27")),
+    ignore = "test groups: keychain, macos27"
+)]
 async fn the_identity_is_looked_up_in_the_given_keychain() {
     let workspace = Workspace::new();
     let unfound = workspace.unsigned("unfound");
