@@ -50,6 +50,7 @@ pub enum Error {
     /// Whether this target exists couldn't be checked, e.g. because a parent directory denies
     /// access.
     #[error("could not access {path}: {source}")]
+    #[non_exhaustive]
     PathAccess {
         path: PathBuf,
         source: std::io::Error,
@@ -63,6 +64,7 @@ pub enum Error {
     /// [`save_to`](crate::codesign::ExtractCertificates::save_to) writes. It never changes a
     /// target. Raised while a target is read, it is collected in [`Batch`](Error::Batch).
     #[error("I/O error on {path}: {source}")]
+    #[non_exhaustive]
     Io {
         path: PathBuf,
         source: std::io::Error,
@@ -144,6 +146,7 @@ pub enum CodesignError {
     /// [`deep`](crate::codesign::Verify::deep)) or when nothing was altered. The message lists them
     /// after the diagnostics, as `(modified: /path; added: /path)`.
     #[error("verification failed: {}{}", diagnostics(.stderr), changes(.resources))]
+    #[non_exhaustive]
     VerificationFailed {
         stdout: String,
         stderr: String,
@@ -159,6 +162,7 @@ pub enum CodesignError {
     /// code's own. `stderr` holds the diagnostics `codesign` printed on standard error and `stdout`
     /// what it printed on standard output, both trimmed. Only `stderr` is part of the message.
     #[error("validly signed, but the requirement isn't satisfied: {}", diagnostics(.stderr))]
+    #[non_exhaustive]
     RequirementUnsatisfied { stdout: String, stderr: String },
 
     /// [`validate_constraint`](crate::codesign::validate_constraint) found a constraint that
@@ -172,6 +176,7 @@ pub enum CodesignError {
     /// plist, so the exit code says nothing here. A plist is rejected only when `codesign` also
     /// reports an error for it, and that report is what `stderr` keeps.
     #[error("invalid constraint: {}", diagnostics(.stderr))]
+    #[non_exhaustive]
     ConstraintInvalid { stdout: String, stderr: String },
 
     /// [`display`](crate::codesign::display) found no signature in the
@@ -184,6 +189,7 @@ pub enum CodesignError {
     /// trimmed, so with one run over several targets they also cover targets that read fine. Only
     /// `stderr` is part of the message.
     #[error("no signature: {}", diagnostics(.stderr))]
+    #[non_exhaustive]
     NoSignature { stdout: String, stderr: String },
 }
 
@@ -212,12 +218,14 @@ pub enum CodesignError {
 pub enum ProcessError {
     /// No executable called `program` was found on `PATH`.
     #[error("`{program}` was not found on PATH")]
+    #[non_exhaustive]
     NotFound { program: &'static str },
 
     /// `program` was found but couldn't start, e.g. because it isn't executable.
     ///
     /// The blocking `.run()` also returns it when it can't create its runtime.
     #[error("failed to spawn the `{program}` process or the Tokio runtime: {source}")]
+    #[non_exhaustive]
     Spawn {
         program: &'static str,
         source: std::io::Error,
@@ -227,6 +235,7 @@ pub enum ProcessError {
     ///
     /// The outcome is unknown, so the targets may or may not have changed.
     #[error("failed while running the `{program}` process: {source}")]
+    #[non_exhaustive]
     Run {
         program: &'static str,
         source: std::io::Error,
@@ -240,6 +249,7 @@ pub enum ProcessError {
     /// When one run covers several targets, the targets before the rejected one may already have
     /// changed.
     #[error("`{program}` exited with code {code}: {}", diagnostics(.stderr))]
+    #[non_exhaustive]
     Failed {
         program: &'static str,
         code: i32,
@@ -252,6 +262,7 @@ pub enum ProcessError {
     /// `status` holds the signal (`ExitStatusExt::signal`). `stderr` is usually empty. `stdout`
     /// holds what `program` printed on standard output, trimmed; it isn't part of the message.
     #[error("the `{program}` process terminated abnormally ({status}): {}", diagnostics(.stderr))]
+    #[non_exhaustive]
     Terminated {
         program: &'static str,
         status: ExitStatus,
@@ -265,6 +276,7 @@ pub enum ProcessError {
     /// targets. `stdout` and `stderr` hold what the run printed, trimmed; with one run over several
     /// targets they cover all of them. Neither is part of the message.
     #[error("`{program}` produced output this crate can't read: {detail}")]
+    #[non_exhaustive]
     UnexpectedOutput {
         program: &'static str,
         detail: String,
