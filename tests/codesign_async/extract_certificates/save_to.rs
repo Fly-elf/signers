@@ -293,7 +293,7 @@ async fn a_read_only_directory_is_an_io_error() {
 
     fs::set_permissions(&out, fs::Permissions::from_mode(0o755)).unwrap();
     match result.unwrap_err() {
-        Error::Io { path, source } => {
+        Error::Io { path, source, .. } => {
             assert!(path.starts_with(&out), "{}", path.display());
             assert_eq!(source.kind(), std::io::ErrorKind::PermissionDenied);
         }

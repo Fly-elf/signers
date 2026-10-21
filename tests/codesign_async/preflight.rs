@@ -238,7 +238,7 @@ macro_rules! preflight_tests {
             // Reopen before asserting, so a failure still leaves a removable workspace.
             std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
             match error {
-                signers::Error::PathAccess { path, source } => {
+                signers::Error::PathAccess { path, source, .. } => {
                     assert_eq!(path, target);
                     assert_eq!(source.kind(), std::io::ErrorKind::PermissionDenied);
                 }

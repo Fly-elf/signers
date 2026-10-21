@@ -50,7 +50,9 @@ fn a_codesign_that_cannot_be_executed_is_a_spawn_failure() {
     };
 
     match result.unwrap_err() {
-        Error::Process(ProcessError::Spawn { program, source }) => {
+        Error::Process(ProcessError::Spawn {
+            program, source, ..
+        }) => {
             assert_eq!(program, "codesign");
             assert_eq!(source.kind(), io::ErrorKind::PermissionDenied)
         }
@@ -79,6 +81,7 @@ fn a_codesign_killed_by_a_signal_is_reported_as_terminated() {
             status,
             stdout,
             stderr,
+            ..
         }) => {
             assert_eq!(status.signal(), Some(9), "killed by something else");
             assert_eq!(stdout, "partial");

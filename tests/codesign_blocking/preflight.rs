@@ -106,7 +106,7 @@ fn an_unreadable_parent_directory_is_an_access_error() {
 
     fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
     match error {
-        Error::PathAccess { path, source } => {
+        Error::PathAccess { path, source, .. } => {
             assert_eq!(path, target);
             assert_eq!(source.kind(), std::io::ErrorKind::PermissionDenied);
         }

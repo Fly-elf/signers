@@ -261,17 +261,11 @@ mod tests {
                 "{'kind': 'PathNotFound', 'path': '/t/a b', 'errno': None}",
             ),
             (
-                Error::PathAccess {
-                    path: "/t/x".into(),
-                    source: io::Error::from_raw_os_error(13),
-                },
+                Error::path_access("/t/x".into(), io::Error::from_raw_os_error(13)),
                 "{'kind': 'PathAccess', 'path': '/t/x', 'errno': 13}",
             ),
             (
-                Error::Io {
-                    path: "/t/y".into(),
-                    source: io::Error::other("boom"),
-                },
+                Error::io("/t/y".into(), io::Error::other("boom")),
                 "{'kind': 'Io', 'path': '/t/y', 'errno': None}",
             ),
             (
@@ -287,77 +281,63 @@ mod tests {
                 "{'kind': 'NotFound', 'codesign': True, 'process': None, 'program': None}",
             ),
             (
-                process(ProcessError::NotFound { program: "pkgutil" }),
+                process(ProcessError::not_found("pkgutil")),
                 "{'kind': 'NotFound', 'process': True, 'codesign': None, 'program': 'pkgutil'}",
             ),
             (
-                process(ProcessError::Spawn {
-                    program: "codesign",
-                    source: io::Error::from_raw_os_error(1),
-                }),
+                process(ProcessError::spawn(
+                    "codesign",
+                    io::Error::from_raw_os_error(1),
+                )),
                 "{'kind': 'Spawn', 'process': True, 'codesign': None, 'program': 'codesign', 'errno': 1}",
             ),
             (
-                process(ProcessError::Run {
-                    program: "codesign",
-                    source: io::Error::other("pipe"),
-                }),
+                process(ProcessError::run("codesign", io::Error::other("pipe"))),
                 "{'kind': 'Run', 'process': True, 'program': 'codesign', 'errno': None}",
             ),
             (
-                process(ProcessError::Failed {
-                    program: "codesign",
-                    code: 3,
-                    stdout: "o".into(),
-                    stderr: "e".into(),
-                }),
+                process(ProcessError::failed("codesign", 3, "o".into(), "e".into())),
                 "{'kind': 'Failed', 'process': True, 'codesign': None, 'program': 'codesign', 'code': 3, 'stdout': 'o', 'stderr': 'e'}",
             ),
             (
-                process(ProcessError::Terminated {
-                    program: "codesign",
-                    status: ExitStatus::from_raw(9),
-                    stdout: "o".into(),
-                    stderr: "e".into(),
-                }),
+                process(ProcessError::terminated(
+                    "codesign",
+                    ExitStatus::from_raw(9),
+                    "o".into(),
+                    "e".into(),
+                )),
                 "{'kind': 'Terminated', 'process': True, 'program': 'codesign', 'signal': 9, 'stdout': 'o', 'stderr': 'e'}",
             ),
             (
-                process(ProcessError::UnexpectedOutput {
-                    program: "codesign",
-                    detail: "d".into(),
-                    stdout: "o".into(),
-                    stderr: "e".into(),
-                }),
+                process(ProcessError::unexpected_output(
+                    "codesign",
+                    "d".into(),
+                    "o".into(),
+                    "e".into(),
+                )),
                 "{'kind': 'UnexpectedOutput', 'process': True, 'program': 'codesign', 'detail': 'd', 'stdout': 'o', 'stderr': 'e'}",
             ),
             (
-                codesign(CodesignError::VerificationFailed {
-                    stdout: "o".into(),
-                    stderr: "e".into(),
-                    resources: Vec::new(),
-                }),
+                codesign(CodesignError::verification_failed(
+                    "o".into(),
+                    "e".into(),
+                    Vec::new(),
+                )),
                 "{'kind': 'VerificationFailed', 'codesign': True, 'stdout': 'o', 'stderr': 'e', 'resources': []}",
             ),
             (
-                codesign(CodesignError::RequirementUnsatisfied {
-                    stdout: "o".into(),
-                    stderr: "e".into(),
-                }),
+                codesign(CodesignError::requirement_unsatisfied(
+                    "o".into(),
+                    "e".into(),
+                )),
                 "{'kind': 'RequirementUnsatisfied', 'codesign': True, 'stdout': 'o', 'stderr': 'e'}",
             ),
             (
-                codesign(CodesignError::ConstraintInvalid {
-                    stdout: "o".into(),
-                    stderr: "e".into(),
-                }),
+                codesign(CodesignError::constraint_invalid("o".into(), "e".into())),
                 "{'kind': 'ConstraintInvalid', 'codesign': True, 'stdout': 'o', 'stderr': 'e'}",
             ),
             (
-                codesign(CodesignError::NoSignature {
-                    stdout: "o".into(),
-                    stderr: "e".into(),
-                }),
+                codesign(CodesignError::no_signature("o".into(), "e".into())),
                 "{'kind': 'NoSignature', 'codesign': True, 'stdout': 'o', 'stderr': 'e'}",
             ),
         ];
@@ -375,22 +355,17 @@ mod tests {
     #[test]
     fn batch_failures_are_path_payload_pairs_in_order_and_nest() {
         let inner = Error::Batch(vec![("/t/c".into(), Error::NoTargets)]);
-        let failed = process(ProcessError::Failed {
-            program: "codesign",
-            code: 1,
-            stdout: String::new(),
-            stderr: "e".into(),
-        });
+        let failed = process(ProcessError::failed(
+            "codesign",
+            1,
+            String::new(),
+            "e".into(),
+        ));
         let err = Error::Batch(vec![("/t/a".into(), failed), ("/t/b".into(), inner)]);
         assert_payload(err, "{'kind': 'Batch', 'codesign': None}");
 
         let err = Error::Batch(vec![
-            (
-                "/t/a".into(),
-                process(ProcessError::NotFound {
-                    program: "codesign",
-                }),
-            ),
+            ("/t/a".into(), process(ProcessError::not_found("codesign"))),
             (
                 "/t/b".into(),
                 Error::Batch(vec![("/t/c".into(), Error::NoTargets)]),
