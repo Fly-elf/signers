@@ -2,13 +2,14 @@
 //! signer rather than an ad hoc signature.
 //!
 //! The certificate is self-signed and untrusted, which `codesign` accepts for
-//! signing. It lives in a keychain of its own, which `codesign` finds through
-//! `--keychain`, and the keychain is deleted when the identity is dropped.
+//! signing. It lives in a keychain of its own, and the keychain is deleted
+//! when the identity is dropped.
 //!
-//! The `codesign` of the macOS 26 CI runner found no identity that way, most
-//! likely because the keychain was off the user's search list. Only where a
-//! first signature fails is the keychain added to the list, for the identity's
-//! lifetime; elsewhere the list is left alone.
+//! On macOS 27 `codesign` finds the identity through `--keychain`. On macOS 26
+//! it ignores `--keychain` and finds the identity only if its keychain is on
+//! the user's search list. Only where a first signature fails is the keychain
+//! added to the list, for the identity's lifetime; elsewhere the list is left
+//! alone.
 
 use std::fs;
 use std::path::{Path, PathBuf};
