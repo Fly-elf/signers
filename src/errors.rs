@@ -251,7 +251,7 @@ impl CodesignError {
 ///
 /// fn explain(error: &Error) -> String {
 ///     match error {
-///         Error::Process(ProcessError::NotFound { program }) => format!("install `{program}`"),
+///         Error::Process(ProcessError::NotFound { program, .. }) => format!("install `{program}`"),
 ///         Error::Process(ProcessError::Failed { stderr, .. }) => stderr.clone(),
 ///         other => other.to_string(),
 ///     }
