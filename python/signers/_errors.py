@@ -40,6 +40,17 @@ __all__ = [
 T = TypeVar("T")
 
 
+# Exceptions rebuild themselves as `cls(*args)`, but these constructors take keyword-only
+# attributes, so the default pickling fails.
+def _restore(
+    cls: type["SignersError"], args: tuple[Any, ...], state: dict[str, Any]
+) -> "SignersError":
+    error = cls.__new__(cls, *args)
+    super(SignersError, error).__init__(*args)
+    error.__dict__.update(state)
+    return error
+
+
 class SignersError(Exception):
     """Base class of every error that an action raises.
 
@@ -47,6 +58,9 @@ class SignersError(Exception):
     in the call itself, such as a target that is not a path, raise Python's own
     `TypeError` instead. Some subclasses are also built-in exceptions (`ValueError`,
     `FileNotFoundError`, `OSError`), so code that catches those keeps working.
+
+    Every error can be pickled with its attributes, so it crosses `multiprocessing` and
+    `ProcessPoolExecutor` intact.
 
     Example:
         ```python
@@ -63,6 +77,10 @@ class SignersError(Exception):
 
     def __init__(self, message: str) -> None:
         super().__init__(message)
+
+    def __reduce__(self) -> tuple[Any, ...]:
+        _, args, *rest = super().__reduce__()
+        return _restore, (type(self), args, (rest[0] if rest else None) or {})
 
 
 class NoTargetsError(SignersError, ValueError):
