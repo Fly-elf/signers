@@ -56,28 +56,39 @@ fn a_missing_program_is_named_in_the_message() {
     assert_eq!(error.to_string(), "`pkgutil` was not found on PATH");
 }
 
+/// The I/O error is only the `source()`: a reporter that prints the chain
+/// would otherwise show it twice.
 #[test]
-fn a_spawn_failure_names_the_program_and_the_cause() {
-    let error = ProcessError::Spawn {
-        program: "codesign",
-        source: std::io::Error::other("no fork"),
-    };
-    assert_eq!(
-        error.to_string(),
-        "failed to spawn the `codesign` process or the Tokio runtime: no fork",
-    );
-}
+fn spawn_and_run_failures_name_the_program_and_leave_the_cause_to_source() {
+    use std::error::Error as _;
 
-#[test]
-fn a_run_failure_names_the_program_and_the_cause() {
-    let error = ProcessError::Run {
-        program: "codesign",
-        source: std::io::Error::other("no wait"),
-    };
-    assert_eq!(
-        error.to_string(),
-        "failed while running the `codesign` process: no wait",
-    );
+    let cases = [
+        (
+            ProcessError::Spawn {
+                program: "codesign",
+                source: std::io::Error::other("no fork"),
+            },
+            "could not start `codesign`",
+            "no fork",
+        ),
+        (
+            ProcessError::Run {
+                program: "codesign",
+                source: std::io::Error::other("no wait"),
+            },
+            "failed while running the `codesign` process",
+            "no wait",
+        ),
+    ];
+    for (error, message, cause) in cases {
+        assert_eq!(error.to_string(), message);
+        let source = error.source().expect("the cause is the source");
+        assert_eq!(
+            source.downcast_ref::<std::io::Error>().unwrap().to_string(),
+            cause
+        );
+        assert!(source.source().is_none(), "{error:?}");
+    }
 }
 
 #[test]
@@ -105,14 +116,14 @@ fn a_process_error_names_the_program_in_every_variant() {
                 program: "tool",
                 source: io(),
             },
-            "failed to spawn the `tool` process or the Tokio runtime: boom",
+            "could not start `tool`",
         ),
         (
             ProcessError::Run {
                 program: "tool",
                 source: io(),
             },
-            "failed while running the `tool` process: boom",
+            "failed while running the `tool` process",
         ),
         (
             ProcessError::Failed {

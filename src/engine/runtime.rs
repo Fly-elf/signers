@@ -2,6 +2,8 @@
 //! (blocking).
 
 use std::future::Future;
+#[cfg(feature = "blocking")]
+use std::io;
 use std::pin::Pin;
 
 use super::tool::Tool;
@@ -61,7 +63,10 @@ impl Runtime for Blocking {
             .map_err(|source| {
                 T::error(ProcessError::Spawn {
                     program: T::PROGRAM,
-                    source,
+                    source: io::Error::new(
+                        source.kind(),
+                        format!("could not build the Tokio runtime: {source}"),
+                    ),
                 })
             })?;
         runtime.block_on(run)

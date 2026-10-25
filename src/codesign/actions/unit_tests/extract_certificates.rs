@@ -77,3 +77,24 @@ fn every_run_gets_its_own_prefix() {
     assert!(one.ends_with("/0-"), "{one}");
     assert!(two.ends_with("/1-"), "{two}");
 }
+
+/// Only a missing file ends the chain; any other read error is an I/O
+/// failure, not a shorter chain.
+#[test]
+fn a_read_error_other_than_not_found_fails_with_the_path() {
+    use crate::errors::testing::ran;
+
+    let options = extract_certificates("a").options;
+    options.validate().unwrap();
+    let targets = [PathBuf::from("a")];
+    options.to_args(&targets);
+    let path = options.state().dir.as_ref().unwrap().path().join("0-0");
+    std::fs::create_dir(&path).unwrap();
+
+    let result = options.output(&targets, &ran("", String::new()));
+
+    match result {
+        Err(Rejection::Error(Error::Io { path: failed, .. })) => assert_eq!(failed, path),
+        other => panic!("{other:?}"),
+    }
+}

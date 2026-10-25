@@ -42,6 +42,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Why an action failed.
 ///
+/// For [`PathAccess`](Error::PathAccess) and [`Io`](Error::Io) the I/O error is
+/// [`source()`](std::error::Error::source), not part of the message; the message of
+/// [`Batch`](Error::Batch) includes the causes of each failure.
+///
 /// Every variant except [`Codesign`](Error::Codesign), [`Process`](Error::Process),
 /// [`Batch`](Error::Batch) and [`Io`](Error::Io) comes from a check made before the tool
 /// starts, so no target has been touched. The order of the checks is listed in
@@ -82,7 +86,7 @@ pub enum Error {
 
     /// Whether this target exists couldn't be checked, e.g. because a parent directory denies
     /// access.
-    #[error("could not access {path}: {source}")]
+    #[error("could not access {path}")]
     #[non_exhaustive]
     PathAccess {
         path: PathBuf,
@@ -96,7 +100,7 @@ pub enum Error {
     /// system's temporary directory, for the files it reads back and for the ones
     /// [`save_to`](crate::codesign::ExtractCertificates::save_to) writes. It never changes a
     /// target. Raised while a target is read, it is collected in [`Batch`](Error::Batch).
-    #[error("I/O error on {path}: {source}")]
+    #[error("I/O error on {path}")]
     #[non_exhaustive]
     Io {
         path: PathBuf,
@@ -202,13 +206,25 @@ pub(crate) fn diagnostics(stderr: &str) -> &str {
     }
 }
 
-/// Joins the entries of a [`Batch`](Error::Batch) as `path: error`, separated by `; `.
+/// Joins the entries of a [`Batch`](Error::Batch) as `path: error: cause…`, separated by `; `.
 fn failures(failures: &[(PathBuf, Error)]) -> String {
     failures
         .iter()
-        .map(|(path, error)| format!("{}: {error}", path.display()))
+        .map(|(path, error)| format!("{}: {}", path.display(), chain(error)))
         .collect::<Vec<_>>()
         .join("; ")
+}
+
+/// Renders an error followed by each of its sources, as `error: cause: …`.
+fn chain(error: &dyn std::error::Error) -> String {
+    let mut text = error.to_string();
+    let mut source = error.source();
+    while let Some(cause) = source {
+        text.push_str(": ");
+        text.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    text
 }
 
 #[cfg(test)]

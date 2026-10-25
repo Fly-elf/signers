@@ -4,7 +4,8 @@
 //! signatures but can't be named from outside, so their behaviour is documented in prose on
 //! `IntoTargets`, the `codesign` module and `per_target`.
 
-use std::ffi::OsString;
+use std::borrow::Cow;
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
 /// Crate-only items of the public traits, where other crates can't reach them.
@@ -113,11 +114,12 @@ impl<const N: usize> Multi for Array<N> {}
 /// The targets of an action: one path, or a `Vec`, slice or array of paths.
 ///
 /// Every action constructor takes one. The implementors below are the path types it accepts,
-/// on their own or in a `Vec`, slice or array.
+/// owned or borrowed, on their own or in a `Vec`, slice or array.
 ///
 /// The target type also fixes what `.await`, or the blocking `.run()`, returns, one output per
 /// target in input order: the output itself for a single path, a `Vec` for a `Vec` or slice, an
-/// array of `N` for an array of `N`. Only a `Vec`, slice or array has
+/// array of `N` for an array of `N`. A reference to a `Vec` or array gives the same as the
+/// value. Only a `Vec`, slice or array has
 /// [`per_target`](crate::codesign::Sign::per_target), even with one element.
 ///
 /// Every path is kept: order and duplicates too, and each path reaches `codesign` byte for byte,
@@ -140,17 +142,12 @@ impl<const N: usize> Multi for Array<N> {}
 ///
 /// let built = PathBuf::from("target/release/mytool");
 /// let one: () = codesign::sign_adhoc(&built).await?;
+/// let name = String::from("mytool");
+/// let one: () = codesign::sign_adhoc(&name).await?;
 /// let all: Vec<()> = codesign::sign_adhoc(vec!["liba.dylib", "libb.dylib"]).await?;
 /// let [a, b]: [(); 2] = codesign::sign_adhoc(["liba.dylib", "libb.dylib"]).await?;
+/// let [a, b]: [(); 2] = codesign::sign_adhoc(&["liba.dylib", "libb.dylib"]).await?;
 /// # Ok(()) }
-/// ```
-///
-/// A reference to an array is neither an array nor a slice, so it doesn't compile. Pass the
-/// array by value, or use `vec![…]`:
-///
-/// ```compile_fail,E0277
-/// # use signers::codesign;
-/// codesign::sign_adhoc(&["liba.dylib", "libb.dylib"]);
 /// ```
 ///
 /// Other crates can't implement it:
@@ -194,7 +191,18 @@ macro_rules! impl_target {
     };
 }
 
-impl_target!(&str, String, OsString, &Path, PathBuf, &PathBuf);
+impl_target!(
+    &str,
+    &String,
+    String,
+    &OsStr,
+    &OsString,
+    OsString,
+    &Path,
+    PathBuf,
+    &PathBuf,
+    Cow<'_, Path>,
+);
 
 impl<T: Into<PathBuf>> IntoTargets for Vec<T> {
     type Shape = Many;
@@ -203,6 +211,16 @@ impl<T: Into<PathBuf>> IntoTargets for Vec<T> {
 impl<T: Into<PathBuf>> sealed::IntoTargets for Vec<T> {
     fn into_targets(self) -> Vec<PathBuf> {
         self.into_iter().map(Into::into).collect()
+    }
+}
+
+impl<T: Into<PathBuf> + Clone> IntoTargets for &Vec<T> {
+    type Shape = Many;
+}
+
+impl<T: Into<PathBuf> + Clone> sealed::IntoTargets for &Vec<T> {
+    fn into_targets(self) -> Vec<PathBuf> {
+        self.as_slice().into_targets()
     }
 }
 
@@ -223,6 +241,16 @@ impl<T: Into<PathBuf>, const N: usize> IntoTargets for [T; N] {
 impl<T: Into<PathBuf>, const N: usize> sealed::IntoTargets for [T; N] {
     fn into_targets(self) -> Vec<PathBuf> {
         self.into_iter().map(Into::into).collect()
+    }
+}
+
+impl<T: Into<PathBuf> + Clone, const N: usize> IntoTargets for &[T; N] {
+    type Shape = Array<N>;
+}
+
+impl<T: Into<PathBuf> + Clone, const N: usize> sealed::IntoTargets for &[T; N] {
+    fn into_targets(self) -> Vec<PathBuf> {
+        self.as_slice().into_targets()
     }
 }
 

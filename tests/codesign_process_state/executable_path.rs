@@ -61,7 +61,14 @@ fn a_codesign_that_cannot_be_executed_is_a_spawn_failure() {
         crate::runtime().block_on(sign(&target, "-").into_future())
     };
 
-    match result.unwrap_err() {
+    let error = result.unwrap_err();
+    let message = error.to_string();
+    assert!(
+        message.starts_with("could not start `codesign`"),
+        "{message}"
+    );
+    assert!(!message.contains("Tokio"), "{message}");
+    match error {
         Error::Process(ProcessError::Spawn {
             program, source, ..
         }) => {

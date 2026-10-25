@@ -100,6 +100,58 @@ fn array_targets() {
     assert!(none.into_targets().is_empty());
 }
 
+/// A reference to any accepted target converts like the target itself, and
+/// leaves the original usable.
+#[test]
+fn borrowed_targets_convert_like_their_owners() {
+    let one = vec![PathBuf::from("app")];
+    let string = String::from("app");
+    let os_string = OsString::from("app");
+    assert_eq!((&string).into_targets(), one);
+    assert_eq!(OsStr::new("app").into_targets(), one);
+    assert_eq!((&os_string).into_targets(), one);
+    assert_eq!(Cow::Borrowed(Path::new("app")).into_targets(), one);
+    assert_eq!(Cow::<Path>::Owned(PathBuf::from("app")).into_targets(), one);
+    assert_eq!((string, os_string), ("app".into(), "app".into()));
+
+    let two = vec![PathBuf::from("a"), PathBuf::from("b")];
+    let vec = vec!["a", "b"];
+    assert_eq!((&vec).into_targets(), two);
+    assert_eq!(vec, ["a", "b"]);
+
+    let array = [String::from("a"), String::from("b")];
+    assert_eq!((&array).into_targets(), two);
+    assert_eq!(array, ["a", "b"]);
+
+    let none: [&str; 0] = [];
+    assert!((&none).into_targets().is_empty());
+    assert!((&Vec::<&str>::new()).into_targets().is_empty());
+}
+
+#[test]
+fn borrowed_collections_keep_order_duplicates_and_empty_entries() {
+    let expected = vec![PathBuf::from("b"), PathBuf::new(), PathBuf::from("b")];
+    assert_eq!((&vec!["b", "", "b"]).into_targets(), expected);
+    assert_eq!((&["b", "", "b"]).into_targets(), expected);
+}
+
+#[cfg(unix)]
+#[test]
+fn borrowed_targets_that_are_not_utf8_survive_unchanged() {
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
+    let raw = OsString::from_vec(vec![b'a', 0xff, b'b']);
+    let expected = vec![PathBuf::from(&raw)];
+    assert_eq!(
+        OsStr::from_bytes(&[b'a', 0xff, b'b']).into_targets(),
+        expected
+    );
+    assert_eq!((&raw).into_targets(), expected);
+    assert_eq!(Cow::Borrowed(Path::new(&raw)).into_targets(), expected);
+    assert_eq!((&vec![&raw]).into_targets(), expected);
+    assert_eq!((&[&raw]).into_targets(), expected);
+}
+
 /// Compiles only when `target` has the shape `S`.
 fn assert_shape<S: Shape>(_target: impl IntoTargets<Shape = S>) {}
 
@@ -111,16 +163,25 @@ fn the_target_type_fixes_the_shape() {
     assert_shape::<One>(Path::new("a"));
     assert_shape::<One>(PathBuf::from("a"));
     assert_shape::<One>(&PathBuf::from("a"));
+    assert_shape::<One>(&String::from("a"));
+    assert_shape::<One>(OsStr::new("a"));
+    assert_shape::<One>(&OsString::from("a"));
+    assert_shape::<One>(Cow::Borrowed(Path::new("a")));
 
     assert_shape::<Many>(vec!["a", "b"]);
     assert_shape::<Many>(Vec::<PathBuf>::new());
     let slice: &[&str] = &["a", "b"];
     assert_shape::<Many>(slice);
+    assert_shape::<Many>(&vec!["a", "b"]);
+    assert_shape::<Many>(&Vec::<PathBuf>::new());
 
     assert_shape::<Array<2>>(["a", "b"]);
     assert_shape::<Array<1>>([PathBuf::from("a")]);
     let none: [&str; 0] = [];
     assert_shape::<Array<0>>(none);
+    assert_shape::<Array<2>>(&["a", "b"]);
+    assert_shape::<Array<1>>(&[PathBuf::from("a")]);
+    assert_shape::<Array<0>>(&none);
 }
 
 /// `Multi` follows the shape, not the length: the bound compiles
