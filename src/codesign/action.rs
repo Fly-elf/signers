@@ -6,7 +6,7 @@ use bitflags::Flags;
 /// Comma-joins the `flag_name` tokens of the flags set in `flags`, in declaration order.
 ///
 /// Not `bitflags`' `Display`, which separates with ` | `.
-pub(crate) fn joined<F: Flags + Copy>(flags: F) -> String {
+pub(crate) fn joined<F: Flags + Copy>(flags: F) -> Option<String> {
     let mut tokens = String::new();
     for flag in F::FLAGS.iter().filter(|flag| flags.contains(*flag.value())) {
         if !tokens.is_empty() {
@@ -14,7 +14,7 @@ pub(crate) fn joined<F: Flags + Copy>(flags: F) -> String {
         }
         tokens.push_str(flag.name());
     }
-    tokens
+    (!tokens.is_empty()).then_some(tokens)
 }
 
 // Emits an action's public type over the engine's `Job`, its private `Options`, a private `new`, one setter
