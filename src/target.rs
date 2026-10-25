@@ -114,11 +114,12 @@ impl<const N: usize> Multi for Array<N> {}
 /// The targets of an action: one path, or a `Vec`, slice or array of paths.
 ///
 /// Every action constructor takes one. The implementors below are the path types it accepts,
-/// on their own or in a `Vec`, slice or array.
+/// owned or borrowed, on their own or in a `Vec`, slice or array.
 ///
 /// The target type also fixes what `.await`, or the blocking `.run()`, returns, one output per
 /// target in input order: the output itself for a single path, a `Vec` for a `Vec` or slice, an
-/// array of `N` for an array of `N`. Only a `Vec`, slice or array has
+/// array of `N` for an array of `N`. A reference to a `Vec` or array gives the same as the
+/// value. Only a `Vec`, slice or array has
 /// [`per_target`](crate::codesign::Sign::per_target), even with one element.
 ///
 /// Every path is kept: order and duplicates too, and each path reaches `codesign` byte for byte,
@@ -141,17 +142,12 @@ impl<const N: usize> Multi for Array<N> {}
 ///
 /// let built = PathBuf::from("target/release/mytool");
 /// let one: () = codesign::sign_adhoc(&built).await?;
+/// let name = String::from("mytool");
+/// let one: () = codesign::sign_adhoc(&name).await?;
 /// let all: Vec<()> = codesign::sign_adhoc(vec!["liba.dylib", "libb.dylib"]).await?;
 /// let [a, b]: [(); 2] = codesign::sign_adhoc(["liba.dylib", "libb.dylib"]).await?;
+/// let [a, b]: [(); 2] = codesign::sign_adhoc(&["liba.dylib", "libb.dylib"]).await?;
 /// # Ok(()) }
-/// ```
-///
-/// A reference to an array is neither an array nor a slice, so it doesn't compile. Pass the
-/// array by value, or use `vec![…]`:
-///
-/// ```compile_fail,E0277
-/// # use signers::codesign;
-/// codesign::sign_adhoc(&["liba.dylib", "libb.dylib"]);
 /// ```
 ///
 /// Other crates can't implement it:
