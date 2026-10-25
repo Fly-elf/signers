@@ -21,7 +21,7 @@ Complete examples for Rust (async and blocking) and Python (sync and asyncio) ar
 
 ## Installation
 
-`signers` runs on macOS only.
+`signers` runs on macOS 26 or later; some options need macOS 27, as their docs say.
 
 Rust: the async API comes with the default `async` feature.
 

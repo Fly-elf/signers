@@ -68,6 +68,9 @@ macro_rules! action {
             /// [`display`](crate::codesign::display) and
             /// [`validate_constraint`](crate::codesign::validate_constraint), which only read them.
             ///
+            /// With `per_target(true)`, the runs that haven't started yet don't start once the future is
+            /// dropped.
+            ///
             /// Only a `Vec`, slice or array of targets has this setter, even with one element. A single
             /// target always runs one `codesign`:
             ///

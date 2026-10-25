@@ -68,6 +68,7 @@
 //!   several targets, signing a bundle and signing for distribution, in Rust and Python.
 //!
 #![doc = concat!("[examples]: https://github.com/Fly-elf/signers/tree/v", env!("CARGO_PKG_VERSION"), "/examples")]
+#![forbid(unsafe_code)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[cfg(not(feature = "async"))]
@@ -76,18 +77,18 @@ compile_error!("signers needs the `async` or the `blocking` feature");
 #[cfg(not(target_os = "macos"))]
 compile_error!("signers currently supports only macOS");
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "async"))]
 pub mod codesign;
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "async"))]
 mod engine;
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "async"))]
 pub mod errors;
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "async"))]
 mod target;
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "async"))]
 pub use codesign::CodesignError;
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "async"))]
 pub use errors::{Error, ProcessError, Result};
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "async"))]
 pub use target::IntoTargets;
