@@ -4,7 +4,8 @@
 //! signatures but can't be named from outside, so their behaviour is documented in prose on
 //! `IntoTargets`, the `codesign` module and `per_target`.
 
-use std::ffi::OsString;
+use std::borrow::Cow;
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
 /// Crate-only items of the public traits, where other crates can't reach them.
@@ -194,7 +195,18 @@ macro_rules! impl_target {
     };
 }
 
-impl_target!(&str, String, OsString, &Path, PathBuf, &PathBuf);
+impl_target!(
+    &str,
+    &String,
+    String,
+    &OsStr,
+    &OsString,
+    OsString,
+    &Path,
+    PathBuf,
+    &PathBuf,
+    Cow<'_, Path>,
+);
 
 impl<T: Into<PathBuf>> IntoTargets for Vec<T> {
     type Shape = Many;
@@ -203,6 +215,16 @@ impl<T: Into<PathBuf>> IntoTargets for Vec<T> {
 impl<T: Into<PathBuf>> sealed::IntoTargets for Vec<T> {
     fn into_targets(self) -> Vec<PathBuf> {
         self.into_iter().map(Into::into).collect()
+    }
+}
+
+impl<T: Into<PathBuf> + Clone> IntoTargets for &Vec<T> {
+    type Shape = Many;
+}
+
+impl<T: Into<PathBuf> + Clone> sealed::IntoTargets for &Vec<T> {
+    fn into_targets(self) -> Vec<PathBuf> {
+        self.as_slice().into_targets()
     }
 }
 
@@ -223,6 +245,16 @@ impl<T: Into<PathBuf>, const N: usize> IntoTargets for [T; N] {
 impl<T: Into<PathBuf>, const N: usize> sealed::IntoTargets for [T; N] {
     fn into_targets(self) -> Vec<PathBuf> {
         self.into_iter().map(Into::into).collect()
+    }
+}
+
+impl<T: Into<PathBuf> + Clone, const N: usize> IntoTargets for &[T; N] {
+    type Shape = Array<N>;
+}
+
+impl<T: Into<PathBuf> + Clone, const N: usize> sealed::IntoTargets for &[T; N] {
+    fn into_targets(self) -> Vec<PathBuf> {
+        self.as_slice().into_targets()
     }
 }
 
