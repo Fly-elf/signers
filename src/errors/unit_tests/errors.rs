@@ -18,16 +18,54 @@ fn a_missing_path_is_named_in_the_message() {
     );
 }
 
+/// Each error followed by its sources, as a reporter that walks `source()` prints them.
+fn walk(error: &dyn std::error::Error) -> Vec<String> {
+    std::iter::successors(Some(error), |e| e.source())
+        .map(ToString::to_string)
+        .collect()
+}
+
+/// The I/O error is the `source()` alone, so a reporter that prints the whole
+/// chain shows it once; `Process` is transparent and adds no link of its own.
 #[test]
-fn an_unreadable_path_carries_the_cause() {
-    let error = Error::PathAccess {
-        path: PathBuf::from("/locked/a.app"),
-        source: std::io::Error::from(std::io::ErrorKind::PermissionDenied),
-    };
-    assert_eq!(
-        error.to_string(),
-        "could not access /locked/a.app: permission denied",
-    );
+fn a_wrapped_io_error_appears_once_in_the_chain() {
+    let cause = || std::io::Error::other("disk on fire");
+    let cases = [
+        (
+            Error::PathAccess {
+                path: PathBuf::from("/locked/a.app"),
+                source: cause(),
+            },
+            "could not access /locked/a.app",
+        ),
+        (
+            Error::Io {
+                path: PathBuf::from("/tmp/x 1/cert.pem"),
+                source: cause(),
+            },
+            "I/O error on /tmp/x 1/cert.pem",
+        ),
+        (
+            Error::from(ProcessError::Spawn {
+                program: "tool",
+                source: cause(),
+            }),
+            "could not start `tool`",
+        ),
+        (
+            Error::from(ProcessError::Run {
+                program: "tool",
+                source: cause(),
+            }),
+            "failed while running the `tool` process",
+        ),
+    ];
+    for (error, message) in cases {
+        assert_eq!(error.to_string(), message);
+        let source = std::error::Error::source(&error).expect("the cause is the source");
+        assert!(source.is::<std::io::Error>(), "{error:?}");
+        assert_eq!(walk(&error), [message, "disk on fire"]);
+    }
 }
 
 #[test]
@@ -76,6 +114,35 @@ fn a_batch_lists_every_failure_in_the_order_given() {
              a: `codesign` exited with code 3: no diagnostics",
             Error::PathNotFound(PathBuf::from("My App.app")),
         ),
+    );
+}
+
+/// Display is all a batch message is built from, so each entry brings the
+/// causes its own message leaves to `source()`.
+#[test]
+fn a_batch_message_carries_the_causes_of_every_failure() {
+    let error = Error::Batch(vec![
+        (
+            PathBuf::from("/locked/a.app"),
+            Error::PathAccess {
+                path: PathBuf::from("/locked/a.app"),
+                source: std::io::Error::from(std::io::ErrorKind::PermissionDenied),
+            },
+        ),
+        (
+            PathBuf::from("b.dylib"),
+            ProcessError::Spawn {
+                program: "tool",
+                source: std::io::Error::other("no fork"),
+            }
+            .into(),
+        ),
+    ]);
+    assert_eq!(
+        error.to_string(),
+        "2 target(s) failed: \
+         /locked/a.app: could not access /locked/a.app: permission denied; \
+         b.dylib: could not start `tool`: no fork",
     );
 }
 

@@ -114,6 +114,31 @@ fn an_unreadable_parent_directory_is_an_access_error() {
     }
 }
 
+/// A reporter that prints the whole `source()` chain, as `anyhow` does with
+/// `{:#}`, shows the operating system's reason once.
+#[test]
+fn an_access_error_reported_through_anyhow_names_its_cause_once() {
+    use std::os::unix::fs::PermissionsExt;
+
+    if crate::support::running_as_root() {
+        crate::support::skip!("root is exempt from the permission bits this relies on");
+    }
+    let workspace = Workspace::new();
+    let locked = workspace.dir("locked");
+    let target = workspace.join("locked/hidden.bin");
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+
+    let error = verify(&target).run().unwrap_err();
+
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+    let report = format!("{:#}", anyhow::Error::from(error));
+    assert!(
+        report.starts_with(&format!("could not access {}: ", target.display())),
+        "{report}"
+    );
+    assert_eq!(report.matches("Permission denied").count(), 1, "{report}");
+}
+
 #[test]
 fn a_dash_for_a_path_is_refused() {
     let workspace = Workspace::new();
