@@ -3,42 +3,24 @@
 use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::io::ErrorKind;
-use std::process::{ExitStatus, Stdio};
+use std::process::Stdio;
 
 use super::tool::Tool;
-use crate::errors::{Error, ProcessError, Result};
+use crate::errors::{Error, Output, ProcessError, Result};
 
-/// How a process ended, with both streams decoded.
-pub struct Exit {
-    pub status: ExitStatus,
-    pub stdout: String,
-    pub stderr: String,
-}
-
-impl Exit {
-    /// Gives the streams of a run that exited 0.
-    ///
-    /// A non-zero exit goes through `failure`, which can read it as it likes. A kill by a signal
-    /// has no exit code, so it is [`ProcessError::Terminated`] whatever `failure` does.
-    pub fn success<T: Tool>(
-        self,
-        failure: impl FnOnce(i32, String, String) -> Error,
-    ) -> Result<(String, String)> {
-        if self.status.success() {
-            return Ok((self.stdout, self.stderr));
-        }
-        Err(match self.status.code() {
-            Some(code) => failure(code, self.stdout, self.stderr),
-            // No exit code at all: the process was killed before it could
-            // exit, so this is not the tool rejecting anything.
-            None => T::error(ProcessError::Terminated {
-                program: T::PROGRAM,
-                status: self.status,
-                stdout: self.stdout,
-                stderr: self.stderr,
-            }),
-        })
+pub(crate) fn exit<T: Tool>(
+    output: Output,
+    failure: impl FnOnce(i32, Output) -> Error,
+) -> Result<Output> {
+    if output.status.success() {
+        return Ok(output);
     }
+    Err(match output.status.code() {
+        Some(code) => failure(code, output),
+        // No exit code at all: the process was killed before it could
+        // exit, so this is not the tool rejecting anything.
+        None => T::error(ProcessError::Failed { output }),
+    })
 }
 
 /// A failed run, split by whether the tool started at all.
@@ -58,7 +40,9 @@ impl RunError {
 }
 
 /// Runs the tool with `args` and waits for it, with no standard input.
-pub(crate) async fn spawn<T: Tool>(args: &[Cow<'_, OsStr>]) -> std::result::Result<Exit, RunError> {
+pub(crate) async fn spawn<T: Tool>(
+    args: &[Cow<'_, OsStr>],
+) -> std::result::Result<Output, RunError> {
     tracing::debug!(target: "signers", program = T::PROGRAM, args = ?args, "spawning");
 
     // Spawning and waiting are kept apart so that a failure to *start*
@@ -102,7 +86,8 @@ pub(crate) async fn spawn<T: Tool>(args: &[Cow<'_, OsStr>]) -> std::result::Resu
     let stdout = decode(output.stdout);
     let stderr = decode(output.stderr);
     tracing::trace!(target: "signers", program = T::PROGRAM, stdout = %stdout, stderr = %stderr, "output");
-    Ok(Exit {
+    Ok(Output {
+        program: T::PROGRAM,
         status: output.status,
         stdout,
         stderr,

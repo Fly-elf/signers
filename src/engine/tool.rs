@@ -1,6 +1,6 @@
 //! The external program an action runs, and how its failures reach the caller.
 
-use crate::errors::{Error, ProcessError};
+use crate::errors::{Error, Output, ProcessError};
 
 /// An external program that actions run, looked up on `PATH`.
 ///
@@ -18,13 +18,8 @@ pub trait Tool: 'static {
     }
 
     /// The error for a non-zero exit, as [`ProcessError::Failed`] of this tool.
-    fn failed(code: i32, stdout: String, stderr: String) -> Error {
-        Self::error(ProcessError::Failed {
-            program: Self::PROGRAM,
-            code,
-            stdout,
-            stderr,
-        })
+    fn failed(output: Output) -> Error {
+        Self::error(ProcessError::Failed { output })
     }
 }
 

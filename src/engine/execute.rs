@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 
 use futures_util::StreamExt;
 
-use super::operation::Operation;
-use super::process::{RunError, spawn};
+use super::operation::{Operation, Rejection};
+use super::process::{RunError, exit, spawn};
 use super::tool::Tool;
 use crate::errors::{Error, ProcessError, Result};
 
@@ -104,37 +104,18 @@ async fn run_once<O: Operation>(
     op: &O,
     targets: &[PathBuf],
 ) -> std::result::Result<Vec<O::Output>, RunError> {
-    let exit = spawn::<O::Tool>(&op.to_args(targets)).await?;
-    let (stdout, stderr) = exit
-        .success::<O::Tool>(|code, stdout, stderr| op.failure(code, stdout, stderr))
+    let output = spawn::<O::Tool>(&op.to_args(targets)).await?;
+    let output = exit::<O::Tool>(output, |code, output| op.failure(code, output))
         .map_err(RunError::Failed)?;
-    let outputs = match op.output(targets, stdout.clone(), stderr.clone()) {
-        Ok(outputs) => outputs,
-        Err(Error::Process(ProcessError::UnexpectedOutput {
-            program, detail, ..
-        })) => {
-            return Err(RunError::Failed(Error::Process(
-                ProcessError::UnexpectedOutput {
-                    program,
-                    detail,
-                    stdout,
-                    stderr,
-                },
-            )));
-        }
-        Err(other) => return Err(RunError::Failed(other)),
+    let detail = match op.output(targets, &output) {
+        Ok(outputs) if outputs.len() == targets.len() => return Ok(outputs),
+        Ok(outputs) => format!("{} outputs for {} targets", outputs.len(), targets.len()),
+        Err(Rejection::Unreadable(detail)) => detail,
+        Err(Rejection::Error(error)) => return Err(RunError::Failed(error)),
     };
-    if outputs.len() != targets.len() {
-        return Err(RunError::Failed(O::Tool::error(
-            ProcessError::UnexpectedOutput {
-                program: O::Tool::PROGRAM,
-                detail: format!("{} outputs for {} targets", outputs.len(), targets.len()),
-                stdout,
-                stderr,
-            },
-        )));
-    }
-    Ok(outputs)
+    Err(RunError::Failed(O::Tool::error(
+        ProcessError::UnexpectedOutput { detail, output },
+    )))
 }
 
 #[cfg(test)]

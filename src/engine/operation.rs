@@ -5,7 +5,7 @@ use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
 
 use super::tool::Tool;
-use crate::errors::{Error, Result};
+use crate::errors::{Error, Output, Result};
 
 /// Marks the action types whose targets can share one run of the tool; bounds `per_target`.
 pub trait SharedRun {}
@@ -57,17 +57,28 @@ pub trait Operation: Sync {
     fn output(
         &self,
         targets: &[PathBuf],
-        stdout: String,
-        stderr: String,
-    ) -> Result<Vec<Self::Output>>;
+        output: &Output,
+    ) -> std::result::Result<Vec<Self::Output>, Rejection>;
 
     /// Turns a non-zero exit code into this action's error; by default
     /// the tool's [`failed`](Tool::failed).
     ///
     /// Both streams are already lossy-decoded and trimmed; the default keeps them as they
     /// are. A process killed by a signal has no exit code and never gets here.
-    fn failure(&self, code: i32, stdout: String, stderr: String) -> Error {
-        Self::Tool::failed(code, stdout, stderr)
+    fn failure(&self, _code: i32, output: Output) -> Error {
+        Self::Tool::failed(output)
+    }
+}
+
+#[derive(Debug)]
+pub enum Rejection {
+    Unreadable(String),
+    Error(Error),
+}
+
+impl From<Error> for Rejection {
+    fn from(error: Error) -> Self {
+        Rejection::Error(error)
     }
 }
 
