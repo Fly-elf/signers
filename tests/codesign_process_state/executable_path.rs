@@ -62,7 +62,9 @@ fn a_codesign_that_cannot_be_executed_is_a_spawn_failure() {
     };
 
     match result.unwrap_err() {
-        Error::Process(ProcessError::Spawn { program, source }) => {
+        Error::Process(ProcessError::Spawn {
+            program, source, ..
+        }) => {
             assert_eq!(program, "codesign");
             assert_eq!(source.kind(), std::io::ErrorKind::PermissionDenied)
         }
@@ -93,6 +95,7 @@ fn a_codesign_killed_by_a_signal_is_reported_as_terminated() {
             status,
             stdout,
             stderr,
+            ..
         }) => {
             assert_eq!(
                 status.signal(),
@@ -122,7 +125,9 @@ fn a_report_short_of_the_targets_is_unexpected_output() {
     };
 
     match result.unwrap_err() {
-        Error::Process(ProcessError::UnexpectedOutput { program, detail }) => {
+        Error::Process(ProcessError::UnexpectedOutput {
+            program, detail, ..
+        }) => {
             assert_eq!(program, "codesign");
             assert!(!detail.is_empty(), "the error does not say what was wrong");
         }
@@ -150,6 +155,7 @@ fn a_silent_failure_still_reports_its_exit_code() {
             code,
             stdout,
             stderr,
+            ..
         }) => {
             assert_eq!(*code, 3);
             assert!(stdout.is_empty(), "the stand-in said something: {stdout}");
@@ -192,6 +198,7 @@ fn a_failure_keeps_what_codesign_printed_on_both_streams() {
             code,
             stdout,
             stderr,
+            ..
         }) => {
             assert_eq!(*code, 5);
             assert_eq!(stdout, "to stdout \u{FFFD}");
@@ -581,7 +588,9 @@ fn a_codesign_that_cannot_be_executed_fails_a_per_target_batch_as_a_whole() {
     };
 
     match result.unwrap_err() {
-        Error::Process(ProcessError::Spawn { program, source }) => {
+        Error::Process(ProcessError::Spawn {
+            program, source, ..
+        }) => {
             assert_eq!(program, "codesign");
             assert_eq!(source.kind(), std::io::ErrorKind::PermissionDenied)
         }

@@ -218,3 +218,17 @@ def test_an_unreadable_report_raises_unexpected_output_error(workspace: Workspac
     assert error.program == "codesign"
     assert error.detail
     assert error.detail in str(error)
+    assert error.stdout == ""
+    assert error.stderr == ""
+
+
+def test_an_unreadable_report_keeps_what_codesign_printed(workspace: Workspace, monkeypatch: pytest.MonkeyPatch) -> None:
+    target = workspace.unsigned("hello")
+    _stand_in(workspace, monkeypatch, "echo partial; echo warning >&2")
+
+    with pytest.raises(signers.UnexpectedOutputError) as raised:
+        codesign.display(target)
+
+    assert raised.value.stdout == "partial"
+    assert raised.value.stderr == "warning"
+    assert "partial" not in str(raised.value)

@@ -29,7 +29,8 @@
 //! - [Signing an app bundle][sign-bundle], nested code first (blocking).
 //! - [Signing for distribution][sign-for-distribution] and checking the result (async).
 //!
-//! Nothing runs until `.await`. Until then a builder is a plain value that you can build over
+//! Nothing runs until `.await`; a builder that is built and then dropped unused triggers the
+//! `unused_must_use` warning. Until then a builder is a plain value that you can build over
 //! several statements, clone or drop. The future it turns into is `Send + 'static`, so you can
 //! spawn it.
 //!
@@ -43,6 +44,11 @@
 //! }
 //! signing.await?;
 //! # Ok(()) }
+//! ```
+//!
+//! ```compile_fail
+//! #![deny(unused_must_use)]
+//! signers::codesign::sign_adhoc("a").force(true);
 //! ```
 //!
 //! What `.await` yields follows the targets (see [`IntoTargets`](crate::IntoTargets)): the
@@ -76,9 +82,10 @@
 //!   rejects: the targets before that one have already been changed, the ones after it haven't.
 //! - once per target, with [`per_target(true)`](Sign::per_target), which is the default for the
 //!   actions that only read them. Every target runs, and the failures come together as
-//!   [`Error::Batch`](crate::Error::Batch). If `codesign` can't start at all
+//!   [`Error::Batch`](crate::Error::Batch), including the targets for which `codesign` couldn't
+//!   start. Only if it can't start for any target
 //!   ([`CodesignError::NotFound`](crate::CodesignError::NotFound),
-//!   [`ProcessError::Spawn`](crate::ProcessError::Spawn)), that error comes alone instead.
+//!   [`ProcessError::Spawn`](crate::ProcessError::Spawn)) does that error come alone instead.
 //!
 //! What `codesign` does wrong comes as [`Error::Process`](crate::Error::Process), a
 //! [`ProcessError`](crate::ProcessError) with `program` `"codesign"`: it couldn't start or be

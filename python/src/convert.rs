@@ -61,6 +61,7 @@ fn format<'py>(py: Python<'py>, value: &Format) -> PyResult<Bound<'py, PyAny>> {
         Format::Bundle {
             app: is_app,
             executable: inner,
+            ..
         } => {
             app = Some(*is_app);
             executable = Some(format(py, inner)?);
@@ -232,7 +233,9 @@ pub(crate) fn signature<'py>(py: Python<'py>, s: &Signature) -> PyResult<Bound<'
     d.set_item("page_size", s.page_size)?;
     match &s.signature {
         SignatureKind::AdHoc => d.set_item("signature", py.None())?,
-        SignatureKind::Certificate { size, authorities } => {
+        SignatureKind::Certificate {
+            size, authorities, ..
+        } => {
             let sig = PyDict::new(py);
             sig.set_item("size", size)?;
             let names: Vec<Option<&str>> = authorities

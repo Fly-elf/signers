@@ -176,6 +176,7 @@ pub enum Format {
     /// A disk image.
     DiskImage,
     /// A bundle with code inside.
+    #[non_exhaustive]
     Bundle {
         /// `true` for an application bundle.
         app: bool,
@@ -338,6 +339,7 @@ pub enum SignatureKind {
     /// An ad hoc signature, which names no signer.
     AdHoc,
     /// A signature made with a certificate.
+    #[non_exhaustive]
     Certificate {
         /// The size of the signature in bytes.
         size: u32,
@@ -826,7 +828,9 @@ Chosen signature=1
     /// The `detail` of the `UnexpectedOutput` that parsing `report` must fail with.
     fn rejection(report: &str) -> String {
         match parse_report(report) {
-            Err(Error::Process(ProcessError::UnexpectedOutput { program, detail })) => {
+            Err(Error::Process(ProcessError::UnexpectedOutput {
+                program, detail, ..
+            })) => {
                 assert_eq!(program, "codesign");
                 detail
             }
