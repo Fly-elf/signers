@@ -42,6 +42,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Why an action failed.
 ///
+/// For [`PathAccess`](Error::PathAccess) and [`Io`](Error::Io) the I/O error is
+/// [`source()`](std::error::Error::source), not part of the message; the message of
+/// [`Batch`](Error::Batch) includes the causes of each failure.
+///
 /// Every variant except [`Codesign`](Error::Codesign), [`Process`](Error::Process),
 /// [`Batch`](Error::Batch) and [`Io`](Error::Io) comes from a check made before the tool
 /// starts, so no target has been touched. The order of the checks is listed in
