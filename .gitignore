@@ -3,7 +3,6 @@
 .vscode
 .idea
 .venv/
-uv.lock
 __pycache__/
 /dist/
 /python/signers/_native*.so
