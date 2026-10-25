@@ -111,7 +111,9 @@ macro_rules! action {
             ///     Ok(_) => {}
             ///     Err(Error::Batch(failures)) => {
             ///         for (path, error) in &failures {
-            ///             eprintln!("{}: {error}", path.display());
+            ///             let causes = std::iter::successors(Some(error as &dyn std::error::Error), |e| e.source());
+            ///             let causes: Vec<_> = causes.map(|e| e.to_string()).collect();
+            ///             eprintln!("{}: {}", path.display(), causes.join(": "));
             ///         }
             ///     }
             ///     Err(error) => return Err(error),
