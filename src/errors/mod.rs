@@ -6,6 +6,22 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
+macro_rules! streams {
+    ($error:ty) => {
+        impl $error {
+            pub fn stdout(&self) -> Option<&str> {
+                self.output().map(|output| output.stdout.as_str())
+            }
+
+            pub fn stderr(&self) -> Option<&str> {
+                self.output().map(|output| output.stderr.as_str())
+            }
+        }
+    };
+}
+
+pub(crate) use streams;
+
 mod process;
 
 pub use process::{Output, ProcessError};
@@ -119,6 +135,18 @@ pub enum Error {
     #[error(transparent)]
     Process(#[from] ProcessError),
 }
+
+impl Error {
+    pub fn output(&self) -> Option<&Output> {
+        match self {
+            Error::Process(error) => error.output(),
+            Error::Codesign(error) => error.output(),
+            _ => None,
+        }
+    }
+}
+
+streams!(Error);
 
 #[cfg(feature = "__test-constructors")]
 impl Error {

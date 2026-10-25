@@ -80,6 +80,20 @@ pub enum CodesignError {
     NoSignature { output: Output },
 }
 
+impl CodesignError {
+    pub fn output(&self) -> Option<&Output> {
+        match self {
+            Self::VerificationFailed { output, .. }
+            | Self::RequirementUnsatisfied { output }
+            | Self::ConstraintInvalid { output }
+            | Self::NoSignature { output } => Some(output),
+            Self::NotFound => None,
+        }
+    }
+}
+
+crate::errors::streams!(CodesignError);
+
 #[cfg(feature = "__test-constructors")]
 impl CodesignError {
     #[doc(hidden)]

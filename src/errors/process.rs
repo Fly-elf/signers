@@ -74,6 +74,26 @@ pub enum ProcessError {
     UnexpectedOutput { detail: String, output: Output },
 }
 
+impl ProcessError {
+    pub fn program(&self) -> &'static str {
+        match self {
+            Self::NotFound { program }
+            | Self::Spawn { program, .. }
+            | Self::Run { program, .. } => program,
+            Self::Failed { output } | Self::UnexpectedOutput { output, .. } => output.program,
+        }
+    }
+
+    pub fn output(&self) -> Option<&Output> {
+        match self {
+            Self::Failed { output } | Self::UnexpectedOutput { output, .. } => Some(output),
+            Self::NotFound { .. } | Self::Spawn { .. } | Self::Run { .. } => None,
+        }
+    }
+}
+
+super::streams!(ProcessError);
+
 #[non_exhaustive]
 #[derive(Debug, Clone)]
 pub struct Output {
