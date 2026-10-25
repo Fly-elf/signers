@@ -1,8 +1,11 @@
+use std::os::unix::process::ExitStatusExt;
+
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use signers::codesign::{Change, ResourceChange};
+use signers::errors::Output;
 use signers::{CodesignError, Error, ProcessError};
 
 create_exception!(_native, NativeError, PyException);
@@ -71,12 +74,9 @@ fn codesign_fields(d: &Bound<'_, PyDict>, err: &CodesignError) -> PyResult<&'sta
     let kind = match err {
         CodesignError::NotFound => "NotFound",
         CodesignError::VerificationFailed {
-            stdout,
-            stderr,
-            resources,
-            ..
+            output, resources, ..
         } => {
-            streams(d, stdout, stderr)?;
+            streams(d, output)?;
             let resources = resources
                 .iter()
                 .filter_map(resource)
@@ -90,16 +90,16 @@ fn codesign_fields(d: &Bound<'_, PyDict>, err: &CodesignError) -> PyResult<&'sta
             d.set_item("resources", resources)?;
             "VerificationFailed"
         }
-        CodesignError::RequirementUnsatisfied { stdout, stderr, .. } => {
-            streams(d, stdout, stderr)?;
+        CodesignError::RequirementUnsatisfied { output, .. } => {
+            streams(d, output)?;
             "RequirementUnsatisfied"
         }
-        CodesignError::ConstraintInvalid { stdout, stderr, .. } => {
-            streams(d, stdout, stderr)?;
+        CodesignError::ConstraintInvalid { output, .. } => {
+            streams(d, output)?;
             "ConstraintInvalid"
         }
-        CodesignError::NoSignature { stdout, stderr, .. } => {
-            streams(d, stdout, stderr)?;
+        CodesignError::NoSignature { output, .. } => {
+            streams(d, output)?;
             "NoSignature"
         }
         _ => "Other",
@@ -127,44 +127,22 @@ fn process_fields(d: &Bound<'_, PyDict>, err: &ProcessError) -> PyResult<&'stati
             d.set_item("errno", source.raw_os_error())?;
             "Run"
         }
-        ProcessError::Failed {
-            program,
-            code,
-            stdout,
-            stderr,
-            ..
-        } => {
-            d.set_item("program", program)?;
-            d.set_item("code", code)?;
-            streams(d, stdout, stderr)?;
+        ProcessError::Failed { output, .. } => {
+            // A killed process has no exit code; like `subprocess`, report the
+            // signal as a negative return code.
+            let status = output.status;
+            let returncode = status
+                .code()
+                .or_else(|| status.signal().map(|signal| -signal));
+            d.set_item("program", output.program)?;
+            d.set_item("returncode", returncode)?;
+            streams(d, output)?;
             "Failed"
         }
-        ProcessError::Terminated {
-            program,
-            status,
-            stdout,
-            stderr,
-            ..
-        } => {
-            #[cfg(unix)]
-            let signal = std::os::unix::process::ExitStatusExt::signal(status);
-            #[cfg(not(unix))]
-            let signal: Option<i32> = None;
-            d.set_item("program", program)?;
-            d.set_item("signal", signal)?;
-            streams(d, stdout, stderr)?;
-            "Terminated"
-        }
-        ProcessError::UnexpectedOutput {
-            program,
-            detail,
-            stdout,
-            stderr,
-            ..
-        } => {
-            d.set_item("program", program)?;
+        ProcessError::UnexpectedOutput { detail, output, .. } => {
+            d.set_item("program", output.program)?;
             d.set_item("detail", detail)?;
-            streams(d, stdout, stderr)?;
+            streams(d, output)?;
             "UnexpectedOutput"
         }
         _ => "Other",
@@ -172,9 +150,9 @@ fn process_fields(d: &Bound<'_, PyDict>, err: &ProcessError) -> PyResult<&'stati
     Ok(kind)
 }
 
-fn streams(d: &Bound<'_, PyDict>, stdout: &str, stderr: &str) -> PyResult<()> {
-    d.set_item("stdout", stdout)?;
-    d.set_item("stderr", stderr)
+fn streams(d: &Bound<'_, PyDict>, output: &Output) -> PyResult<()> {
+    d.set_item("stdout", &output.stdout)?;
+    d.set_item("stderr", &output.stderr)
 }
 
 // A change kind this binding doesn't know yet has no Python counterpart, so it is left out.

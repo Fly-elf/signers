@@ -28,7 +28,6 @@ __all__ = [
     "SignersError",
     "SpawnError",
     "StdioPathError",
-    "TerminatedError",
     "ToolNotFoundError",
     "UnexpectedOutputError",
     "VerificationFailedError",
@@ -334,44 +333,15 @@ class ProcessFailedError(ProcessError):
         stderr: Its diagnostics, trimmed. Only this is part of the message.
     """
 
-    code: int
+    returncode: int
     stdout: str
     stderr: str
 
     def __init__(
-        self, message: str, *, program: str, code: int, stdout: str, stderr: str
+        self, message: str, *, program: str, returncode: int, stdout: str, stderr: str
     ) -> None:
         super().__init__(message, program=program)
-        self.code = code
-        self.stdout = stdout
-        self.stderr = stderr
-
-
-class TerminatedError(ProcessError):
-    """`program` was killed by a signal before it could exit.
-
-    Attributes:
-        signal: The signal number, or `None` if the system gave none.
-        stdout: What `program` printed on standard output, trimmed. It isn't part of the
-            message.
-        stderr: Its diagnostics, trimmed; usually empty.
-    """
-
-    signal: int | None
-    stdout: str
-    stderr: str
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        program: str,
-        signal: int | None,
-        stdout: str,
-        stderr: str,
-    ) -> None:
-        super().__init__(message, program=program)
-        self.signal = signal
+        self.returncode = returncode
         self.stdout = stdout
         self.stderr = stderr
 
@@ -557,15 +527,7 @@ def _from_native(payload: dict[str, object]) -> SignersError:
                 return ProcessFailedError(
                     message,
                     program=program,
-                    code=p["code"],
-                    stdout=p["stdout"],
-                    stderr=p["stderr"],
-                )
-            case "Terminated":
-                return TerminatedError(
-                    message,
-                    program=program,
-                    signal=p["signal"],
+                    returncode=p["returncode"],
                     stdout=p["stdout"],
                     stderr=p["stderr"],
                 )
