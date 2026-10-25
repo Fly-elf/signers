@@ -89,15 +89,12 @@ async fn an_unsigned_target_is_a_codesign_failure() {
     for target in targets {
         let error = extract_certificates(&target).await.unwrap_err();
 
-        let Error::Process(ProcessError::Failed {
-            program: "codesign",
-            code: 1,
-            stderr,
-            ..
-        }) = error
-        else {
+        let Error::Process(ProcessError::Failed { output, .. }) = error else {
             panic!("expected `codesign` to exit 1, got {error:?}");
         };
+        assert_eq!(output.program, "codesign");
+        assert_eq!(output.status.code(), Some(1));
+        let stderr = output.stderr;
         assert!(
             stderr.contains("code object is not signed at all"),
             "{stderr}"

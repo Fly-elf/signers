@@ -6,9 +6,36 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
+/// Gives an error type `stdout()` and `stderr()` over its `output()`; the docs are written once here.
+macro_rules! streams {
+    ($error:ty) => {
+        impl $error {
+            /// What the tool printed on standard output, trimmed.
+            ///
+            /// `None` when the error doesn't come from a finished run, see
+            /// [`output`](Self::output). Shorthand for `output()` then
+            /// [`stdout`](crate::errors::Output::stdout).
+            pub fn stdout(&self) -> Option<&str> {
+                self.output().map(|output| output.stdout.as_str())
+            }
+
+            /// What the tool printed on standard error, trimmed.
+            ///
+            /// `None` when the error doesn't come from a finished run, see
+            /// [`output`](Self::output). Shorthand for `output()` then
+            /// [`stderr`](crate::errors::Output::stderr).
+            pub fn stderr(&self) -> Option<&str> {
+                self.output().map(|output| output.stderr.as_str())
+            }
+        }
+    };
+}
+
+pub(crate) use streams;
+
 mod process;
 
-pub use process::ProcessError;
+pub use process::{Output, ProcessError};
 
 /// A `Result` whose error is this crate's [`Error`](enum@Error).
 pub type Result<T> = std::result::Result<T, Error>;
@@ -24,13 +51,15 @@ pub type Result<T> = std::result::Result<T, Error>;
 ///
 /// ```no_run
 /// # async fn run() {
-/// use signers::{Error, ProcessError, codesign};
+/// use signers::{Error, codesign};
 ///
 /// match codesign::sign_adhoc("mytool").force(true).await {
 ///     Ok(()) => {}
 ///     Err(Error::PathNotFound(path)) => eprintln!("no such file: {}", path.display()),
-///     Err(Error::Process(ProcessError::Failed { stderr, .. })) => eprintln!("{stderr}"),
-///     Err(error) => eprintln!("{error}"),
+///     Err(error) => match error.stderr() {
+///         Some(stderr) => eprintln!("codesign said: {stderr}"),
+///         None => eprintln!("{error}"),
+///     },
 /// }
 /// # }
 /// ```
@@ -120,6 +149,37 @@ pub enum Error {
     Process(#[from] ProcessError),
 }
 
+impl Error {
+    /// The finished run behind this error: its exit status and both output streams.
+    ///
+    /// `Some` for a [`Process`](Error::Process) error that came after the run, and for a
+    /// [`Codesign`](Error::Codesign) verdict. `None` for everything else, including checks made
+    /// before the tool starts and [`Batch`](Error::Batch): look at the errors inside it.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # fn run() {
+    /// use signers::codesign;
+    ///
+    /// if let Err(error) = codesign::blocking::verify("MyApp.app").run() {
+    ///     if let Some(output) = error.output() {
+    ///         eprintln!("{} ended with {}", output.program, output.status);
+    ///     }
+    /// }
+    /// # }
+    /// ```
+    pub fn output(&self) -> Option<&Output> {
+        match self {
+            Error::Process(error) => error.output(),
+            Error::Codesign(error) => error.output(),
+            _ => None,
+        }
+    }
+}
+
+streams!(Error);
+
 #[cfg(feature = "__test-constructors")]
 impl Error {
     #[doc(hidden)]
@@ -150,6 +210,10 @@ fn failures(failures: &[(PathBuf, Error)]) -> String {
         .collect::<Vec<_>>()
         .join("; ")
 }
+
+#[cfg(test)]
+#[path = "unit_tests/support.rs"]
+pub(crate) mod testing;
 
 #[cfg(test)]
 #[path = "unit_tests/errors.rs"]

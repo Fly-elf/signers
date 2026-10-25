@@ -5,7 +5,8 @@ use std::path::PathBuf;
 use crate::codesign::CodesignError;
 use crate::codesign::action::action;
 use crate::codesign::tool::Codesign;
-use crate::engine::{Operation, PushArgs, SharedRun};
+use crate::engine::{Operation, PushArgs, Rejection, SharedRun};
+use crate::errors::Output;
 
 action! {
     /// Builder of a constraint check, returned by
@@ -43,14 +44,14 @@ impl Operation for Options {
 
     // macOS 27 exits 0 and prints "Constraint validation failed" for every readable plist,
     // valid ones included; only an `error:` line marks a real rejection.
-    fn output(
-        &self,
-        targets: &[PathBuf],
-        stdout: String,
-        stderr: String,
-    ) -> crate::errors::Result<Vec<()>> {
-        if stderr.lines().any(|line| line.starts_with("error:")) {
-            return Err(CodesignError::ConstraintInvalid { stdout, stderr }.into());
+    fn output(&self, targets: &[PathBuf], output: &Output) -> Result<Vec<()>, Rejection> {
+        if output.stderr.lines().any(|line| line.starts_with("error:")) {
+            return Err(Rejection::Error(
+                CodesignError::ConstraintInvalid {
+                    output: output.clone(),
+                }
+                .into(),
+            ));
         }
         Ok(vec![(); targets.len()])
     }

@@ -173,12 +173,9 @@ async fn together_an_unreadable_plist_fails_the_whole_run_with_exit_one() {
 
     assert!(
         matches!(
-            error,
-            Error::Process(ProcessError::Failed {
-                program: "codesign",
-                code: 1,
-                ..
-            })
+            &error,
+            Error::Process(ProcessError::Failed { output, .. })
+                if output.program == "codesign" && output.status.code() == Some(1)
         ),
         "{error:?}"
     );

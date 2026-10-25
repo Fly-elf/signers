@@ -1,3 +1,4 @@
+use std::fmt;
 use std::process::ExitStatus;
 
 use thiserror::Error;
@@ -11,6 +12,9 @@ use super::diagnostics;
 /// variant but [`NotFound`](ProcessError::NotFound), which is
 /// [`CodesignError::NotFound`](crate::codesign::CodesignError::NotFound) so that it can hint at `/usr/bin`.
 ///
+/// [`Failed`](ProcessError::Failed) and [`UnexpectedOutput`](ProcessError::UnexpectedOutput) come
+/// after a run that ended, and carry its [`Output`].
+///
 /// # Examples
 ///
 /// ```
@@ -19,7 +23,7 @@ use super::diagnostics;
 /// fn explain(error: &Error) -> String {
 ///     match error {
 ///         Error::Process(ProcessError::NotFound { program, .. }) => format!("install `{program}`"),
-///         Error::Process(ProcessError::Failed { stderr, .. }) => stderr.clone(),
+///         Error::Process(ProcessError::Failed { output, .. }) => output.stderr.clone(),
 ///         other => other.to_string(),
 ///     }
 /// }
@@ -52,48 +56,102 @@ pub enum ProcessError {
         source: std::io::Error,
     },
 
-    /// `program` exited with `code`.
+    /// `program` exited non-zero, or was killed by a signal.
     ///
-    /// `stderr` holds its diagnostics and `stdout` what it printed on standard output, both
-    /// trimmed. Only `stderr` is part of the message.
+    /// `output` holds the exit status and what the run printed. The message gives the exit code,
+    /// or the signal when there is none (`status.code()` is [`None`]), followed by the `stderr`
+    /// diagnostics.
     ///
     /// When one run covers several targets, the targets before the rejected one may already have
     /// changed.
-    #[error("`{program}` exited with code {code}: {}", diagnostics(.stderr))]
+    #[error(fmt = failed)]
     #[non_exhaustive]
-    Failed {
-        program: &'static str,
-        code: i32,
-        stdout: String,
-        stderr: String,
-    },
-
-    /// `program` was killed by a signal before it could exit.
-    ///
-    /// `status` holds the signal (`ExitStatusExt::signal`). `stderr` is usually empty. `stdout`
-    /// holds what `program` printed on standard output, trimmed; it isn't part of the message.
-    #[error("the `{program}` process terminated abnormally ({status}): {}", diagnostics(.stderr))]
-    #[non_exhaustive]
-    Terminated {
-        program: &'static str,
-        status: ExitStatus,
-        stdout: String,
-        stderr: String,
-    },
+    Failed { output: Output },
 
     /// `program` exited 0, but its output couldn't be read as the action's result.
     ///
     /// `detail` says what didn't match, e.g. the number of results against the number of
-    /// targets. `stdout` and `stderr` hold what the run printed, trimmed; with one run over several
-    /// targets they cover all of them. Neither is part of the message.
-    #[error("`{program}` produced output this crate can't read: {detail}")]
+    /// targets. `output` holds what the run printed, for all its targets. Only `detail` is part
+    /// of the message.
+    #[error("`{}` produced output this crate can't read: {detail}", .output.program)]
     #[non_exhaustive]
-    UnexpectedOutput {
-        program: &'static str,
-        detail: String,
-        stdout: String,
-        stderr: String,
-    },
+    UnexpectedOutput { detail: String, output: Output },
+}
+
+impl ProcessError {
+    /// The tool this error is about, e.g. `"codesign"`.
+    pub fn program(&self) -> &'static str {
+        match self {
+            Self::NotFound { program }
+            | Self::Spawn { program, .. }
+            | Self::Run { program, .. } => program,
+            Self::Failed { output } | Self::UnexpectedOutput { output, .. } => output.program,
+        }
+    }
+
+    /// The finished run behind this error, for [`Failed`](Self::Failed) and
+    /// [`UnexpectedOutput`](Self::UnexpectedOutput); `None` for a process that never ran to the end.
+    pub fn output(&self) -> Option<&Output> {
+        match self {
+            Self::Failed { output } | Self::UnexpectedOutput { output, .. } => Some(output),
+            Self::NotFound { .. } | Self::Spawn { .. } | Self::Run { .. } => None,
+        }
+    }
+}
+
+super::streams!(ProcessError);
+
+/// What a run of an external tool produced once it ended.
+///
+/// Errors that come after the run carry it: [`ProcessError::Failed`],
+/// [`ProcessError::UnexpectedOutput`] and the verdicts of
+/// [`CodesignError`](crate::CodesignError). Read it with `output()` on any of them, or with
+/// `stdout()` and `stderr()` when only the text matters.
+///
+/// With one run over several targets, the streams cover all of them, including targets that
+/// passed before the one that failed.
+///
+/// # Examples
+///
+/// ```no_run
+/// # fn run() {
+/// use signers::{Error, ProcessError, codesign};
+///
+/// match codesign::blocking::display("MyApp.app").run() {
+///     Err(Error::Process(ProcessError::Failed { output, .. })) => {
+///         match output.status.code() {
+///             Some(code) => eprintln!("{} exited with {code}", output.program),
+///             None => eprintln!("{} was killed", output.program),
+///         }
+///     }
+///     _ => {}
+/// }
+/// # }
+/// ```
+#[non_exhaustive]
+#[derive(Debug, Clone)]
+pub struct Output {
+    /// The executable that ran, e.g. `"codesign"`.
+    pub program: &'static str,
+    /// How the process ended. [`code`](ExitStatus::code) is `None` when a signal killed it.
+    pub status: ExitStatus,
+    /// What it printed on standard output, decoded lossily as UTF-8 and trimmed.
+    pub stdout: String,
+    /// What it printed on standard error, decoded and trimmed like `stdout`.
+    pub stderr: String,
+}
+
+#[cfg(feature = "__test-constructors")]
+impl Output {
+    #[doc(hidden)]
+    pub fn new(program: &'static str, status: ExitStatus, stdout: String, stderr: String) -> Self {
+        Self {
+            program,
+            status,
+            stdout,
+            stderr,
+        }
+    }
 }
 
 #[cfg(feature = "__test-constructors")]
@@ -114,43 +172,34 @@ impl ProcessError {
     }
 
     #[doc(hidden)]
-    pub fn failed(program: &'static str, code: i32, stdout: String, stderr: String) -> Self {
-        Self::Failed {
-            program,
-            code,
-            stdout,
-            stderr,
-        }
+    pub fn failed(output: Output) -> Self {
+        Self::Failed { output }
     }
 
     #[doc(hidden)]
-    pub fn terminated(
-        program: &'static str,
-        status: ExitStatus,
-        stdout: String,
-        stderr: String,
-    ) -> Self {
-        Self::Terminated {
-            program,
-            status,
-            stdout,
-            stderr,
-        }
+    pub fn unexpected_output(detail: String, output: Output) -> Self {
+        Self::UnexpectedOutput { detail, output }
     }
+}
 
-    #[doc(hidden)]
-    pub fn unexpected_output(
-        program: &'static str,
-        detail: String,
-        stdout: String,
-        stderr: String,
-    ) -> Self {
-        Self::UnexpectedOutput {
-            program,
-            detail,
-            stdout,
-            stderr,
-        }
+fn failed(output: &Output, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let Output {
+        program,
+        status,
+        stderr,
+        ..
+    } = output;
+    match status.code() {
+        Some(code) => write!(
+            f,
+            "`{program}` exited with code {code}: {}",
+            diagnostics(stderr)
+        ),
+        None => write!(
+            f,
+            "`{program}` was killed ({status}): {}",
+            diagnostics(stderr)
+        ),
     }
 }
 

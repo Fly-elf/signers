@@ -13,8 +13,8 @@ use tempfile::TempDir;
 use crate::codesign::Certificate;
 use crate::codesign::action::action;
 use crate::codesign::tool::Codesign;
-use crate::engine::{Operation, PushArgs};
-use crate::errors::{Error, Result};
+use crate::engine::{Operation, PushArgs, Rejection};
+use crate::errors::{Error, Output, Result};
 
 action! {
     /// Builder of a run that reads certificate chains, returned by
@@ -148,9 +148,8 @@ impl Operation for Options {
     fn output(
         &self,
         targets: &[PathBuf],
-        _stdout: String,
-        _stderr: String,
-    ) -> Result<Vec<Vec<Certificate>>> {
+        _: &Output,
+    ) -> std::result::Result<Vec<Vec<Certificate>>, Rejection> {
         let prefix = self
             .state()
             .prefixes
@@ -165,7 +164,7 @@ impl Operation for Options {
             match std::fs::read(&path) {
                 Ok(der) => chain.push(Certificate::from_der(der)),
                 Err(error) if error.kind() == ErrorKind::NotFound => break,
-                Err(source) => return Err(Error::Io { path, source }),
+                Err(source) => return Err(Error::Io { path, source }.into()),
             }
         }
 

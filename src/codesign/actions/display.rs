@@ -7,8 +7,8 @@ use crate::codesign::action::action;
 use crate::codesign::tool::Codesign;
 use crate::codesign::types::parse_report;
 use crate::codesign::{Signature, SignatureSlot};
-use crate::engine::{Operation, PushArgs, SharedRun};
-use crate::errors::Result;
+use crate::engine::{Operation, PushArgs, Rejection, SharedRun};
+use crate::errors::Output;
 
 action! {
     /// Builder of a run that reads signatures, returned by [`display`](crate::codesign::display).
@@ -119,15 +119,10 @@ impl Operation for Options {
     /// `signature_slot` the code has no signature in) fails the whole run with
     /// [`CodesignError::NoSignature`]. Entitlements come from the plist on stdout, which only a
     /// single-target run asks for.
-    fn output(
-        &self,
-        targets: &[PathBuf],
-        stdout: String,
-        stderr: String,
-    ) -> Result<Vec<Signature>> {
-        let reports = reports(&stderr);
+    fn output(&self, targets: &[PathBuf], output: &Output) -> Result<Vec<Signature>, Rejection> {
+        let reports = reports(&output.stderr);
         if reports.len() != targets.len() {
-            return Err(Codesign::unexpected_output(format!(
+            return Err(Rejection::Unreadable(format!(
                 "{} reports for {} targets",
                 reports.len(),
                 targets.len()
@@ -140,20 +135,26 @@ impl Operation for Options {
             !report.lines().any(|line| line.starts_with("Signature="))
                 && report.lines().any(|line| line.ends_with(": no signature"))
         }) {
-            return Err(CodesignError::NoSignature { stdout, stderr }.into());
+            return Err(Rejection::Error(
+                CodesignError::NoSignature {
+                    output: output.clone(),
+                }
+                .into(),
+            ));
         }
 
         let mut signatures = reports
             .into_iter()
             .map(parse_report)
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
 
         if let [signature] = signatures.as_mut_slice()
-            && let Some(plist) = plist_start(&stdout)
+            && let Some(plist) = plist_start(&output.stdout)
         {
-            let entitlements = plist::from_bytes(&stdout.as_bytes()[plist..]).map_err(|error| {
-                Codesign::unexpected_output(format!("unreadable entitlements: {error}"))
-            })?;
+            let entitlements =
+                plist::from_bytes(&output.stdout.as_bytes()[plist..]).map_err(|error| {
+                    Rejection::Unreadable(format!("unreadable entitlements: {error}"))
+                })?;
             signature.entitlements = Some(entitlements);
         }
 

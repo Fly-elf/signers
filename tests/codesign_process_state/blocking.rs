@@ -61,7 +61,7 @@ fn a_codesign_that_cannot_be_executed_is_a_spawn_failure() {
 }
 
 #[test]
-fn a_codesign_killed_by_a_signal_is_reported_as_terminated() {
+fn a_codesign_killed_by_a_signal_is_reported_as_failed_with_the_signal() {
     use std::os::unix::process::ExitStatusExt;
 
     let _serialised = crate::serialised();
@@ -76,18 +76,13 @@ fn a_codesign_killed_by_a_signal_is_reported_as_terminated() {
     };
 
     match result.unwrap_err() {
-        Error::Process(ProcessError::Terminated {
-            program: "codesign",
-            status,
-            stdout,
-            stderr,
-            ..
-        }) => {
-            assert_eq!(status.signal(), Some(9), "killed by something else");
-            assert_eq!(stdout, "partial");
-            assert_eq!(stderr, "warning");
+        Error::Process(ProcessError::Failed { output, .. }) => {
+            assert_eq!(output.program, "codesign");
+            assert_eq!(output.status.signal(), Some(9), "killed by something else");
+            assert_eq!(output.stdout, "partial");
+            assert_eq!(output.stderr, "warning");
         }
-        other => panic!("expected Terminated, got {other:?}"),
+        other => panic!("expected Failed, got {other:?}"),
     }
 }
 
@@ -106,10 +101,8 @@ fn a_report_short_of_the_targets_is_unexpected_output() {
     };
 
     match result.unwrap_err() {
-        Error::Process(ProcessError::UnexpectedOutput {
-            program, detail, ..
-        }) => {
-            assert_eq!(program, "codesign");
+        Error::Process(ProcessError::UnexpectedOutput { detail, output, .. }) => {
+            assert_eq!(output.program, "codesign");
             assert!(!detail.is_empty(), "the error does not say what was wrong");
         }
         other => panic!("expected UnexpectedOutput, got {other:?}"),

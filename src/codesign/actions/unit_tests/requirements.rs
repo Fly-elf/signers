@@ -4,6 +4,7 @@ use super::*;
 use crate::codesign::RequirementKind;
 use crate::codesign::requirements;
 use crate::errors::ProcessError;
+use crate::errors::testing::{exited, ran};
 
 const DESIGNATED: &str = r#"designated => identifier "com.apple.ls" and anchor apple"#;
 const DUMP: &str = "\t[Dict]\n\t\t[Key] ccat\n\t\t[Value]\n\t\t\t[Int] 0\n";
@@ -29,8 +30,8 @@ fn paths(names: &[&str]) -> Vec<PathBuf> {
     names.iter().map(PathBuf::from).collect()
 }
 
-fn read(stdout: &str) -> Result<Vec<Requirement>> {
-    let mut outputs = action().output(&paths(&["a"]), stdout.to_owned(), String::new())?;
+fn read(stdout: &str) -> Result<Vec<Requirement>, Rejection> {
+    let mut outputs = action().output(&paths(&["a"]), &ran(stdout.to_owned(), String::new()))?;
     assert_eq!(outputs.len(), 1);
     Ok(outputs.remove(0))
 }
@@ -98,7 +99,10 @@ fn nothing_on_stdout_is_an_empty_list() {
 #[test]
 fn the_run_yields_one_list() {
     let outputs = action()
-        .output(&paths(&["a"]), format!("{DESIGNATED}\n"), String::new())
+        .output(
+            &paths(&["a"]),
+            &ran(format!("{DESIGNATED}\n"), String::new()),
+        )
         .unwrap();
 
     assert_eq!(outputs.len(), 1);
@@ -110,8 +114,10 @@ fn stderr_is_not_read() {
     let outputs = action()
         .output(
             &paths(&["a"]),
-            format!("{DESIGNATED}\n"),
-            "Executable=/x/a\nnot a requirement\n".to_owned(),
+            &ran(
+                format!("{DESIGNATED}\n"),
+                "Executable=/x/a\nnot a requirement\n".to_owned(),
+            ),
         )
         .unwrap();
 
@@ -185,8 +191,7 @@ fn a_malformed_requirement_line_is_rejected() {
         assert!(
             matches!(
                 &result,
-                Err(crate::Error::Process(ProcessError::UnexpectedOutput { program: "codesign", detail, .. }))
-                    if detail.contains("requirement")
+                Err(Rejection::Unreadable(detail)) if detail.contains("requirement")
             ),
             "{stdout:?}: {result:?}"
         );
@@ -209,13 +214,16 @@ fn the_action_cannot_share_a_run() {
 
 #[test]
 fn a_failed_run_keeps_its_exit_code_and_streams() {
-    let error = action().failure(1, "out".into(), "err".into());
+    let error = action().failure(1, exited("codesign", 1, "out", "err"));
 
     assert!(
         matches!(
             &error,
-            crate::Error::Process(ProcessError::Failed { program: "codesign", code: 1, stdout, stderr })
-                if stdout == "out" && stderr == "err"
+            crate::Error::Process(ProcessError::Failed { output })
+                if output.program == "codesign"
+                    && output.status.code() == Some(1)
+                    && output.stdout == "out"
+                    && output.stderr == "err"
         ),
         "{error:?}"
     );

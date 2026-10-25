@@ -10,12 +10,11 @@ use crate::support::inspect;
 /// The diagnostics of a run `codesign` ended with exit code 1.
 fn exit_1(error: Error) -> String {
     match error {
-        Error::Process(ProcessError::Failed {
-            program: "codesign",
-            code: 1,
-            stderr,
-            ..
-        }) => stderr,
+        Error::Process(ProcessError::Failed { output, .. })
+            if output.program == "codesign" && output.status.code() == Some(1) =>
+        {
+            output.stderr
+        }
         other => panic!("expected `codesign` to exit 1, got {other:?}"),
     }
 }
@@ -117,15 +116,15 @@ async fn a_failed_one_process_run_carries_the_empty_stdout_codesign_left() {
         .unwrap_err();
 
     match error {
-        Error::Process(ProcessError::Failed {
-            program: "codesign",
-            stdout,
-            stderr,
-            ..
-        }) => {
-            assert_eq!(stdout, oracle.stdout.trim());
-            assert!(stdout.is_empty(), "{stdout}");
-            assert!(stderr.contains(&unsigned.display().to_string()), "{stderr}");
+        Error::Process(ProcessError::Failed { output, .. }) => {
+            assert_eq!(output.program, "codesign");
+            assert_eq!(output.stdout, oracle.stdout.trim());
+            assert!(output.stdout.is_empty(), "{}", output.stdout);
+            assert!(
+                output.stderr.contains(&unsigned.display().to_string()),
+                "{}",
+                output.stderr
+            );
         }
         other => panic!("expected Failed, got {other:?}"),
     }

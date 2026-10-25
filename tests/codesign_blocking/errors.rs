@@ -20,14 +20,14 @@ fn a_refused_target_is_a_failed_run_with_codesigns_diagnostics() {
     let error = sign_adhoc(&target).run().unwrap_err();
 
     match error {
-        Error::Process(ProcessError::Failed {
-            program: "codesign",
-            code,
-            stderr,
-            ..
-        }) => {
-            assert_eq!(code, 1);
-            assert!(stderr.contains("is already signed"), "{stderr}");
+        Error::Process(ProcessError::Failed { output, .. }) => {
+            assert_eq!(output.program, "codesign");
+            assert_eq!(output.status.code(), Some(1));
+            assert!(
+                output.stderr.contains("is already signed"),
+                "{}",
+                output.stderr
+            );
         }
         other => panic!("expected Failed, got {other:?}"),
     }
@@ -42,8 +42,12 @@ fn an_unsigned_target_fails_verification() {
     let error = verify(&target).run().unwrap_err();
 
     match error {
-        Error::Codesign(CodesignError::VerificationFailed { stderr, .. }) => {
-            assert!(stderr.contains("not signed at all"), "{stderr}");
+        Error::Codesign(CodesignError::VerificationFailed { output, .. }) => {
+            assert!(
+                output.stderr.contains("not signed at all"),
+                "{}",
+                output.stderr
+            );
         }
         other => panic!("expected VerificationFailed, got {other:?}"),
     }
@@ -76,8 +80,11 @@ fn an_invalid_constraint_is_constraint_invalid() {
         .unwrap_err();
 
     match error {
-        Error::Codesign(CodesignError::ConstraintInvalid { stderr, .. }) => {
-            assert!(!stderr.is_empty(), "the rejection carried no diagnostics");
+        Error::Codesign(CodesignError::ConstraintInvalid { output, .. }) => {
+            assert!(
+                !output.stderr.is_empty(),
+                "the rejection carried no diagnostics"
+            );
         }
         other => panic!("expected ConstraintInvalid, got {other:?}"),
     }
@@ -92,8 +99,12 @@ fn an_empty_signature_slot_is_no_signature() {
         .unwrap_err();
 
     match error {
-        Error::Codesign(CodesignError::NoSignature { stderr, .. }) => {
-            assert!(stderr.contains("/bin/ls: no signature"), "{stderr}");
+        Error::Codesign(CodesignError::NoSignature { output, .. }) => {
+            assert!(
+                output.stderr.contains("/bin/ls: no signature"),
+                "{}",
+                output.stderr
+            );
         }
         other => panic!("expected NoSignature, got {other:?}"),
     }
@@ -114,4 +125,47 @@ fn a_certificate_directory_that_is_a_file_is_an_io_error() {
         other => panic!("expected Io, got {other:?}"),
     }
     assert_eq!(fs::read_to_string(&out).unwrap(), "not a directory\n");
+}
+
+#[test]
+fn a_failed_run_exposes_what_codesign_printed() {
+    let workspace = Workspace::new();
+    let target = workspace.adhoc_signed("hello");
+    let oracle = inspect::codesign(&["--sign".as_ref(), "-".as_ref(), target.as_ref()]);
+    assert!(!oracle.success);
+
+    let error = sign_adhoc(&target).run().unwrap_err();
+
+    let output = error.output().expect("a failed run has an output");
+    assert_eq!(output.program, "codesign");
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.stdout, oracle.stdout.trim());
+    assert_eq!(output.stderr, oracle.stderr.trim());
+    assert_eq!(error.stdout(), Some(output.stdout.as_str()));
+    assert_eq!(error.stderr(), Some(output.stderr.as_str()));
+}
+
+#[test]
+fn a_verdict_exposes_what_codesign_printed() {
+    let workspace = Workspace::new();
+    let target = workspace.unsigned("hello");
+    let oracle = inspect::codesign(&["--verify".as_ref(), target.as_ref()]);
+    assert!(!oracle.success);
+
+    let error = verify(&target).run().unwrap_err();
+
+    let output = error.output().expect("a verdict has an output");
+    assert_eq!(output.program, "codesign");
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(error.stdout(), Some(oracle.stdout.trim()));
+    assert_eq!(error.stderr(), Some(oracle.stderr.trim()));
+}
+
+#[test]
+fn an_error_from_before_the_run_has_no_output() {
+    let error = sign_adhoc("/no/such/target").run().unwrap_err();
+
+    assert!(matches!(error, Error::PathNotFound(_)), "got {error:?}");
+    assert!(error.output().is_none());
+    assert_eq!((error.stdout(), error.stderr()), (None, None));
 }

@@ -4,7 +4,7 @@ use std::os::unix::ffi::OsStrExt;
 use super::*;
 use crate::codesign::SignatureKind;
 use crate::codesign::display;
-use crate::errors::ProcessError;
+use crate::errors::testing::ran;
 
 fn os(strings: &[&str]) -> Vec<OsString> {
     strings.iter().map(OsString::from).collect()
@@ -45,15 +45,10 @@ fn paths(names: &[&str]) -> Vec<PathBuf> {
     names.iter().map(PathBuf::from).collect()
 }
 
-fn unexpected_output(result: Result<Vec<Signature>>) -> String {
+fn unreadable(result: Result<Vec<Signature>, Rejection>) -> String {
     match result {
-        Err(crate::Error::Process(ProcessError::UnexpectedOutput {
-            program, detail, ..
-        })) => {
-            assert_eq!(program, "codesign");
-            detail
-        }
-        other => panic!("expected UnexpectedOutput, got {other:?}"),
+        Err(Rejection::Unreadable(detail)) => detail,
+        other => panic!("expected Unreadable, got {other:?}"),
     }
 }
 
@@ -193,7 +188,7 @@ fn each_report_becomes_one_signature_in_order() {
     let stderr = format!("{}{}", report("/x/a", "first"), report("/x/b", "second"));
 
     let signatures = Options::default()
-        .output(&paths(&["a", "b"]), String::new(), stderr)
+        .output(&paths(&["a", "b"]), &ran("", stderr))
         .unwrap();
 
     let identifiers: Vec<&str> = signatures.iter().map(|s| s.identifier.as_str()).collect();
@@ -219,7 +214,7 @@ fn no_report_keeps_trailing_whitespace_whatever_the_run_printed() {
         assert!(blocks[0].ends_with("Chosen signature=1"));
     }
     let signatures = Options::default()
-        .output(&paths(&["a", "b"]), String::new(), stderr)
+        .output(&paths(&["a", "b"]), &ran("", stderr))
         .unwrap();
     assert!(signatures.iter().all(|s| s.raw() == s.raw().trim_end()));
 }
@@ -232,7 +227,7 @@ fn lines_before_the_first_report_are_ignored() {
     );
 
     let signatures = Options::default()
-        .output(&paths(&["a"]), String::new(), stderr)
+        .output(&paths(&["a"]), &ran("", stderr))
         .unwrap();
 
     assert_eq!(signatures.len(), 1);
@@ -252,7 +247,7 @@ fn a_report_count_other_than_the_target_count_is_rejected() {
     ];
 
     for (targets, stderr) in cases {
-        unexpected_output(Options::default().output(&targets, String::new(), stderr));
+        unreadable(Options::default().output(&targets, &ran("", stderr)));
     }
 }
 
@@ -260,8 +255,7 @@ fn a_report_count_other_than_the_target_count_is_rejected() {
 fn an_unreadable_report_is_rejected() {
     let stderr = report("/x/a", "first").replace("Total signatures=1", "Total signatures=x");
 
-    let detail =
-        unexpected_output(Options::default().output(&paths(&["a"]), String::new(), stderr));
+    let detail = unreadable(Options::default().output(&paths(&["a"]), &ran("", stderr)));
 
     assert!(detail.contains("Total signatures"), "{detail}");
 }
@@ -271,8 +265,7 @@ fn a_single_target_reads_its_entitlements_from_stdout() {
     let signatures = Options::default()
         .output(
             &paths(&["a"]),
-            ENTITLEMENTS.to_owned(),
-            report("/x/a", "first"),
+            &ran(ENTITLEMENTS.to_owned(), report("/x/a", "first")),
         )
         .unwrap();
 
@@ -297,7 +290,7 @@ fn a_single_target_reads_its_entitlements_from_stdout() {
 #[test]
 fn a_single_target_with_nothing_on_stdout_has_no_entitlements() {
     let signatures = Options::default()
-        .output(&paths(&["a"]), String::new(), report("/x/a", "first"))
+        .output(&paths(&["a"]), &ran("", report("/x/a", "first")))
         .unwrap();
 
     assert_eq!(signatures[0].entitlements, None);
@@ -310,10 +303,9 @@ fn unreadable_entitlements_are_rejected() {
         "<?xml not a plist",
         "\t[Dict]\n<?xml version=\"1.0\"?><plist",
     ] {
-        unexpected_output(Options::default().output(
+        unreadable(Options::default().output(
             &paths(&["a"]),
-            stdout.to_owned(),
-            report("/x/a", "first"),
+            &ran(stdout.to_owned(), report("/x/a", "first")),
         ));
     }
 }
@@ -322,7 +314,7 @@ const DUMP: &str = "\t[Dict]\n\t\t[Key] ccat\n\t\t[Value]\n\t\t\t[Int] 0\n";
 
 fn entitlement_keys(stdout: String) -> Option<Vec<String>> {
     let signatures = Options::default()
-        .output(&paths(&["a"]), stdout, report("/x/a", "first"))
+        .output(&paths(&["a"]), &ran(stdout, report("/x/a", "first")))
         .unwrap();
     signatures[0]
         .entitlements
@@ -363,7 +355,7 @@ fn several_targets_in_one_run_have_no_entitlements() {
     let stderr = format!("{}{}", report("/x/a", "first"), report("/x/b", "second"));
 
     let signatures = Options::default()
-        .output(&paths(&["a", "b"]), ENTITLEMENTS.to_owned(), stderr)
+        .output(&paths(&["a", "b"]), &ran(ENTITLEMENTS.to_owned(), stderr))
         .unwrap();
 
     assert!(signatures.iter().all(|s| s.entitlements.is_none()));
@@ -376,8 +368,7 @@ fn streams_trimmed_by_the_process_run_parse_as_they_are() {
     let signatures = Options::default()
         .output(
             &paths(&["a"]),
-            ENTITLEMENTS.trim().to_owned(),
-            stderr.trim().to_owned(),
+            &ran(ENTITLEMENTS.trim().to_owned(), stderr.trim().to_owned()),
         )
         .unwrap();
 
@@ -400,8 +391,7 @@ fn a_non_utf8_executable_path_is_decoded_lossily() {
     let signatures = Options::default()
         .output(
             &[PathBuf::from(OsStr::from_bytes(b"caf\xE9"))],
-            String::new(),
-            String::from_utf8_lossy(&stderr).into_owned(),
+            &ran("", String::from_utf8_lossy(&stderr).into_owned()),
         )
         .unwrap();
 
@@ -415,10 +405,12 @@ fn without_signature(executable: &str) -> String {
     )
 }
 
-fn no_signature(result: Result<Vec<Signature>>) -> (String, String) {
+fn no_signature(result: Result<Vec<Signature>, Rejection>) -> (String, String) {
     match result {
-        Err(crate::Error::Codesign(CodesignError::NoSignature { stdout, stderr })) => {
-            (stdout, stderr)
+        Err(Rejection::Error(crate::Error::Codesign(CodesignError::NoSignature { output }))) => {
+            assert_eq!(output.program, "codesign");
+            assert!(output.status.success());
+            (output.stdout, output.stderr)
         }
         other => panic!("expected NoSignature, got {other:?}"),
     }
@@ -430,8 +422,7 @@ fn a_report_that_says_no_signature_in_place_of_the_signature_line_is_no_signatur
 
     let (out, err) = no_signature(Options::default().output(
         &paths(&["a"]),
-        ENTITLEMENTS.to_owned(),
-        stderr.clone(),
+        &ran(ENTITLEMENTS.to_owned(), stderr.clone()),
     ));
 
     assert_eq!(out, ENTITLEMENTS);
@@ -442,22 +433,19 @@ fn a_report_that_says_no_signature_in_place_of_the_signature_line_is_no_signatur
 fn one_target_without_a_signature_fails_the_whole_run_with_both_streams() {
     let stderr = format!("{}{}", report("/x/a", "first"), without_signature("/x/b"));
 
-    let (out, err) = no_signature(Options::default().output(
-        &paths(&["a", "b"]),
-        "out".to_owned(),
-        stderr.clone(),
-    ));
+    let (out, err) = no_signature(
+        Options::default().output(&paths(&["a", "b"]), &ran("out".to_owned(), stderr.clone())),
+    );
 
     assert_eq!(out, "out");
     assert_eq!(err, stderr);
 }
 
 #[test]
-fn a_missing_signature_line_without_the_no_signature_note_is_unexpected_output() {
+fn a_missing_signature_line_without_the_no_signature_note_is_unreadable() {
     let stderr = report("/x/a", "first").replace("Signature=adhoc\n", "");
 
-    let detail =
-        unexpected_output(Options::default().output(&paths(&["a"]), String::new(), stderr));
+    let detail = unreadable(Options::default().output(&paths(&["a"]), &ran("", stderr)));
 
     assert!(detail.contains("Signature"), "{detail}");
 }
@@ -470,7 +458,7 @@ fn the_no_signature_note_beside_a_signature_line_is_not_an_error() {
     );
 
     let signatures = Options::default()
-        .output(&paths(&["a"]), String::new(), stderr)
+        .output(&paths(&["a"]), &ran("", stderr))
         .unwrap();
 
     assert_eq!(signatures[0].signature, SignatureKind::AdHoc);
@@ -480,7 +468,7 @@ fn the_no_signature_note_beside_a_signature_line_is_not_an_error() {
 fn a_line_that_only_mentions_no_signature_is_not_the_note() {
     let stderr = report("/x/a", "first").replace("Signature=adhoc\n", "no signature at all\n");
 
-    unexpected_output(Options::default().output(&paths(&["a"]), String::new(), stderr));
+    unreadable(Options::default().output(&paths(&["a"]), &ran("", stderr)));
 }
 
 #[test]

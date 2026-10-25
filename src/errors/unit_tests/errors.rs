@@ -1,12 +1,11 @@
 use super::*;
+use crate::codesign::CodesignError;
+use crate::errors::testing::{exited, killed};
 
 /// A failing run of `code`, as a batch entry holds it.
 fn failed(code: i32, stderr: &str) -> Error {
     ProcessError::Failed {
-        program: "codesign",
-        stdout: "printed on stdout".into(),
-        code,
-        stderr: stderr.into(),
+        output: exited("codesign", code, "printed on stdout", stderr),
     }
     .into()
 }
@@ -118,4 +117,70 @@ fn a_failure_on_a_path_that_is_not_utf8_is_still_printable() {
         failures(&[(path.clone(), Error::EmptyTarget(0))]),
         format!("{}: target 0 is an empty path", path.display()),
     );
+}
+
+#[test]
+fn the_process_wrapper_delegates_the_accessors() {
+    let failed = Error::from(ProcessError::Failed {
+        output: killed("tool", 9, "printed", "Killed"),
+    });
+    let output = failed.output().expect("a process failure has an output");
+    assert_eq!(output.program, "tool");
+    assert_eq!(output.status.code(), None);
+    assert_eq!(failed.stdout(), Some("printed"));
+    assert_eq!(failed.stderr(), Some("Killed"));
+
+    let unreadable = Error::from(ProcessError::UnexpectedOutput {
+        detail: "d".into(),
+        output: exited("tool", 0, "o", "e"),
+    });
+    assert_eq!(unreadable.output().unwrap().program, "tool");
+    assert_eq!(unreadable.stdout(), Some("o"));
+    assert_eq!(unreadable.stderr(), Some("e"));
+}
+
+#[test]
+fn the_codesign_wrapper_delegates_the_accessors() {
+    let error = Error::from(CodesignError::NoSignature {
+        output: exited("codesign", 0, "o", "e"),
+    });
+    assert_eq!(error.output().unwrap().program, "codesign");
+    assert_eq!(error.stdout(), Some("o"));
+    assert_eq!(error.stderr(), Some("e"));
+}
+
+/// A batch holds outputs inside its entries, but no single run is its own.
+#[test]
+fn errors_without_a_finished_run_have_no_output() {
+    let io = || std::io::Error::other("boom");
+    for error in [
+        Error::NoTargets,
+        Error::EmptyTarget(0),
+        Error::PathNotFound(PathBuf::from("a")),
+        Error::PathAccess {
+            path: PathBuf::from("a"),
+            source: io(),
+        },
+        Error::Io {
+            path: PathBuf::from("a"),
+            source: io(),
+        },
+        Error::StdioPath("file_list"),
+        Error::SharedOutputPerTarget("detached"),
+        Error::Batch(vec![(PathBuf::from("a"), failed(1, "boom"))]),
+        Error::from(CodesignError::NotFound),
+        Error::from(ProcessError::NotFound { program: "tool" }),
+        Error::from(ProcessError::Spawn {
+            program: "tool",
+            source: io(),
+        }),
+        Error::from(ProcessError::Run {
+            program: "tool",
+            source: io(),
+        }),
+    ] {
+        assert!(error.output().is_none(), "{error:?}");
+        assert_eq!(error.stdout(), None, "{error:?}");
+        assert_eq!(error.stderr(), None, "{error:?}");
+    }
 }

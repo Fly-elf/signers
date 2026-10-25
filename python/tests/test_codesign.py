@@ -65,7 +65,7 @@ def test_codesign_rejecting_a_target_raises_process_failed_error(workspace: Work
     assert isinstance(error, signers.ProcessError)
     assert not isinstance(error, signers.CodesignError)
     assert error.program == "codesign"
-    assert error.code == 1
+    assert error.returncode == 1
     assert "bundle format unrecognized" in error.stderr
     assert isinstance(error.stdout, str)
     assert "bundle format unrecognized" in str(error)
@@ -86,7 +86,7 @@ def test_per_target_failures_come_back_in_a_batch_error_in_input_order(workspace
         assert isinstance(path, Path)
         assert isinstance(error, signers.ProcessFailedError)
         assert error.program == "codesign"
-        assert error.code == 1
+        assert error.returncode == 1
         assert str(path) in str(raised.value)
 
 
@@ -191,17 +191,18 @@ def test_a_codesign_that_cannot_start_raises_spawn_error(workspace: Workspace, m
         assert error.errno == errno.EACCES
 
 
-def test_a_codesign_killed_by_a_signal_raises_terminated_error(workspace: Workspace, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_codesign_killed_by_a_signal_raises_process_failed_error_with_a_negative_returncode(workspace: Workspace, monkeypatch: pytest.MonkeyPatch) -> None:
     target = workspace.unsigned("hello")
     _stand_in(workspace, monkeypatch, "echo partial; echo warning >&2; kill -9 $$")
 
-    with pytest.raises(signers.TerminatedError) as raised:
+    with pytest.raises(signers.ProcessFailedError) as raised:
         codesign.sign_adhoc(target)
 
     error = raised.value
     assert isinstance(error, signers.ProcessError)
     assert error.program == "codesign"
-    assert error.signal == 9
+    assert error.returncode == -9
+    assert "was killed" in str(error)
     assert error.stdout == "partial"
     assert error.stderr == "warning"
 

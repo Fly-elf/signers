@@ -69,9 +69,9 @@ So far no target has been touched. Then `codesign` runs:
   any target (`CodesignNotFoundError`, `SpawnError`) is that error raised alone instead.
 
 What `codesign` does wrong raises a `ProcessError` with `program` `"codesign"`: it
-couldn't start or be waited on (`SpawnError`, `RunError`), it exited non-zero
-(`ProcessFailedError`), a signal killed it (`TerminatedError`), or its output couldn't
-be read (`UnexpectedOutputError`). A missing executable is the exception: it raises
+couldn't start or be waited on (`SpawnError`, `RunError`), it exited non-zero or was
+killed by a signal (`ProcessFailedError`), or its output couldn't be read
+(`UnexpectedOutputError`). A missing executable is the exception: it raises
 `CodesignNotFoundError`, which adds a hint about `/usr/bin`. The other `CodesignError`
 subclasses are the verdicts of `verify`, `validate_constraint` and `display`.
 
@@ -116,7 +116,6 @@ from .._errors import (
     SignersError,
     SpawnError,
     StdioPathError,
-    TerminatedError,
     ToolNotFoundError,
     UnexpectedOutputError,
     VerificationFailedError,
@@ -188,7 +187,6 @@ __all__ = [
     "SpawnError",
     "StdioPathError",
     "Strict",
-    "TerminatedError",
     "Timestamp",
     "ToolNotFoundError",
     "UnexpectedOutputError",

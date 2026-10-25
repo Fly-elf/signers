@@ -178,10 +178,7 @@ async fn a_single_failure_in_a_collection_is_still_a_batch() {
         assert!(
             matches!(
                 error,
-                Error::Process(ProcessError::Failed {
-                    program: "codesign",
-                    ..
-                })
+                Error::Process(ProcessError::Failed { output, .. }) if output.program == "codesign"
             ),
             "the failure is not what codesign reported: {error:?}"
         );

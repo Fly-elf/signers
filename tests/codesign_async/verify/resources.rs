@@ -350,17 +350,18 @@ async fn the_error_keeps_what_codesign_printed_on_stdout() {
     let unchecked = verify(&app).await.unwrap_err();
 
     let (
-        Error::Codesign(CodesignError::VerificationFailed { stdout, stderr, .. }),
+        Error::Codesign(CodesignError::VerificationFailed { output, .. }),
         Error::Codesign(CodesignError::VerificationFailed {
-            stdout: plain_stdout,
+            output: plain_output,
             ..
         }),
     ) = (checked, unchecked)
     else {
         panic!("expected two VerificationFailed");
     };
+    let (stdout, stderr) = (output.stdout, output.stderr);
     assert!(stdout.starts_with("file modified: "), "{stdout}");
     assert_eq!(stdout, verbose.stdout.trim());
-    assert_eq!(plain_stdout, plain.stdout.trim());
+    assert_eq!(plain_output.stdout, plain.stdout.trim());
     assert!(!stderr.contains("file modified"), "{stderr}");
 }

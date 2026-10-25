@@ -6,7 +6,8 @@ use crate::codesign::action::action;
 use crate::codesign::action::joined;
 use crate::codesign::tool::Codesign;
 use crate::codesign::{PreserveMetadata, SigningFlags, Timestamp};
-use crate::engine::{Operation, PushArgs, SharedRun};
+use crate::engine::{Operation, PushArgs, Rejection, SharedRun};
+use crate::errors::Output;
 
 action! {
     /// Builder of a signing run, returned by [`sign`](crate::codesign::sign) and its presets.
@@ -365,12 +366,7 @@ impl Operation for Options {
         args
     }
 
-    fn output(
-        &self,
-        targets: &[PathBuf],
-        _stdout: String,
-        _stderr: String,
-    ) -> crate::errors::Result<Vec<()>> {
+    fn output(&self, targets: &[PathBuf], _: &Output) -> Result<Vec<()>, Rejection> {
         Ok(vec![(); targets.len()])
     }
 }

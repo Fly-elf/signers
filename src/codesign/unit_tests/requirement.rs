@@ -1,8 +1,7 @@
 use super::*;
-use crate::errors::ProcessError;
 
 fn requirement(line: &str) -> Requirement {
-    Requirement::parse(line).unwrap_or_else(|e| panic!("{line:?}: {e}"))
+    Requirement::parse(line).unwrap_or_else(|e| panic!("{line:?}: {e:?}"))
 }
 
 #[test]
@@ -80,13 +79,7 @@ fn a_line_without_the_separator_is_rejected() {
     ] {
         let result = Requirement::parse(line);
         assert!(
-            matches!(
-                result,
-                Err(crate::Error::Process(ProcessError::UnexpectedOutput {
-                    program: "codesign",
-                    ..
-                }))
-            ),
+            matches!(&result, Err(Rejection::Unreadable(detail)) if detail.starts_with("unreadable requirement")),
             "{line:?}: {result:?}"
         );
     }

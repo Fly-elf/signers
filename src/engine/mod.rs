@@ -13,7 +13,7 @@ mod runtime;
 mod tool;
 
 pub use job::Job;
-pub use operation::{Operation, PushArgs, SharedRun};
+pub use operation::{Operation, PushArgs, Rejection, SharedRun};
 #[cfg(feature = "async")]
 pub use runtime::Async;
 #[cfg(feature = "blocking")]

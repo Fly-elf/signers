@@ -4,7 +4,8 @@ use std::path::PathBuf;
 
 use crate::codesign::action::action;
 use crate::codesign::tool::Codesign;
-use crate::engine::{Operation, PushArgs, SharedRun};
+use crate::engine::{Operation, PushArgs, Rejection, SharedRun};
+use crate::errors::Output;
 
 action! {
     /// Builder of a signature removal, returned by
@@ -59,12 +60,7 @@ impl Operation for Options {
         args
     }
 
-    fn output(
-        &self,
-        targets: &[PathBuf],
-        _stdout: String,
-        _stderr: String,
-    ) -> crate::errors::Result<Vec<()>> {
+    fn output(&self, targets: &[PathBuf], _: &Output) -> Result<Vec<()>, Rejection> {
         Ok(vec![(); targets.len()])
     }
 }

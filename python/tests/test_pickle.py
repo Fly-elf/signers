@@ -32,8 +32,8 @@ INSTANCES: list[tuple[type[signers.SignersError], dict[str, Any]]] = [
     (signers.ToolNotFoundError, PROC),
     (signers.SpawnError, {**PROC, "errno": 13}),
     (signers.RunError, {**PROC, "errno": None}),
-    (signers.ProcessFailedError, {**PROC, "code": 3, **STREAMS}),
-    (signers.TerminatedError, {**PROC, "signal": 9, **STREAMS}),
+    (signers.ProcessFailedError, {**PROC, "returncode": 3, **STREAMS}),
+    (signers.ProcessFailedError, {**PROC, "returncode": -9, **STREAMS}),
     (signers.UnexpectedOutputError, {**PROC, "detail": "d", **STREAMS}),
     (signers.VerificationFailedError, {**STREAMS, "resources": (RESOURCE,)}),
     (signers.RequirementUnsatisfiedError, STREAMS),
@@ -96,7 +96,7 @@ def test_every_exception_class_is_covered() -> None:
 def test_nested_batch_error_keeps_its_failures() -> None:
     failures = (
         (Path("/t/a"), make(signers.PathNotFoundError, {"path": P})),
-        (Path("/t/b"), make(signers.ProcessFailedError, {**PROC, "code": 1, **STREAMS})),
+        (Path("/t/b"), make(signers.ProcessFailedError, {**PROC, "returncode": 1, **STREAMS})),
     )
     error = signers.BatchError("message", failures=failures)
     restored = pickle.loads(pickle.dumps(error))

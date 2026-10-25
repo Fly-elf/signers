@@ -1,6 +1,7 @@
 use super::*;
 use crate::engine::tool::testing::Sh;
 use crate::errors::ProcessError;
+use crate::errors::testing::exited;
 
 /// Overrides nothing but the required items, so the defaults show.
 struct Echo;
@@ -17,10 +18,9 @@ impl Operation for Echo {
     fn output(
         &self,
         _targets: &[PathBuf],
-        stdout: String,
-        stderr: String,
-    ) -> Result<Vec<Self::Output>> {
-        Ok(vec![(stdout, stderr)])
+        output: &Output,
+    ) -> std::result::Result<Vec<Self::Output>, Rejection> {
+        Ok(vec![(output.stdout.clone(), output.stderr.clone())])
     }
 }
 
@@ -32,17 +32,12 @@ fn the_defaults_validate_everything_and_share_no_output() {
 
 #[test]
 fn the_default_failure_is_the_tool_s_failed_error() {
-    match Echo.failure(2, "printed".into(), "bad".into()) {
-        Error::Process(ProcessError::Failed {
-            program,
-            code,
-            stdout,
-            stderr,
-        }) => {
-            assert_eq!(program, "sh");
-            assert_eq!(code, 2);
-            assert_eq!(stdout, "printed");
-            assert_eq!(stderr, "bad");
+    match Echo.failure(2, exited("sh", 2, "printed", "bad")) {
+        Error::Process(ProcessError::Failed { output }) => {
+            assert_eq!(output.program, "sh");
+            assert_eq!(output.status.code(), Some(2));
+            assert_eq!(output.stdout, "printed");
+            assert_eq!(output.stderr, "bad");
         }
         other => panic!("expected Process(Failed), got {other:?}"),
     }
@@ -50,7 +45,7 @@ fn the_default_failure_is_the_tool_s_failed_error() {
 
 #[test]
 fn the_default_failure_keeps_stdout_apart_from_the_message() {
-    let error = Echo.failure(2, "printed".into(), "bad".into());
+    let error = Echo.failure(2, exited("sh", 2, "printed", "bad"));
 
     assert_eq!(error.to_string(), "`sh` exited with code 2: bad");
 }

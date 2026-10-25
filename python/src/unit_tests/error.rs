@@ -9,6 +9,26 @@ use pyo3::types::PyAnyMethods;
 
 use super::*;
 
+/// A finished run of `codesign` that exited with `code`.
+fn exited(code: i32, stdout: &str, stderr: &str) -> Output {
+    Output::new(
+        "codesign",
+        ExitStatus::from_raw(code << 8),
+        stdout.into(),
+        stderr.into(),
+    )
+}
+
+/// A finished run of `codesign` that `signal` killed.
+fn killed(signal: i32, stdout: &str, stderr: &str) -> Output {
+    Output::new(
+        "codesign",
+        ExitStatus::from_raw(signal),
+        stdout.into(),
+        stderr.into(),
+    )
+}
+
 fn payload<'py>(py: Python<'py>, err: Error) -> Bound<'py, PyDict> {
     let err = to_py(err);
     assert!(err.is_instance_of::<NativeError>(py));
@@ -104,48 +124,37 @@ fn every_constructible_variant_maps_to_its_kind_and_fields() {
             "{'kind': 'Run', 'process': True, 'program': 'codesign', 'errno': None}",
         ),
         (
-            process(ProcessError::failed("codesign", 3, "o".into(), "e".into())),
-            "{'kind': 'Failed', 'process': True, 'codesign': None, 'program': 'codesign', 'code': 3, 'stdout': 'o', 'stderr': 'e'}",
+            process(ProcessError::failed(exited(3, "o", "e"))),
+            "{'kind': 'Failed', 'process': True, 'codesign': None, 'program': 'codesign', 'returncode': 3, 'stdout': 'o', 'stderr': 'e'}",
         ),
         (
-            process(ProcessError::terminated(
-                "codesign",
-                ExitStatus::from_raw(9),
-                "o".into(),
-                "e".into(),
-            )),
-            "{'kind': 'Terminated', 'process': True, 'program': 'codesign', 'signal': 9, 'stdout': 'o', 'stderr': 'e'}",
+            process(ProcessError::failed(killed(9, "o", "e"))),
+            "{'kind': 'Failed', 'process': True, 'codesign': None, 'program': 'codesign', 'returncode': -9, 'stdout': 'o', 'stderr': 'e', 'signal': None, 'code': None}",
         ),
         (
             process(ProcessError::unexpected_output(
-                "codesign",
                 "d".into(),
-                "o".into(),
-                "e".into(),
+                exited(0, "o", "e"),
             )),
             "{'kind': 'UnexpectedOutput', 'process': True, 'program': 'codesign', 'detail': 'd', 'stdout': 'o', 'stderr': 'e'}",
         ),
         (
             codesign(CodesignError::verification_failed(
-                "o".into(),
-                "e".into(),
+                exited(1, "o", "e"),
                 Vec::new(),
             )),
             "{'kind': 'VerificationFailed', 'codesign': True, 'stdout': 'o', 'stderr': 'e', 'resources': []}",
         ),
         (
-            codesign(CodesignError::requirement_unsatisfied(
-                "o".into(),
-                "e".into(),
-            )),
+            codesign(CodesignError::requirement_unsatisfied(exited(3, "o", "e"))),
             "{'kind': 'RequirementUnsatisfied', 'codesign': True, 'stdout': 'o', 'stderr': 'e'}",
         ),
         (
-            codesign(CodesignError::constraint_invalid("o".into(), "e".into())),
+            codesign(CodesignError::constraint_invalid(exited(0, "o", "e"))),
             "{'kind': 'ConstraintInvalid', 'codesign': True, 'stdout': 'o', 'stderr': 'e'}",
         ),
         (
-            codesign(CodesignError::no_signature("o".into(), "e".into())),
+            codesign(CodesignError::no_signature(exited(0, "o", "e"))),
             "{'kind': 'NoSignature', 'codesign': True, 'stdout': 'o', 'stderr': 'e'}",
         ),
     ];
@@ -163,12 +172,7 @@ fn a_non_utf8_path_crosses_as_a_surrogate_escaped_str() {
 #[test]
 fn batch_failures_are_path_payload_pairs_in_order_and_nest() {
     let inner = Error::Batch(vec![("/t/c".into(), Error::NoTargets)]);
-    let failed = process(ProcessError::failed(
-        "codesign",
-        1,
-        String::new(),
-        "e".into(),
-    ));
+    let failed = process(ProcessError::failed(exited(1, "", "e")));
     let err = Error::Batch(vec![("/t/a".into(), failed), ("/t/b".into(), inner)]);
     assert_payload(err, "{'kind': 'Batch', 'codesign': None}");
 

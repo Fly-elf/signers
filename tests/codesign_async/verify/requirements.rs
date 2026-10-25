@@ -179,8 +179,8 @@ async fn an_unsatisfied_requirement_keeps_what_codesign_printed_on_stdout() {
         .unwrap_err();
 
     match error {
-        Error::Codesign(CodesignError::RequirementUnsatisfied { stdout, .. }) => {
-            assert_eq!(stdout, oracle.stdout.trim());
+        Error::Codesign(CodesignError::RequirementUnsatisfied { output, .. }) => {
+            assert_eq!(output.stdout, oracle.stdout.trim());
         }
         other => panic!("expected RequirementUnsatisfied, got {other:?}"),
     }

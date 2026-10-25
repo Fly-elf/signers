@@ -89,10 +89,11 @@
 //!
 //! What `codesign` does wrong comes as [`Error::Process`](crate::Error::Process), a
 //! [`ProcessError`](crate::ProcessError) with `program` `"codesign"`: it couldn't start or be
-//! waited on, it exited non-zero ([`Failed`](crate::ProcessError::Failed)), a signal killed it,
-//! or its output couldn't be read. A missing executable is the exception: it is
-//! [`CodesignError::NotFound`], which adds a hint about
-//! `/usr/bin`. [`CodesignError`] also holds the verdicts of [`verify`], are the verdicts of
+//! waited on, it exited non-zero or a signal killed it ([`Failed`](crate::ProcessError::Failed)),
+//! or its output couldn't be read ([`UnexpectedOutput`](crate::ProcessError::UnexpectedOutput)).
+//! Both of those carry the run's [`Output`](crate::errors::Output). A missing executable is the
+//! exception: it is [`CodesignError::NotFound`], which adds a hint about `/usr/bin`.
+//! [`CodesignError`] also holds the verdicts of [`verify`],
 //! [`validate_constraint`] and [`display`].
 //!
 //! # Panics

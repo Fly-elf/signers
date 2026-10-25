@@ -5,6 +5,7 @@ use super::*;
 use crate::engine::runtime::RunFuture;
 use crate::engine::tool::testing::Real;
 use crate::engine::{Async, Job, SharedRun};
+use crate::errors::Output;
 use crate::target::{IntoTargets, Shape};
 
 /// The run of a stand-in action, built on `Job` as the real actions are.
@@ -82,23 +83,28 @@ impl Operation for Probe {
             .collect()
     }
 
-    fn output(&self, _targets: &[PathBuf], _stdout: String, stderr: String) -> Result<Vec<String>> {
+    fn output(
+        &self,
+        _targets: &[PathBuf],
+        output: &Output,
+    ) -> std::result::Result<Vec<String>, Rejection> {
         if self.unreadable {
-            return Err(Error::StdioPath("probe"));
+            return Err(Error::StdioPath("probe").into());
         }
-        let mut outputs: Vec<String> = stderr.lines().map(str::to_owned).collect();
+        let mut outputs: Vec<String> = output.stderr.lines().map(str::to_owned).collect();
         if self.drop_last_output {
             outputs.pop();
         }
         Ok(outputs)
     }
 
-    fn failure(&self, code: i32, stdout: String, stderr: String) -> Error {
+    fn failure(&self, code: i32, output: Output) -> Error {
         ProcessError::UnexpectedOutput {
-            program: "codesign",
-            detail: format!("probe saw exit {code} with stdout {stdout:?}: {stderr}"),
-            stdout: String::new(),
-            stderr: String::new(),
+            detail: format!(
+                "probe saw exit {code} with stdout {:?}: {}",
+                output.stdout, output.stderr
+            ),
+            output,
         }
         .into()
     }
@@ -391,7 +397,7 @@ impl Operation for Gone {
             .collect()
     }
 
-    fn output(&self, targets: &[PathBuf], _: String, _: String) -> Result<Vec<()>> {
+    fn output(&self, targets: &[PathBuf], _: &Output) -> std::result::Result<Vec<()>, Rejection> {
         Ok(vec![(); targets.len()])
     }
 }

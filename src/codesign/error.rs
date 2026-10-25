@@ -2,11 +2,12 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
-use crate::errors::diagnostics;
+use crate::errors::{Output, diagnostics};
 
 /// What only `codesign` reports: a missing executable, and the verdicts of some actions.
 ///
 /// Every other failure of its process is a [`ProcessError`](crate::ProcessError) in [`Error::Process`](crate::Error::Process).
+/// Each verdict carries the run's [`Output`]; only its `stderr` is part of the message.
 #[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum CodesignError {
@@ -23,9 +24,8 @@ pub enum CodesignError {
     /// [`verify`](crate::codesign::verify) found the target's signature wanting.
     ///
     /// The signature is invalid or modified, the target is unsigned, or the requirement text of
-    /// [`test_requirement`](crate::codesign::Verify::test_requirement) doesn't compile. `stderr`
-    /// holds the diagnostics `codesign` printed on standard error and `stdout` what it printed on
-    /// standard output, both trimmed. Only `stderr` is part of the message.
+    /// [`test_requirement`](crate::codesign::Verify::test_requirement) doesn't compile. `output`
+    /// holds what `codesign` printed.
     ///
     /// `resources` names the sealed resources that were altered, in the order `codesign` printed
     /// them, which can differ from run to run. It is filled only with
@@ -33,11 +33,10 @@ pub enum CodesignError {
     /// stays empty when the damage is to nested code (see
     /// [`deep`](crate::codesign::Verify::deep)) or when nothing was altered. The message lists them
     /// after the diagnostics, as `(modified: /path; added: /path)`.
-    #[error("verification failed: {}{}", diagnostics(.stderr), changes(.resources))]
+    #[error("verification failed: {}{}", diagnostics(&.output.stderr), changes(.resources))]
     #[non_exhaustive]
     VerificationFailed {
-        stdout: String,
-        stderr: String,
+        output: Output,
         resources: Vec<ResourceChange>,
     },
 
@@ -47,25 +46,22 @@ pub enum CodesignError {
     /// That requirement is the text of
     /// [`test_requirement`](crate::codesign::Verify::test_requirement) or, with
     /// [`check_designated_requirement`](crate::codesign::Verify::check_designated_requirement), the
-    /// code's own. `stderr` holds the diagnostics `codesign` printed on standard error and `stdout`
-    /// what it printed on standard output, both trimmed. Only `stderr` is part of the message.
-    #[error("validly signed, but the requirement isn't satisfied: {}", diagnostics(.stderr))]
+    /// code's own. `output` holds what `codesign` printed.
+    #[error("validly signed, but the requirement isn't satisfied: {}", diagnostics(&.output.stderr))]
     #[non_exhaustive]
-    RequirementUnsatisfied { stdout: String, stderr: String },
+    RequirementUnsatisfied { output: Output },
 
     /// [`validate_constraint`](crate::codesign::validate_constraint) found a constraint that
     /// isn't valid.
     ///
-    /// The plist has an unknown key or is empty. `stderr` holds the diagnostics `codesign`
-    /// printed on standard error and `stdout` what it printed on standard output, both trimmed.
-    /// Only `stderr` is part of the message.
+    /// The plist has an unknown key or is empty. `output` holds what `codesign` printed.
     ///
     /// On macOS 27 `codesign` exits 0 and prints "Constraint validation failed" even for a valid
     /// plist, so the exit code says nothing here. A plist is rejected only when `codesign` also
-    /// reports an error for it, and that report is what `stderr` keeps.
-    #[error("invalid constraint: {}", diagnostics(.stderr))]
+    /// reports an error for it, and that report is what `output.stderr` keeps.
+    #[error("invalid constraint: {}", diagnostics(&.output.stderr))]
     #[non_exhaustive]
-    ConstraintInvalid { stdout: String, stderr: String },
+    ConstraintInvalid { output: Output },
 
     /// [`display`](crate::codesign::display) found no signature in the
     /// [`signature_slot`](crate::codesign::Display::signature_slot) it was asked for.
@@ -73,42 +69,62 @@ pub enum CodesignError {
     /// Code with one signature has nothing in the second slot. `codesign` exits 0 for it, and
     /// reports `no signature` in place of the signature, so this crate fails instead of returning
     /// one with nothing in it. Unsigned code is a different failure: [`ProcessError::Failed`](crate::ProcessError::Failed).
-    /// `stderr` and `stdout` hold what `codesign` printed on each stream during the whole run,
-    /// trimmed, so with one run over several targets they also cover targets that read fine. Only
-    /// `stderr` is part of the message.
-    #[error("no signature: {}", diagnostics(.stderr))]
+    /// `output` covers the whole run, so with one run over several targets it also holds the
+    /// targets that read fine.
+    #[error("no signature: {}", diagnostics(&.output.stderr))]
     #[non_exhaustive]
-    NoSignature { stdout: String, stderr: String },
+    NoSignature { output: Output },
 }
+
+impl CodesignError {
+    /// The finished run behind this verdict; `None` for [`NotFound`](Self::NotFound).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn run() {
+    /// use signers::{CodesignError, Error, codesign};
+    ///
+    /// if let Err(Error::Codesign(error @ CodesignError::RequirementUnsatisfied { .. })) =
+    ///     codesign::verify("MyApp.app").test_requirement("anchor apple").await
+    /// {
+    ///     eprintln!("{}", error.stderr().unwrap_or_default());
+    /// }
+    /// # }
+    /// ```
+    pub fn output(&self) -> Option<&Output> {
+        match self {
+            Self::VerificationFailed { output, .. }
+            | Self::RequirementUnsatisfied { output }
+            | Self::ConstraintInvalid { output }
+            | Self::NoSignature { output } => Some(output),
+            Self::NotFound => None,
+        }
+    }
+}
+
+crate::errors::streams!(CodesignError);
 
 #[cfg(feature = "__test-constructors")]
 impl CodesignError {
     #[doc(hidden)]
-    pub fn verification_failed(
-        stdout: String,
-        stderr: String,
-        resources: Vec<ResourceChange>,
-    ) -> Self {
-        Self::VerificationFailed {
-            stdout,
-            stderr,
-            resources,
-        }
+    pub fn verification_failed(output: Output, resources: Vec<ResourceChange>) -> Self {
+        Self::VerificationFailed { output, resources }
     }
 
     #[doc(hidden)]
-    pub fn requirement_unsatisfied(stdout: String, stderr: String) -> Self {
-        Self::RequirementUnsatisfied { stdout, stderr }
+    pub fn requirement_unsatisfied(output: Output) -> Self {
+        Self::RequirementUnsatisfied { output }
     }
 
     #[doc(hidden)]
-    pub fn constraint_invalid(stdout: String, stderr: String) -> Self {
-        Self::ConstraintInvalid { stdout, stderr }
+    pub fn constraint_invalid(output: Output) -> Self {
+        Self::ConstraintInvalid { output }
     }
 
     #[doc(hidden)]
-    pub fn no_signature(stdout: String, stderr: String) -> Self {
-        Self::NoSignature { stdout, stderr }
+    pub fn no_signature(output: Output) -> Self {
+        Self::NoSignature { output }
     }
 }
 

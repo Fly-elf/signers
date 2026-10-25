@@ -1,5 +1,4 @@
-use crate::codesign::tool::Codesign;
-use crate::errors::Result;
+use crate::engine::Rejection;
 
 /// A code requirement of a signature: what it is for, and the expression to satisfy.
 ///
@@ -40,16 +39,16 @@ pub enum RequirementKind {
 impl Requirement {
     /// Parses one line of `--display -r-`: `kind => expression`, prefixed with `# ` when implicit.
     ///
-    /// A line without ` => ` fails with `ProcessError::UnexpectedOutput`. An unknown kind
+    /// A line without ` => ` is rejected as unreadable, which becomes `ProcessError::UnexpectedOutput`. An unknown kind
     /// becomes [`RequirementKind::Other`].
-    pub(crate) fn parse(line: &str) -> Result<Self> {
+    pub(crate) fn parse(line: &str) -> Result<Self, Rejection> {
         let (line, implicit) = match line.strip_prefix("# ") {
             Some(rest) => (rest, true),
             None => (line, false),
         };
-        let (kind, expression) = line.split_once(" => ").ok_or_else(|| {
-            Codesign::unexpected_output(format!("unreadable requirement: {line}"))
-        })?;
+        let (kind, expression) = line
+            .split_once(" => ")
+            .ok_or_else(|| Rejection::Unreadable(format!("unreadable requirement: {line}")))?;
         let kind = match kind {
             "designated" => RequirementKind::Designated,
             "host" => RequirementKind::Host,
