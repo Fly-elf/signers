@@ -62,7 +62,11 @@ pub type Result<T> = std::result::Result<T, Error>;
 ///     Err(Error::PathNotFound(path)) => eprintln!("no such file: {}", path.display()),
 ///     Err(error) => match error.stderr() {
 ///         Some(stderr) => eprintln!("codesign said: {stderr}"),
-///         None => eprintln!("{error}"),
+///         None => {
+///             let causes = std::iter::successors(Some(&error as &dyn std::error::Error), |e| e.source());
+///             let causes: Vec<_> = causes.map(|e| e.to_string()).collect();
+///             eprintln!("{}", causes.join(": "));
+///         }
 ///     },
 /// }
 /// # }

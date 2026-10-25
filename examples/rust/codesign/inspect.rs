@@ -26,7 +26,7 @@ async fn main() -> anyhow::Result<()> {
             Ok((signature, requirements, verdict)) => {
                 print_report(&signature, &requirements, verdict);
             }
-            Err(error) => println!("  unreadable: {error}"),
+            Err(error) => println!("  unreadable: {:#}", anyhow::Error::from(error)),
         }
     }
 
