@@ -142,6 +142,10 @@ mod execute_collect;
 #[path = "unit_tests/execute_stream.rs"]
 mod execute_stream;
 
+#[cfg(test)]
+#[path = "unit_tests/execute_per_target.rs"]
+mod execute_per_target;
+
 /// The runner's side of its contract with an operation, which no shipped action
 /// can show from outside: both yield `()`, keep the default `failure` and
 /// always return one output per target.
