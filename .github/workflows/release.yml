@@ -40,6 +40,19 @@ jobs:
     with:
       macos: "27"
 
+  tests-macos26:
+    needs: preflight
+    uses: ./.github/workflows/tests.yml
+    with:
+      macos: "26"
+      network: false
+
+  python-macos26:
+    needs: preflight
+    uses: ./.github/workflows/python.yml
+    with:
+      macos: "26"
+
   advisories:
     needs: preflight
     uses: ./.github/workflows/advisories.yml
@@ -119,7 +132,7 @@ jobs:
   # Each step skips what is already published, so re-running a failed job
   # completes a partial release.
   publish:
-    needs: [tests, python, advisories, wheels, sdist, package]
+    needs: [tests, python, tests-macos26, python-macos26, advisories, wheels, sdist, package]
     runs-on: ubuntu-latest
     environment: release
     permissions:
