@@ -16,6 +16,13 @@ use signers::codesign;
 codesign::sign_adhoc("patched.dylib").force(true).await?;
 ```
 
+```python
+from signers import codesign
+
+# Re-sign a binary after patching it: `force` replaces the signature the patch broke.
+codesign.sign_adhoc("patched.dylib", force=True)
+```
+
 Complete examples for Rust (async and blocking) and Python (sync and asyncio) are in
 [`examples/`](https://github.com/Fly-elf/signers/tree/v0.1.0/examples).
 
