@@ -266,7 +266,7 @@ mod collect_tests {
     }
 
     #[test]
-    fn a_failed_run_keeps_its_own_error_inside_the_batch() {
+    fn an_unstarted_run_keeps_its_own_error_inside_the_batch() {
         let source = io::Error::from(io::ErrorKind::PermissionDenied);
         let results: Runs = vec![
             Ok(vec![1]),
