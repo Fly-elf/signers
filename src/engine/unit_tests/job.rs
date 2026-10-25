@@ -3,8 +3,9 @@ use std::ffi::OsStr;
 use std::path::Path;
 
 use super::*;
+use crate::engine::operation::Rejection;
 use crate::engine::tool::testing::Sh;
-use crate::errors::Result;
+use crate::errors::Output;
 use crate::target::IntoTargets;
 
 /// An operation that asks for a run per target, like a read-only action.
@@ -23,7 +24,11 @@ macro_rules! stand_in {
                 Vec::new()
             }
 
-            fn output(&self, targets: &[PathBuf], _: String, _: String) -> Result<Vec<()>> {
+            fn output(
+                &self,
+                targets: &[PathBuf],
+                _: &Output,
+            ) -> std::result::Result<Vec<()>, Rejection> {
                 Ok(vec![(); targets.len()])
             }
         }

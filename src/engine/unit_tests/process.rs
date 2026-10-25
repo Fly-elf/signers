@@ -1,4 +1,5 @@
 use std::os::unix::process::ExitStatusExt;
+use std::process::ExitStatus;
 
 use super::super::tool::testing::{Missing, NotExecutable, Sh};
 use super::*;
@@ -10,8 +11,9 @@ fn sh(script: &str) -> Vec<Cow<'_, OsStr>> {
     ]
 }
 
-fn exit(status: i32, stdout: &str, stderr: &str) -> Exit {
-    Exit {
+fn output(status: i32, stdout: &str, stderr: &str) -> Output {
+    Output {
+        program: "sh",
         status: ExitStatus::from_raw(status),
         stdout: stdout.into(),
         stderr: stderr.into(),
@@ -41,55 +43,51 @@ fn decode_replaces_invalid_utf8_with_the_replacement_character() {
 }
 
 #[test]
-fn success_hands_over_both_streams_without_calling_the_failure_hook() {
-    let result = exit(0, "out", "err").success::<Sh>(|_, _, _| panic!("not a failure"));
+fn success_hands_over_the_output_without_calling_the_failure_hook() {
+    let result = exit::<Sh>(output(0, "out", "err"), |_, _| panic!("not a failure"));
 
-    assert_eq!(result.unwrap(), ("out".to_owned(), "err".to_owned()));
+    let output = result.unwrap();
+    assert_eq!(output.program, "sh");
+    assert!(output.status.success());
+    assert_eq!(output.stdout, "out");
+    assert_eq!(output.stderr, "err");
 }
 
 #[test]
-fn a_non_zero_code_goes_to_the_failure_hook_with_both_streams() {
-    let error = exit(7 << 8, "out", "err")
-        .success::<Sh>(|code, stdout, stderr| {
-            Error::Process(ProcessError::UnexpectedOutput {
-                program: "hook",
-                detail: format!("{code}/{stdout}/{stderr}"),
-                stdout: String::new(),
-                stderr: String::new(),
-            })
+fn a_non_zero_code_goes_to_the_failure_hook_with_the_output() {
+    let error = exit::<Sh>(output(7 << 8, "out", "err"), |code, output| {
+        Error::Process(ProcessError::UnexpectedOutput {
+            detail: format!("{code}/{}/{}", output.stdout, output.stderr),
+            output,
         })
-        .unwrap_err();
+    })
+    .unwrap_err();
 
     match error {
-        Error::Process(ProcessError::UnexpectedOutput {
-            program, detail, ..
-        }) => {
-            assert_eq!(program, "hook");
+        Error::Process(ProcessError::UnexpectedOutput { detail, output }) => {
             assert_eq!(detail, "7/out/err");
+            assert_eq!(output.program, "sh");
+            assert_eq!(output.status.code(), Some(7));
         }
         other => panic!("expected the hook's error, got {other:?}"),
     }
 }
 
 #[test]
-fn a_signal_death_is_terminated_and_never_reaches_the_failure_hook() {
-    let error = exit(9, "out", "err")
-        .success::<Sh>(|_, _, _| panic!("a killed process has no exit code"))
-        .unwrap_err();
+fn a_signal_death_is_failed_and_never_reaches_the_failure_hook() {
+    let error = exit::<Sh>(output(9, "out", "err"), |_, _| {
+        panic!("a killed process has no exit code")
+    })
+    .unwrap_err();
 
     match error {
-        Error::Process(ProcessError::Terminated {
-            program,
-            status,
-            stdout,
-            stderr,
-        }) => {
-            assert_eq!(program, "sh");
-            assert_eq!(status.signal(), Some(9));
-            assert_eq!(stdout, "out");
-            assert_eq!(stderr, "err");
+        Error::Process(ProcessError::Failed { output }) => {
+            assert_eq!(output.program, "sh");
+            assert_eq!(output.status.signal(), Some(9));
+            assert_eq!(output.stdout, "out");
+            assert_eq!(output.stderr, "err");
         }
-        other => panic!("expected Terminated, got {other:?}"),
+        other => panic!("expected Failed, got {other:?}"),
     }
 }
 
@@ -118,24 +116,19 @@ async fn spawn_decodes_both_streams() {
 
 #[tokio::test]
 async fn a_failed_exit_keeps_its_code_and_decoded_streams() {
-    let exit = spawn::<Sh>(&sh(r"printf 'out\n'; printf '\377err\n' >&2; exit 7"))
+    let ran = spawn::<Sh>(&sh(r"printf 'out\n'; printf '\377err\n' >&2; exit 7"))
         .await
         .ok()
         .expect("sh starts");
 
-    let error = exit.success::<Sh>(Sh::failed).unwrap_err();
+    let error = exit::<Sh>(ran, |_, output| Sh::failed(output)).unwrap_err();
 
     match error {
-        Error::Process(ProcessError::Failed {
-            program,
-            code,
-            stdout,
-            stderr,
-        }) => {
-            assert_eq!(program, "sh");
-            assert_eq!(code, 7);
-            assert_eq!(stdout, "out");
-            assert_eq!(stderr, "\u{FFFD}err");
+        Error::Process(ProcessError::Failed { output }) => {
+            assert_eq!(output.program, "sh");
+            assert_eq!(output.status.code(), Some(7));
+            assert_eq!(output.stdout, "out");
+            assert_eq!(output.stderr, "\u{FFFD}err");
         }
         other => panic!("expected Failed, got {other:?}"),
     }
@@ -143,15 +136,16 @@ async fn a_failed_exit_keeps_its_code_and_decoded_streams() {
 
 #[tokio::test]
 async fn a_killed_process_comes_back_without_an_exit_code() {
-    let exit = spawn::<Sh>(&sh("kill -9 $$"))
+    let ran = spawn::<Sh>(&sh("kill -9 $$"))
         .await
         .ok()
         .expect("sh starts");
 
-    assert_eq!(exit.status.code(), None);
+    assert_eq!(ran.status.code(), None);
+    assert_eq!(ran.status.signal(), Some(9));
     assert!(matches!(
-        exit.success::<Sh>(|_, _, _| panic!("no exit code")),
-        Err(Error::Process(ProcessError::Terminated { .. }))
+        exit::<Sh>(ran, |_, _| panic!("no exit code")),
+        Err(Error::Process(ProcessError::Failed { .. }))
     ));
 }
 

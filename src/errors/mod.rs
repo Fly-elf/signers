@@ -180,5 +180,9 @@ fn failures(failures: &[(PathBuf, Error)]) -> String {
 }
 
 #[cfg(test)]
+#[path = "unit_tests/support.rs"]
+pub(crate) mod testing;
+
+#[cfg(test)]
 #[path = "unit_tests/errors.rs"]
 mod tests;

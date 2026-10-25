@@ -3,6 +3,7 @@ use std::future::IntoFuture;
 
 use super::*;
 use crate::codesign::remove_signature;
+use crate::errors::testing::{exited, ran};
 
 fn os(strings: &[&str]) -> Vec<OsString> {
     strings.iter().map(OsString::from).collect()
@@ -77,15 +78,13 @@ fn the_output_is_one_unit_per_target_whatever_codesign_printed() {
     let action = remove_signature("app").options;
     let targets = [PathBuf::from("a"), PathBuf::from("b"), PathBuf::from("c")];
 
-    let silent: Vec<()> = action
-        .output(&targets, String::new(), String::new())
-        .unwrap();
+    let silent: Vec<()> = action.output(&targets, &ran("", String::new())).unwrap();
     assert_eq!(silent.len(), 3);
 
-    let noisy = action.output(&targets[..1], "noise".into(), "\u{FFFD}\u{FFFD}".into());
+    let noisy = action.output(&targets[..1], &ran("noise", "\u{FFFD}\u{FFFD}"));
     assert_eq!(noisy.unwrap().len(), 1);
 
-    let none = action.output(&[], "noise".into(), String::new());
+    let none = action.output(&[], &ran("noise", String::new()));
     assert_eq!(none.unwrap().len(), 0);
 }
 
@@ -125,19 +124,18 @@ fn a_failed_run_is_reported_with_its_code_and_diagnostics() {
     for code in [1, 2, 3] {
         match action.failure(
             code,
-            "file modified: /x".into(),
-            "app: bundle format unrecognized".into(),
+            exited(
+                "codesign",
+                code,
+                "file modified: /x",
+                "app: bundle format unrecognized",
+            ),
         ) {
-            crate::errors::Error::Process(crate::errors::ProcessError::Failed {
-                program,
-                code: reported,
-                stdout,
-                stderr,
-            }) => {
-                assert_eq!(program, "codesign");
-                assert_eq!(reported, code);
-                assert_eq!(stdout, "file modified: /x");
-                assert_eq!(stderr, "app: bundle format unrecognized");
+            crate::errors::Error::Process(crate::errors::ProcessError::Failed { output }) => {
+                assert_eq!(output.program, "codesign");
+                assert_eq!(output.status.code(), Some(code));
+                assert_eq!(output.stdout, "file modified: /x");
+                assert_eq!(output.stderr, "app: bundle format unrecognized");
             }
             other => panic!("expected Failed, got {other:?}"),
         }

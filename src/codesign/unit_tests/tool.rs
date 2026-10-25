@@ -1,7 +1,7 @@
 use std::os::unix::process::ExitStatusExt;
-use std::process::ExitStatus;
 
 use super::*;
+use crate::errors::testing::{exited, killed};
 
 #[test]
 fn not_found_maps_to_the_codesign_variant() {
@@ -40,88 +40,62 @@ fn spawn_and_run_keep_their_io_error() {
 }
 
 #[test]
-fn failed_keeps_the_code_and_both_streams() {
-    let error = Codesign::failed(3, "out".into(), "err".into());
+fn failed_keeps_the_status_and_both_streams() {
+    let error = Codesign::failed(exited("codesign", 3, "out", "err"));
 
     match error {
-        Error::Process(ProcessError::Failed {
-            program,
-            code,
-            stdout,
-            stderr,
-        }) => {
-            assert_eq!(program, "codesign");
-            assert_eq!(code, 3);
-            assert_eq!(stdout, "out");
-            assert_eq!(stderr, "err");
+        Error::Process(ProcessError::Failed { output }) => {
+            assert_eq!(output.program, "codesign");
+            assert_eq!(output.status.code(), Some(3));
+            assert_eq!(output.stdout, "out");
+            assert_eq!(output.stderr, "err");
         }
         other => panic!("expected Failed, got {other:?}"),
     }
 }
 
 #[test]
-fn terminated_keeps_the_status_and_both_streams() {
-    let error = Codesign::error(ProcessError::Terminated {
-        program: "codesign",
-        status: ExitStatus::from_raw(9),
-        stdout: "out".into(),
-        stderr: "err".into(),
-    });
+fn a_killed_run_is_failed_with_the_signal_in_its_status() {
+    let error = Codesign::failed(killed("codesign", 9, "out", "err"));
 
-    match error {
-        Error::Process(ProcessError::Terminated {
-            program,
-            status,
-            stdout,
-            stderr,
-        }) => {
-            assert_eq!(program, "codesign");
-            assert_eq!(status.signal(), Some(9));
-            assert_eq!(stdout, "out");
-            assert_eq!(stderr, "err");
+    match &error {
+        Error::Process(ProcessError::Failed { output }) => {
+            assert_eq!(output.program, "codesign");
+            assert_eq!(output.status.code(), None);
+            assert_eq!(output.status.signal(), Some(9));
+            assert_eq!(output.stdout, "out");
+            assert_eq!(output.stderr, "err");
         }
-        other => panic!("expected Terminated, got {other:?}"),
+        other => panic!("expected Failed, got {other:?}"),
     }
+    assert_eq!(
+        error.to_string(),
+        "`codesign` was killed (signal: 9 (SIGKILL)): err"
+    );
 }
 
 #[test]
-fn unexpected_output_names_codesign_and_keeps_its_detail() {
-    let error = Codesign::unexpected_output("2 outputs for 3 targets");
+fn unexpected_output_keeps_its_detail_and_the_run_output() {
+    let error = Codesign::error(ProcessError::UnexpectedOutput {
+        detail: "no plist".into(),
+        output: exited("codesign", 0, "out", "err"),
+    });
 
     match error {
-        Error::Process(ProcessError::UnexpectedOutput {
-            program,
-            detail,
-            stdout,
-            stderr,
-        }) => {
-            assert_eq!(program, "codesign");
-            assert_eq!(detail, "2 outputs for 3 targets");
-            assert!(stdout.is_empty() && stderr.is_empty());
+        Error::Process(ProcessError::UnexpectedOutput { detail, output }) => {
+            assert_eq!(detail, "no plist");
+            assert_eq!(output.program, "codesign");
+            assert!(output.status.success());
+            assert_eq!(output.stdout, "out");
+            assert_eq!(output.stderr, "err");
         }
         other => panic!("expected UnexpectedOutput, got {other:?}"),
     }
 }
 
 #[test]
-fn unexpected_output_through_the_mapping_is_the_same_error() {
-    let error = Codesign::error(ProcessError::UnexpectedOutput {
-        program: "codesign",
-        detail: "no plist".into(),
-        stdout: String::new(),
-        stderr: String::new(),
-    });
-
-    assert!(matches!(
-        error,
-        Error::Process(ProcessError::UnexpectedOutput { program: "codesign", ref detail, .. })
-            if detail == "no plist"
-    ));
-}
-
-#[test]
 fn the_mapped_errors_read_as_codesign_errors() {
-    let error = Codesign::failed(1, String::new(), "A.app: bad".into());
+    let error = Codesign::failed(exited("codesign", 1, "", "A.app: bad"));
 
     assert_eq!(
         error.to_string(),

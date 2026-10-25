@@ -3,6 +3,7 @@ use std::ffi::OsString;
 use super::*;
 use crate::codesign::verify;
 use crate::errors::ProcessError;
+use crate::errors::testing::{exited, ran};
 
 fn os(strings: &[&str]) -> Vec<OsString> {
     strings.iter().map(OsString::from).collect()
@@ -19,12 +20,9 @@ fn args_of<S>(builder: &Verify<S>) -> Vec<OsString> {
 
 fn code_of(error: Error) -> Option<(i32, String)> {
     match error {
-        Error::Process(ProcessError::Failed {
-            program: "codesign",
-            code,
-            stderr,
-            ..
-        }) => Some((code, stderr)),
+        Error::Process(ProcessError::Failed { output }) if output.program == "codesign" => {
+            Some((output.status.code()?, output.stderr))
+        }
         _ => None,
     }
 }
@@ -363,16 +361,14 @@ fn the_output_is_one_unit_per_target_whatever_codesign_printed() {
     let targets = [PathBuf::from("a"), PathBuf::from("b"), PathBuf::from("c")];
 
     assert_eq!(
-        action
-            .output(&targets, String::new(), String::new())
-            .unwrap(),
+        action.output(&targets, &ran("", String::new())).unwrap(),
         [(), (), ()]
     );
-    let noisy = action.output(&targets[..1], "noise".into(), "\u{FFFD}\u{FFFD}".into());
+    let noisy = action.output(&targets[..1], &ran("noise", "\u{FFFD}\u{FFFD}"));
     assert_eq!(noisy.unwrap(), [()]);
     assert!(
         action
-            .output(&[], String::new(), String::new())
+            .output(&[], &ran("", String::new()))
             .unwrap()
             .is_empty()
     );
@@ -399,14 +395,12 @@ fn per_target_renders_no_argument() {
 #[test]
 fn exit_one_means_the_signature_did_not_verify() {
     let action = verify("app").options;
-    match action.failure(1, String::new(), "app: invalid signature".into()) {
-        Error::Codesign(CodesignError::VerificationFailed {
-            stdout,
-            stderr,
-            resources,
-        }) => {
-            assert_eq!(stdout, "");
-            assert_eq!(stderr, "app: invalid signature");
+    match action.failure(1, exited("codesign", 1, "", "app: invalid signature")) {
+        Error::Codesign(CodesignError::VerificationFailed { output, resources }) => {
+            assert_eq!(output.program, "codesign");
+            assert_eq!(output.status.code(), Some(1));
+            assert_eq!(output.stdout, "");
+            assert_eq!(output.stderr, "app: invalid signature");
             assert!(resources.is_empty());
         }
         other => panic!("got {other:?}"),
@@ -419,19 +413,22 @@ fn exit_one_carries_the_altered_resources_printed_on_stdout() {
     let stdout = "file modified: /x/app/r.txt\nfile added: /x/app/new.txt".to_string();
     match action.failure(
         1,
-        stdout,
-        "app: a sealed resource is missing or invalid".into(),
+        exited(
+            "codesign",
+            1,
+            &stdout,
+            "app: a sealed resource is missing or invalid",
+        ),
     ) {
-        Error::Codesign(CodesignError::VerificationFailed {
-            stdout,
-            stderr,
-            resources,
-        }) => {
+        Error::Codesign(CodesignError::VerificationFailed { output, resources }) => {
             assert_eq!(
-                stdout,
+                output.stdout,
                 "file modified: /x/app/r.txt\nfile added: /x/app/new.txt"
             );
-            assert_eq!(stderr, "app: a sealed resource is missing or invalid");
+            assert_eq!(
+                output.stderr,
+                "app: a sealed resource is missing or invalid"
+            );
             assert_eq!(
                 pairs(&resources),
                 [
@@ -447,11 +444,13 @@ fn exit_one_carries_the_altered_resources_printed_on_stdout() {
 #[test]
 fn exit_three_keeps_stdout_without_reading_resources() {
     let action = verify("app").options;
-    let error = action.failure(3, "file modified: /x".into(), "no".into());
+    let error = action.failure(3, exited("codesign", 3, "file modified: /x", "no"));
     assert!(matches!(
         error,
-        Error::Codesign(CodesignError::RequirementUnsatisfied { ref stdout, ref stderr })
-            if stdout == "file modified: /x" && stderr == "no"
+        Error::Codesign(CodesignError::RequirementUnsatisfied { ref output })
+            if output.status.code() == Some(3)
+                && output.stdout == "file modified: /x"
+                && output.stderr == "no"
     ));
 }
 
@@ -537,10 +536,13 @@ fn a_path_that_is_not_utf8_is_decoded_lossily() {
 #[test]
 fn exit_three_means_the_requirement_was_not_satisfied() {
     let action = verify("app").options;
-    match action.failure(3, "file /x: ok".into(), "test-requirement: failed".into()) {
-        Error::Codesign(CodesignError::RequirementUnsatisfied { stdout, stderr }) => {
-            assert_eq!(stdout, "file /x: ok");
-            assert_eq!(stderr, "test-requirement: failed");
+    match action.failure(
+        3,
+        exited("codesign", 3, "file /x: ok", "test-requirement: failed"),
+    ) {
+        Error::Codesign(CodesignError::RequirementUnsatisfied { output }) => {
+            assert_eq!(output.stdout, "file /x: ok");
+            assert_eq!(output.stderr, "test-requirement: failed");
         }
         other => panic!("got {other:?}"),
     }
@@ -550,7 +552,7 @@ fn exit_three_means_the_requirement_was_not_satisfied() {
 fn any_other_exit_code_is_the_generic_failure() {
     let action = verify("app").options;
     for code in [2, 4, 64, 127, 255] {
-        let error = action.failure(code, "file modified: /x".into(), "boom".into());
+        let error = action.failure(code, exited("codesign", code, "file modified: /x", "boom"));
         assert_eq!(
             code_of(error),
             Some((code, "boom".to_string())),
@@ -566,11 +568,11 @@ fn the_failure_mapping_ignores_the_options() {
         .deep(true)
         .options;
     assert!(matches!(
-        action.failure(1, String::new(), String::new()),
+        action.failure(1, exited("codesign", 1, "", "")),
         Error::Codesign(CodesignError::VerificationFailed { .. })
     ));
     assert!(matches!(
-        action.failure(3, String::new(), String::new()),
+        action.failure(3, exited("codesign", 3, "", "")),
         Error::Codesign(CodesignError::RequirementUnsatisfied { .. })
     ));
 }

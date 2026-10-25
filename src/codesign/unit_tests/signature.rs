@@ -1,5 +1,4 @@
 use super::*;
-use crate::errors::ProcessError;
 
 /// `codesign -dvvvv` on a binary signed ad hoc, as printed on macOS 27.
 const ADHOC: &str = "\
@@ -65,19 +64,14 @@ Chosen signature=1
 ";
 
 fn parsed(report: &str) -> Signature {
-    parse_report(report).unwrap_or_else(|e| panic!("{e}\nin report:\n{report}"))
+    parse_report(report).unwrap_or_else(|e| panic!("{e:?}\nin report:\n{report}"))
 }
 
-/// The `detail` of the `UnexpectedOutput` that parsing `report` must fail with.
+/// The `detail` of the `Rejection::Unreadable` that parsing `report` must fail with.
 fn rejection(report: &str) -> String {
     match parse_report(report) {
-        Err(Error::Process(ProcessError::UnexpectedOutput {
-            program, detail, ..
-        })) => {
-            assert_eq!(program, "codesign");
-            detail
-        }
-        other => panic!("expected UnexpectedOutput, got {other:?}\nfor report:\n{report}"),
+        Err(Rejection::Unreadable(detail)) => detail,
+        other => panic!("expected Unreadable, got {other:?}\nfor report:\n{report}"),
     }
 }
 

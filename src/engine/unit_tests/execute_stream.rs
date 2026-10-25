@@ -3,6 +3,7 @@ use std::ffi::OsStr;
 
 use super::*;
 use crate::engine::tool::testing::Sh;
+use crate::errors::Output;
 
 /// How the stand-in operation answers once `sh` has printed its two streams.
 #[derive(Clone, Copy)]
@@ -30,16 +31,11 @@ impl Operation for Printer {
             .collect()
     }
 
-    fn output(&self, targets: &[PathBuf], _: String, _: String) -> Result<Vec<()>> {
+    fn output(&self, targets: &[PathBuf], _: &Output) -> std::result::Result<Vec<()>, Rejection> {
         match self.0 {
-            Reads::Unreadable => Err(Error::Process(ProcessError::UnexpectedOutput {
-                program: "sh",
-                detail: "not a report".into(),
-                stdout: String::new(),
-                stderr: String::new(),
-            })),
+            Reads::Unreadable => Err(Rejection::Unreadable("not a report".into())),
             Reads::OneTooFew => Ok(vec![(); targets.len() - 1]),
-            Reads::Other => Err(Error::NoTargets),
+            Reads::Other => Err(Error::NoTargets.into()),
             Reads::Fine => Ok(vec![(); targets.len()]),
         }
     }
@@ -51,18 +47,17 @@ async fn run(reads: Reads) -> std::result::Result<Vec<()>, RunError> {
 
 fn unexpected_output(error: RunError) -> (String, String, String) {
     match error.into_error() {
-        Error::Process(ProcessError::UnexpectedOutput {
-            detail,
-            stdout,
-            stderr,
-            ..
-        }) => (detail, stdout, stderr),
+        Error::Process(ProcessError::UnexpectedOutput { detail, output }) => {
+            assert_eq!(output.program, "sh");
+            assert!(output.status.success());
+            (detail, output.stdout, output.stderr)
+        }
         other => panic!("expected UnexpectedOutput, got {other:?}"),
     }
 }
 
 #[tokio::test]
-async fn an_unreadable_output_carries_the_streams_of_the_run() {
+async fn an_unreadable_output_carries_the_output_of_the_run() {
     let error = run(Reads::Unreadable).await.expect_err("must fail");
 
     assert!(matches!(error, RunError::Failed(_)));
@@ -77,7 +72,7 @@ async fn an_unreadable_output_carries_the_streams_of_the_run() {
 }
 
 #[tokio::test]
-async fn an_output_count_mismatch_carries_the_streams_of_the_run() {
+async fn an_output_count_mismatch_carries_the_output_of_the_run() {
     let error = run(Reads::OneTooFew).await.expect_err("must fail");
 
     assert!(matches!(error, RunError::Failed(_)));
