@@ -7,6 +7,7 @@ use crate::errors::{Output, diagnostics};
 /// What only `codesign` reports: a missing executable, and the verdicts of some actions.
 ///
 /// Every other failure of its process is a [`ProcessError`](crate::ProcessError) in [`Error::Process`](crate::Error::Process).
+/// Each verdict carries the run's [`Output`]; only its `stderr` is part of the message.
 #[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum CodesignError {
@@ -23,9 +24,8 @@ pub enum CodesignError {
     /// [`verify`](crate::codesign::verify) found the target's signature wanting.
     ///
     /// The signature is invalid or modified, the target is unsigned, or the requirement text of
-    /// [`test_requirement`](crate::codesign::Verify::test_requirement) doesn't compile. `stderr`
-    /// holds the diagnostics `codesign` printed on standard error and `stdout` what it printed on
-    /// standard output, both trimmed. Only `stderr` is part of the message.
+    /// [`test_requirement`](crate::codesign::Verify::test_requirement) doesn't compile. `output`
+    /// holds what `codesign` printed.
     ///
     /// `resources` names the sealed resources that were altered, in the order `codesign` printed
     /// them, which can differ from run to run. It is filled only with
@@ -46,8 +46,7 @@ pub enum CodesignError {
     /// That requirement is the text of
     /// [`test_requirement`](crate::codesign::Verify::test_requirement) or, with
     /// [`check_designated_requirement`](crate::codesign::Verify::check_designated_requirement), the
-    /// code's own. `stderr` holds the diagnostics `codesign` printed on standard error and `stdout`
-    /// what it printed on standard output, both trimmed. Only `stderr` is part of the message.
+    /// code's own. `output` holds what `codesign` printed.
     #[error("validly signed, but the requirement isn't satisfied: {}", diagnostics(&.output.stderr))]
     #[non_exhaustive]
     RequirementUnsatisfied { output: Output },
@@ -55,13 +54,11 @@ pub enum CodesignError {
     /// [`validate_constraint`](crate::codesign::validate_constraint) found a constraint that
     /// isn't valid.
     ///
-    /// The plist has an unknown key or is empty. `stderr` holds the diagnostics `codesign`
-    /// printed on standard error and `stdout` what it printed on standard output, both trimmed.
-    /// Only `stderr` is part of the message.
+    /// The plist has an unknown key or is empty. `output` holds what `codesign` printed.
     ///
     /// On macOS 27 `codesign` exits 0 and prints "Constraint validation failed" even for a valid
     /// plist, so the exit code says nothing here. A plist is rejected only when `codesign` also
-    /// reports an error for it, and that report is what `stderr` keeps.
+    /// reports an error for it, and that report is what `output.stderr` keeps.
     #[error("invalid constraint: {}", diagnostics(&.output.stderr))]
     #[non_exhaustive]
     ConstraintInvalid { output: Output },
@@ -72,15 +69,29 @@ pub enum CodesignError {
     /// Code with one signature has nothing in the second slot. `codesign` exits 0 for it, and
     /// reports `no signature` in place of the signature, so this crate fails instead of returning
     /// one with nothing in it. Unsigned code is a different failure: [`ProcessError::Failed`](crate::ProcessError::Failed).
-    /// `stderr` and `stdout` hold what `codesign` printed on each stream during the whole run,
-    /// trimmed, so with one run over several targets they also cover targets that read fine. Only
-    /// `stderr` is part of the message.
+    /// `output` covers the whole run, so with one run over several targets it also holds the
+    /// targets that read fine.
     #[error("no signature: {}", diagnostics(&.output.stderr))]
     #[non_exhaustive]
     NoSignature { output: Output },
 }
 
 impl CodesignError {
+    /// The finished run behind this verdict; `None` for [`NotFound`](Self::NotFound).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn run() {
+    /// use signers::{CodesignError, Error, codesign};
+    ///
+    /// if let Err(Error::Codesign(error @ CodesignError::RequirementUnsatisfied { .. })) =
+    ///     codesign::verify("MyApp.app").test_requirement("anchor apple").await
+    /// {
+    ///     eprintln!("{}", error.stderr().unwrap_or_default());
+    /// }
+    /// # }
+    /// ```
     pub fn output(&self) -> Option<&Output> {
         match self {
             Self::VerificationFailed { output, .. }

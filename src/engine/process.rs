@@ -1,4 +1,4 @@
-//! Starts the tool's process and captures its exit, with each way it can fail to run kept apart.
+//! Starts the tool's process and captures its [`Output`], with each way it can fail to run kept apart.
 
 use std::borrow::Cow;
 use std::ffi::OsStr;
@@ -8,6 +8,8 @@ use std::process::Stdio;
 use super::tool::Tool;
 use crate::errors::{Error, Output, ProcessError, Result};
 
+/// Passes a run that exited 0; otherwise `failure` maps its exit code, and a kill by a signal is
+/// the tool's [`ProcessError::Failed`].
 pub(crate) fn exit<T: Tool>(
     output: Output,
     failure: impl FnOnce(i32, Output) -> Error,

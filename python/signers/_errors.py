@@ -322,13 +322,14 @@ class RunError(ProcessError, OSError):
 
 
 class ProcessFailedError(ProcessError):
-    """`program` exited with a non-zero code.
+    """`program` exited with a non-zero code, or was killed by a signal.
 
     When one run covers several targets, the targets before the rejected one have
     already changed. See `signers.codesign`.
 
     Attributes:
-        code: The exit code.
+        returncode: The exit code, or minus the signal number if a signal killed
+            `program` (`-9` for `SIGKILL`), as `subprocess` reports it.
         stdout: What `program` printed on standard output, trimmed.
         stderr: Its diagnostics, trimmed. Only this is part of the message.
     """

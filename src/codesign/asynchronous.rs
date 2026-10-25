@@ -168,8 +168,8 @@ pub fn verify<T: IntoTargets>(target: T) -> Verify<T::Shape> {
 /// # Errors
 ///
 /// An unsigned target fails with [`ProcessError::Failed`](crate::ProcessError::Failed), exit
-/// code 1. With one `codesign` over several targets, its `stderr` also holds the reports of the
-/// targets before the unsigned one. A [`signature_slot`](Display::signature_slot)
+/// code 1. With one `codesign` over several targets, its [`stderr()`](crate::ProcessError::stderr) also
+/// holds the reports of the targets before the unsigned one. A [`signature_slot`](Display::signature_slot)
 /// the code has no signature in fails with
 /// [`CodesignError::NoSignature`](crate::CodesignError::NoSignature). A report or entitlements
 /// that can't be read fails with

@@ -70,9 +70,12 @@ pub trait Operation: Sync {
     }
 }
 
+/// Why [`Operation::output`] refused a run that exited 0.
 #[derive(Debug)]
 pub enum Rejection {
+    /// The output didn't match what the action expects; the engine reports it as `UnexpectedOutput`.
     Unreadable(String),
+    /// A verdict or other error of the action itself.
     Error(Error),
 }
 

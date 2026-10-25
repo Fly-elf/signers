@@ -17,7 +17,7 @@ pub trait Tool: 'static {
         Error::Process(error)
     }
 
-    /// The error for a non-zero exit, as [`ProcessError::Failed`] of this tool.
+    /// The error for a run that exited non-zero or was killed, as [`ProcessError::Failed`] of this tool.
     fn failed(output: Output) -> Error {
         Self::error(ProcessError::Failed { output })
     }
