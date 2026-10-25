@@ -39,6 +39,10 @@ jobs:
     with:
       macos: "27"
 
+  advisories:
+    needs: preflight
+    uses: ./.github/workflows/advisories.yml
+
   wheels:
     needs: preflight
     strategy:
@@ -114,7 +118,7 @@ jobs:
   # Each step skips what is already published, so re-running a failed job
   # completes a partial release.
   publish:
-    needs: [tests, python, wheels, sdist, package]
+    needs: [tests, python, advisories, wheels, sdist, package]
     runs-on: ubuntu-latest
     environment: release
     permissions:
