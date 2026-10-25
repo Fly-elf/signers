@@ -562,7 +562,7 @@ class Signature:
     """
     constraints: Constraints
     """The launch and library constraints the code carries."""
-    entitlements: dict[str, object] | None
+    entitlements: dict[str, object] | None = dataclasses.field(hash=False)
     """The entitlements as a dict, or `None` if the target has none.
 
     Values are the plist's: `str`, `int`, `float`, `bool`, `bytes`, `datetime.datetime`,

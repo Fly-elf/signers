@@ -126,6 +126,38 @@ def test_display_reads_bundle_resources_and_entitlements(workspace: Workspace) -
     assert signature.constraints == Constraints.LAUNCH_SELF
 
 
+def test_signature_with_entitlements_hashes_and_equals_a_read_of_the_same_code(workspace: Workspace) -> None:
+    app = workspace.app_bundle("Hello")
+    codesign.sign_adhoc(app, entitlements=fixture("entitlements.plist"))
+
+    signature = codesign.display(app)
+    again = codesign.display(app)
+
+    assert signature.entitlements
+    assert isinstance(hash(signature), int)
+    assert signature == again and hash(signature) == hash(again)
+    assert len({signature, again}) == 1
+
+
+def test_signature_without_entitlements_hashes(workspace: Workspace) -> None:
+    signature = codesign.display(workspace.adhoc_signed("hello"))
+
+    assert signature.entitlements is None
+    assert isinstance(hash(signature), int)
+
+
+def test_signatures_differing_only_in_entitlements_are_unequal(workspace: Workspace) -> None:
+    app = workspace.app_bundle("Hello")
+    codesign.sign_adhoc(app, entitlements=fixture("entitlements.plist"))
+    signature = codesign.display(app)
+
+    other = dataclasses.replace(signature, entitlements={"com.apple.security.get-task-allow": True})
+    stripped = dataclasses.replace(signature, entitlements=None)
+
+    assert signature != other and signature != stripped and other != stripped
+    assert len({signature, other, stripped}) == 3
+
+
 def test_display_lists_one_signature_per_target(workspace: Workspace) -> None:
     targets = [workspace.adhoc_signed("a"), APPLE_SIGNED]
 
