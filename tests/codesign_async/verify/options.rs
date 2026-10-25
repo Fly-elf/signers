@@ -197,7 +197,7 @@ async fn check_notarization_false_is_the_plain_check() {
 /// It reaches the network, and a target that is valid but not notarized still
 /// verifies: the option is accepted, nothing more is promised.
 #[tokio::test]
-#[cfg_attr(not(signers_test = "network"), ignore = "test groups: network")]
+#[cfg_attr(not(signers_test = "network"), ignore = "test group: network")]
 async fn check_notarization_is_accepted_on_a_valid_target() {
     let workspace = Workspace::new();
     let target = workspace.adhoc_signed("hello");
@@ -206,7 +206,7 @@ async fn check_notarization_is_accepted_on_a_valid_target() {
 }
 
 #[tokio::test]
-#[cfg_attr(not(signers_test = "network"), ignore = "test groups: network")]
+#[cfg_attr(not(signers_test = "network"), ignore = "test group: network")]
 async fn check_notarization_still_reports_a_broken_signature() {
     let workspace = Workspace::new();
     let target = workspace.unsigned("hello");

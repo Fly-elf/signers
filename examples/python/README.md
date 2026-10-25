@@ -1,12 +1,13 @@
 # Python examples
 
-Install the package first, either from GitHub (needs `cargo`, it builds from source):
+Install the package first:
 
 ```sh
-pip install git+https://github.com/Fly-elf/signers
+pip install signers
 ```
 
-or from a checkout of the repository:
+or, to build from GitHub (needs `cargo`), `pip install git+https://github.com/Fly-elf/signers`, or from a
+checkout of the repository:
 
 ```sh
 uv run maturin develop

@@ -1,6 +1,7 @@
 """The signing actions: each kwarg has to reach `codesign`, checked by reading the result back with it."""
 
 import os
+import warnings
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -159,11 +160,25 @@ def test_enforce_constraint_validity_reaches_codesign(workspace: Workspace) -> N
 def test_bundle_version_and_deep_reach_codesign(workspace: Workspace) -> None:
     bundle = workspace.framework("Hello", ("A", "B"))
 
-    codesign.sign_adhoc(bundle, bundle_version="B", deep=True, identifier="com.example.versioned")
+    with pytest.warns(DeprecationWarning, match="deep is deprecated"):
+        codesign.sign_adhoc(bundle, bundle_version="B", deep=True, identifier="com.example.versioned")
 
     assert (bundle / "Versions/B/_CodeSignature/CodeResources").is_file()
     assert not (bundle / "Versions/A/_CodeSignature").exists()
     assert Signature(bundle, "--bundle-version", "B").identifier == "com.example.versioned"
+
+
+@pytest.mark.parametrize("name", SIGNERS)
+def test_deep_warns_on_every_signing_function_and_its_absence_does_not(workspace: Workspace, name: str) -> None:
+    deep, plain = workspace.unsigned("deep"), workspace.unsigned("plain")
+
+    with pytest.warns(DeprecationWarning, match="deep is deprecated") as caught:
+        SIGNERS[name](deep, deep=True)
+    assert caught[0].filename == __file__
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        SIGNERS[name](plain)
 
 
 def test_dry_run_and_detached_reach_codesign(workspace: Workspace) -> None:

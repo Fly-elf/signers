@@ -2,8 +2,10 @@
 
 import asyncio
 import inspect
+import warnings
 from collections.abc import Awaitable
-from typing import TypeVar
+from pathlib import Path
+from typing import Any, TypeVar
 
 import pytest
 
@@ -82,6 +84,22 @@ def test_sign_adhoc_signs_a_target_and_every_target_of_a_sequence(workspace: Wor
     assert Report(single).identifier == "com.example.single"
     for path in many:
         assert_valid(path)
+
+
+@pytest.mark.parametrize("name", ["sign", "sign_adhoc", "sign_for_distribution"])
+def test_deep_warns_on_every_aio_signing_function_and_its_absence_does_not(workspace: Workspace, name: str) -> None:
+    def sign(target: Path, **kwargs: Any) -> None:
+        arguments = () if name == "sign_adhoc" else ("-",)
+        run(getattr(aio, name)(target, *arguments, **kwargs))
+
+    deep, plain = workspace.unsigned("deep"), workspace.unsigned("plain")
+
+    with pytest.warns(DeprecationWarning, match="deep is deprecated"):
+        sign(deep, deep=True)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        sign(plain)
 
 
 def test_sign_for_distribution_applies_the_distribution_preset(workspace: Workspace) -> None:

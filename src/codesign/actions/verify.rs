@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::ffi::OsStr;
-use std::path::PathBuf;
+use std::os::unix::ffi::OsStrExt;
+use std::path::{Path, PathBuf};
 
 use crate::codesign::action::action;
 use crate::codesign::tool::Codesign;
@@ -193,6 +194,11 @@ impl Operation for Options {
         match &self.test_requirement {
             // `-R` takes `=text` only in this single-argument form; a space would make it a file path.
             Some(TestRequirement::Text(text)) => args.built(format!("-R={text}")),
+            Some(TestRequirement::File(path)) if path.as_os_str().as_bytes().starts_with(b"=") => {
+                // `codesign` reads a value starting with `=` as requirement text.
+                args.flag("-R");
+                args.built(Path::new(".").join(path));
+            }
             Some(TestRequirement::File(path)) => args.option("-R", path),
             None => {}
         }

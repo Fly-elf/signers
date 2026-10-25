@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -54,7 +58,7 @@ jobs:
         with:
           enable-cache: false
       - run: uv sync --only-group dev
-      - run: uv run --no-sync maturin build --release --out dist
+      - run: uv run --no-sync maturin build --release --locked --out dist
       - name: Check the wheel tags
         env:
           ARCH: ${{ matrix.arch }}
@@ -105,7 +109,7 @@ jobs:
         with:
           persist-credentials: false
       - run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
-      - run: cargo publish --dry-run -p signers
+      - run: cargo publish --dry-run --locked -p signers
 
   # Each step skips what is already published, so re-running a failed job
   # completes a partial release.
@@ -148,7 +152,7 @@ jobs:
         if: steps.crates.outputs.published == 'false'
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN || steps.crates-auth.outputs.token }}
-        run: cargo publish -p signers --no-verify
+        run: cargo publish --locked -p signers --no-verify
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2

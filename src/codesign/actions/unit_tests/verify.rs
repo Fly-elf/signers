@@ -211,7 +211,8 @@ fn a_requirement_file_is_a_flag_and_its_path() {
     for path in [
         "req.txt",
         "dir/my requirement.txt",
-        "=anchor apple",
+        "a=anchor apple",
+        "dir/=anchor apple",
         "-R=x",
         "--verify",
         "-x",
@@ -221,6 +222,22 @@ fn a_requirement_file_is_a_flag_and_its_path() {
         assert_eq!(
             args_of(&verify("app").test_requirement_file(path)),
             os(&["--verify", "-R", path, "--", "app"]),
+            "{path}"
+        );
+    }
+}
+
+/// `codesign` reads any `-R` value starting with `=` as requirement text.
+#[test]
+fn a_requirement_file_starting_with_an_equals_sign_is_made_relative() {
+    for (path, rendered) in [
+        ("=team.req", "./=team.req"),
+        ("=anchor apple", "./=anchor apple"),
+        ("=", "./="),
+    ] {
+        assert_eq!(
+            args_of(&verify("app").test_requirement_file(path)),
+            os(&["--verify", "-R", rendered, "--", "app"]),
             "{path}"
         );
     }

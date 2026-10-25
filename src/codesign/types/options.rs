@@ -3,7 +3,8 @@ use bitflags::bitflags;
 /// Which of the two signatures of a code object to use (`--signature-slot`).
 ///
 /// Without it, `codesign` uses the slot the system prefers. The second slot exists only if the
-/// code carries two signatures. Pass it to [`verify`](crate::codesign::verify).
+/// code carries two signatures. Pass it to [`verify`](crate::codesign::verify) or
+/// [`display`](crate::codesign::display).
 /// Needs macOS 27 or later.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
