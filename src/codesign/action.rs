@@ -91,6 +91,11 @@ macro_rules! action {
             /// can be sealed before that code is signed, which leaves the bundle's signature invalid.
             /// Sign the nested code in an earlier run.
             ///
+            /// For the actions that change their targets, [`sign`](crate::codesign::sign) and its presets
+            /// and [`remove_signature`](crate::codesign::remove_signature), the same file must not appear
+            /// twice, under any spelling, symlink or hard link: two `codesign` runs then replace it at once,
+            /// some fail and the file can be left with an invalid signature.
+            ///
             /// </div>
             ///
             /// # Examples

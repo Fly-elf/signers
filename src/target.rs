@@ -121,8 +121,10 @@ impl<const N: usize> Multi for Array<N> {}
 /// [`per_target`](crate::codesign::Sign::per_target), even with one element.
 ///
 /// Every path is kept: order and duplicates too, and each path reaches `codesign` byte for byte,
-/// non-UTF-8 included. A path starting with `-` is never read as an option. `.await` refuses an
-/// empty path with [`Error::EmptyTarget`](crate::Error::EmptyTarget), and no path at all with
+/// non-UTF-8 included. Duplicates are fine in one run, but not under
+/// [`per_target`](crate::codesign::Sign::per_target) for actions that change their targets.
+/// A path starting with `-` is never read as an option. `.await` refuses an empty path with
+/// [`Error::EmptyTarget`](crate::Error::EmptyTarget), and no path at all with
 /// [`Error::NoTargets`](crate::Error::NoTargets).
 ///
 /// The trait is sealed and has nothing to call: the actions convert their targets themselves.
