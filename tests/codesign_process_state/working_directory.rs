@@ -126,3 +126,38 @@ fn the_current_directory_as_target_is_saved_under_its_own_name() {
         "no Calculator.app.pem"
     );
 }
+
+/// Only a *relative* path can start with `=`, and `codesign` reads a `-R`
+/// value starting with it as requirement text, not as a file.
+#[test]
+fn a_requirement_file_whose_name_starts_with_an_equals_sign_is_read_as_a_file() {
+    let _serialised = crate::serialised();
+
+    let workspace = Workspace::new();
+    let target = workspace.adhoc_signed("hello");
+    workspace.write("=identifier \"nope\"", "!anchor apple\n");
+    workspace.write("=anchor apple", "anchor apple\n");
+    let previous = env::current_dir().expect("no working directory");
+    env::set_current_dir(workspace.path()).expect("could not enter the workspace");
+
+    let satisfied = crate::runtime().block_on(
+        verify(&target)
+            .test_requirement_file("=identifier \"nope\"")
+            .into_future(),
+    );
+    let unsatisfied = crate::runtime().block_on(
+        verify(&target)
+            .test_requirement_file("=anchor apple")
+            .into_future(),
+    );
+
+    env::set_current_dir(previous).expect("could not leave the workspace");
+    satisfied.expect("a requirement file starting with `=` was read as text");
+    assert!(
+        matches!(
+            unsatisfied.unwrap_err(),
+            signers::Error::Codesign(signers::CodesignError::RequirementUnsatisfied { .. })
+        ),
+        "the file was not read"
+    );
+}
