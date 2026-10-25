@@ -3,6 +3,9 @@ name = "signers-python"
 version.workspace = true
 edition = "2024"
 publish = false
+description = "Python bindings of signers"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Fly-elf/signers"
 
 [lib]
 name = "_native"

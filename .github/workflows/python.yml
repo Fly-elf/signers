@@ -63,7 +63,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
           enable-cache: true
-      - run: uv run maturin develop
+      - run: uv run maturin develop --locked
       - run: uv run pytest
         env:
           SIGNERS_TEST_GROUPS: ${{ needs.plan.outputs.pytest_groups }}
