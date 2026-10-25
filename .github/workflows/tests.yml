@@ -76,7 +76,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: macos-${{ inputs.macos }}
-      - run: cargo test --workspace
+      - run: cargo test --workspace --locked
 
   network:
     if: inputs.network
@@ -94,4 +94,4 @@ jobs:
         with:
           key: macos-${{ inputs.macos }}
       # Apple's timestamp and notarization servers fail transiently now and then.
-      - run: cargo test || cargo test
+      - run: cargo test --locked || cargo test --locked
