@@ -7,9 +7,9 @@ use super::diagnostics;
 /// Why running an external tool failed.
 ///
 /// Each variant names the tool in `program`, the executable looked up on `PATH`, e.g.
-/// `"codesign"`. It comes wrapped in [`Error::Process`]. The `codesign` actions return every
+/// `"codesign"`. It comes wrapped in [`Error::Process`](crate::Error::Process). The `codesign` actions return every
 /// variant but [`NotFound`](ProcessError::NotFound), which is
-/// [`CodesignError::NotFound`] so that it can hint at `/usr/bin`.
+/// [`CodesignError::NotFound`](crate::codesign::CodesignError::NotFound) so that it can hint at `/usr/bin`.
 ///
 /// # Examples
 ///

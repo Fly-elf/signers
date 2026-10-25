@@ -6,7 +6,7 @@ use crate::errors::diagnostics;
 
 /// What only `codesign` reports: a missing executable, and the verdicts of some actions.
 ///
-/// Every other failure of its process is a [`ProcessError`] in [`Error::Process`].
+/// Every other failure of its process is a [`ProcessError`](crate::ProcessError) in [`Error::Process`](crate::Error::Process).
 #[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum CodesignError {
@@ -72,7 +72,7 @@ pub enum CodesignError {
     ///
     /// Code with one signature has nothing in the second slot. `codesign` exits 0 for it, and
     /// reports `no signature` in place of the signature, so this crate fails instead of returning
-    /// one with nothing in it. Unsigned code is a different failure: [`ProcessError::Failed`].
+    /// one with nothing in it. Unsigned code is a different failure: [`ProcessError::Failed`](crate::ProcessError::Failed).
     /// `stderr` and `stdout` hold what `codesign` printed on each stream during the whole run,
     /// trimmed, so with one run over several targets they also cover targets that read fine. Only
     /// `stderr` is part of the message.

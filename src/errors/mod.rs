@@ -1,5 +1,6 @@
 //! Why an action failed: [`Error`](enum@Error). [`ProcessError`] says what went wrong with the
-//! external tool's process, and [`CodesignError`] holds what only `codesign` reports.
+//! external tool's process. `codesign` adds [`CodesignError`](crate::codesign::CodesignError)
+//! for what only it reports.
 
 use std::path::PathBuf;
 
@@ -102,7 +103,7 @@ pub enum Error {
 
     /// `codesign` is missing, or it rejected the job with a verdict.
     ///
-    /// Only what is specific to `codesign` comes here: [`NotFound`](CodesignError::NotFound) and
+    /// Only what is specific to `codesign` comes here: [`NotFound`](crate::codesign::CodesignError::NotFound) and
     /// the verdicts of [`verify`](crate::codesign::verify),
     /// [`validate_constraint`](crate::codesign::validate_constraint) and
     /// [`display`](crate::codesign::display). Any other failure of its process is
