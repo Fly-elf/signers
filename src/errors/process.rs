@@ -153,3 +153,7 @@ impl ProcessError {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "unit_tests/process.rs"]
+mod tests;

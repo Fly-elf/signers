@@ -175,3 +175,7 @@ fn changes(resources: &[ResourceChange]) -> String {
         .collect();
     format!(" ({})", list.join("; "))
 }
+
+#[cfg(test)]
+#[path = "unit_tests/error.rs"]
+mod tests;

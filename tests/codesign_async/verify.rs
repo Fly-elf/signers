@@ -22,7 +22,7 @@ use std::fs::OpenOptions;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
-use signers::errors::ResourceChange;
+use signers::codesign::ResourceChange;
 use signers::{CodesignError, Error};
 
 /// Unwraps the `VerificationFailed` a target that does not verify must

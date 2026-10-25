@@ -8,7 +8,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use signers::codesign::verify;
-use signers::errors::{Change, ResourceChange};
+use signers::codesign::{Change, ResourceChange};
 use signers::{CodesignError, Error};
 
 use super::{break_signature, verification_failed_with_resources};
