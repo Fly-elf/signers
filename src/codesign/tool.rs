@@ -1,5 +1,6 @@
+use crate::codesign::CodesignError;
 use crate::engine::Tool;
-use crate::errors::{CodesignError, Error, ProcessError};
+use crate::errors::{Error, ProcessError};
 
 pub(crate) struct Codesign;
 

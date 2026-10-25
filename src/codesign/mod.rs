@@ -84,16 +84,16 @@
 //!   actions that only read them. Every target runs, and the failures come together as
 //!   [`Error::Batch`](crate::Error::Batch), including the targets for which `codesign` couldn't
 //!   start. Only if it can't start for any target
-//!   ([`CodesignError::NotFound`](crate::CodesignError::NotFound),
+//!   ([`CodesignError::NotFound`],
 //!   [`ProcessError::Spawn`](crate::ProcessError::Spawn)) does that error come alone instead.
 //!
 //! What `codesign` does wrong comes as [`Error::Process`](crate::Error::Process), a
 //! [`ProcessError`](crate::ProcessError) with `program` `"codesign"`: it couldn't start or be
 //! waited on, it exited non-zero ([`Failed`](crate::ProcessError::Failed)), a signal killed it,
 //! or its output couldn't be read. A missing executable is the exception: it is
-//! [`CodesignError::NotFound`](crate::CodesignError::NotFound), which adds a hint about
-//! `/usr/bin`. The other [`CodesignError`](crate::CodesignError) variants are the verdicts of
-//! [`verify`], [`validate_constraint`] and [`display`].
+//! [`CodesignError::NotFound`], which adds a hint about
+//! `/usr/bin`. [`CodesignError`] also holds the verdicts of [`verify`], are the verdicts of
+//! [`validate_constraint`] and [`display`].
 //!
 //! # Panics
 //!
@@ -112,6 +112,7 @@ mod actions;
 mod asynchronous;
 #[cfg(feature = "blocking")]
 pub mod blocking;
+mod error;
 mod tool;
 mod types;
 
@@ -123,6 +124,7 @@ pub use asynchronous::{
     display, extract_certificates, remove_signature, requirements, sign, sign_adhoc,
     sign_for_distribution, validate_constraint, verify,
 };
+pub use error::{Change, CodesignError, ResourceChange};
 pub use types::{
     Authority, CdHash, Certificate, CmsDigest, CodeDirectory, CodeHashes, Constraints,
     ExecutableSegment, Format, HashType, InfoPlist, Location, OsVersion, Platform,
