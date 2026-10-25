@@ -43,7 +43,7 @@ fn cli_rejection(plist: &Path) -> Option<String> {
 /// returning its stderr.
 fn constraint_invalid(error: Error) -> String {
     match error {
-        Error::Codesign(CodesignError::ConstraintInvalid { stdout, stderr }) => {
+        Error::Codesign(CodesignError::ConstraintInvalid { stdout, stderr, .. }) => {
             assert!(stdout.is_empty(), "unexpected stdout: {stdout}");
             assert!(!stderr.is_empty(), "the rejection carried no diagnostics");
             stderr

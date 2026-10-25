@@ -169,9 +169,9 @@ fn second_slot_run(paths: &[&str]) -> (String, String) {
 
 fn no_signature(error: signers::Error) -> (String, String) {
     match error {
-        signers::Error::Codesign(signers::CodesignError::NoSignature { stdout, stderr }) => {
-            (stdout, stderr)
-        }
+        signers::Error::Codesign(signers::CodesignError::NoSignature {
+            stdout, stderr, ..
+        }) => (stdout, stderr),
         other => panic!("expected NoSignature, got {other:?}"),
     }
 }

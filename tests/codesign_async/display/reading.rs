@@ -317,7 +317,10 @@ async fn an_app_bundle_reports_its_executable_info_plist_and_resources() {
     let signature = display(&bundle).await.unwrap();
 
     assert_agrees_with_codesign(&signature, &bundle);
-    let Format::Bundle { app, executable } = &signature.format else {
+    let Format::Bundle {
+        app, executable, ..
+    } = &signature.format
+    else {
         panic!("not a bundle: {:?}", signature.format);
     };
     assert!(app);
@@ -377,7 +380,10 @@ async fn an_apple_platform_binary_carries_its_certificate_chain() {
         .filter_map(|line| line.strip_prefix("Authority="))
         .map(|name| Authority::Name(name.to_owned()))
         .collect();
-    let SignatureKind::Certificate { size, authorities } = &signature.signature else {
+    let SignatureKind::Certificate {
+        size, authorities, ..
+    } = &signature.signature
+    else {
         panic!("not a certificate signature: {:?}", signature.signature);
     };
     assert_eq!(*authorities, printed);

@@ -98,7 +98,7 @@ fn an_unusable_temporary_directory_is_an_io_error() {
     };
 
     match result.unwrap_err() {
-        Error::Io { path, source } => {
+        Error::Io { path, source, .. } => {
             assert_eq!(path, missing);
             assert_eq!(source.kind(), std::io::ErrorKind::NotFound);
         }
