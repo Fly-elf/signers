@@ -107,16 +107,13 @@ async fn an_unsigned_single_target_fails_with_codesigns_diagnostics() {
     let error = requirements(&target).await.unwrap_err();
 
     match error {
-        signers::Error::Process(signers::ProcessError::Failed {
-            program: "codesign",
-            code,
-            stderr,
-            ..
-        }) => {
-            assert_eq!(code, 1);
+        signers::Error::Process(signers::ProcessError::Failed { output, .. }) => {
+            assert_eq!(output.program, "codesign");
+            assert_eq!(output.status.code(), Some(1));
             assert!(
-                stderr.contains("code object is not signed at all"),
-                "{stderr}"
+                output.stderr.contains("code object is not signed at all"),
+                "{}",
+                output.stderr
             );
         }
         other => panic!("expected Failed, got {other:?}"),

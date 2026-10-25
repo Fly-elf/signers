@@ -43,10 +43,17 @@ fn cli_rejection(plist: &Path) -> Option<String> {
 /// returning its stderr.
 fn constraint_invalid(error: Error) -> String {
     match error {
-        Error::Codesign(CodesignError::ConstraintInvalid { stdout, stderr, .. }) => {
-            assert!(stdout.is_empty(), "unexpected stdout: {stdout}");
-            assert!(!stderr.is_empty(), "the rejection carried no diagnostics");
-            stderr
+        Error::Codesign(CodesignError::ConstraintInvalid { output, .. }) => {
+            assert!(
+                output.stdout.is_empty(),
+                "unexpected stdout: {}",
+                output.stdout
+            );
+            assert!(
+                !output.stderr.is_empty(),
+                "the rejection carried no diagnostics"
+            );
+            output.stderr
         }
         other => panic!("expected ConstraintInvalid, got {other:?}"),
     }
@@ -56,12 +63,10 @@ fn constraint_invalid(error: Error) -> String {
 /// returning its exit code and stderr.
 fn unreadable(error: Error) -> (i32, String) {
     match error {
-        Error::Process(ProcessError::Failed {
-            program: "codesign",
-            code,
-            stderr,
-            ..
-        }) => (code, stderr),
+        Error::Process(ProcessError::Failed { output, .. }) => {
+            assert_eq!(output.program, "codesign");
+            (output.status.code().expect("killed"), output.stderr)
+        }
         other => panic!("expected Failed, got {other:?}"),
     }
 }

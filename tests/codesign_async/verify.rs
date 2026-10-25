@@ -29,9 +29,12 @@ use signers::{CodesignError, Error};
 /// produce, returning its diagnostics.
 fn verification_failed(error: Error) -> String {
     match error {
-        Error::Codesign(CodesignError::VerificationFailed { stderr, .. }) => {
-            assert!(!stderr.is_empty(), "the failure carried no diagnostics");
-            stderr
+        Error::Codesign(CodesignError::VerificationFailed { output, .. }) => {
+            assert!(
+                !output.stderr.is_empty(),
+                "the failure carried no diagnostics"
+            );
+            output.stderr
         }
         other => panic!("expected VerificationFailed, got {other:?}"),
     }
@@ -42,8 +45,8 @@ fn verification_failed(error: Error) -> String {
 fn verification_failed_with_resources(error: Error) -> (String, Vec<ResourceChange>) {
     match error {
         Error::Codesign(CodesignError::VerificationFailed {
-            stderr, resources, ..
-        }) => (stderr, resources),
+            output, resources, ..
+        }) => (output.stderr, resources),
         other => panic!("expected VerificationFailed, got {other:?}"),
     }
 }
@@ -52,9 +55,12 @@ fn verification_failed_with_resources(error: Error) -> (String, Vec<ResourceChan
 /// requirement must produce, returning its diagnostics.
 fn requirement_unsatisfied(error: Error) -> String {
     match error {
-        Error::Codesign(CodesignError::RequirementUnsatisfied { stderr, .. }) => {
-            assert!(!stderr.is_empty(), "the failure carried no diagnostics");
-            stderr
+        Error::Codesign(CodesignError::RequirementUnsatisfied { output, .. }) => {
+            assert!(
+                !output.stderr.is_empty(),
+                "the failure carried no diagnostics"
+            );
+            output.stderr
         }
         other => panic!("expected RequirementUnsatisfied, got {other:?}"),
     }

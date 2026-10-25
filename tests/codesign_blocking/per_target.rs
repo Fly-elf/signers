@@ -23,11 +23,8 @@ fn one_process_fails_as_a_whole_at_the_first_refused_target() {
 
     assert!(
         matches!(
-            error,
-            Error::Process(ProcessError::Failed {
-                program: "codesign",
-                ..
-            })
+            &error,
+            Error::Process(ProcessError::Failed { output, .. }) if output.program == "codesign"
         ),
         "got {error:?}"
     );
@@ -55,11 +52,8 @@ fn per_target_runs_every_target_and_collects_the_failures() {
     assert_eq!(*path, refused);
     assert!(
         matches!(
-            error,
-            Error::Process(ProcessError::Failed {
-                program: "codesign",
-                ..
-            })
+            &error,
+            Error::Process(ProcessError::Failed { output, .. }) if output.program == "codesign"
         ),
         "got {error:?}"
     );

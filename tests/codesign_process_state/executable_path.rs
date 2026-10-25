@@ -75,7 +75,7 @@ fn a_codesign_that_cannot_be_executed_is_a_spawn_failure() {
 /// A killed process has no exit code and, as here, usually no diagnostics —
 /// nothing that could be mistaken for `codesign` rejecting the target.
 #[test]
-fn a_codesign_killed_by_a_signal_is_reported_as_terminated() {
+fn a_codesign_killed_by_a_signal_is_reported_as_failed_with_the_signal() {
     use std::os::unix::process::ExitStatusExt;
 
     let _serialised = crate::serialised();
@@ -90,34 +90,39 @@ fn a_codesign_killed_by_a_signal_is_reported_as_terminated() {
     };
 
     match result.unwrap_err() {
-        Error::Process(ProcessError::Terminated {
-            program: "codesign",
-            status,
-            stdout,
-            stderr,
-            ..
-        }) => {
+        Error::Process(ProcessError::Failed { output, .. }) => {
+            let status = output.status;
+            assert_eq!(output.program, "codesign");
+            assert_eq!(status.code(), None);
             assert_eq!(
                 status.signal(),
                 Some(9),
                 "killed by something else: {status}"
             );
-            assert!(stdout.is_empty(), "the stand-in said something: {stdout}");
-            assert!(stderr.is_empty(), "the stand-in said something: {stderr}");
+            assert!(
+                output.stdout.is_empty(),
+                "the stand-in said something: {}",
+                output.stdout
+            );
+            assert!(
+                output.stderr.is_empty(),
+                "the stand-in said something: {}",
+                output.stderr
+            );
         }
-        other => panic!("expected Terminated, got {other:?}"),
+        other => panic!("expected Failed, got {other:?}"),
     }
 }
 
 /// A `display` that exits 0 with no report is not a `codesign` verdict: it is the generic
-/// unreadable-output failure, charged to the program.
+/// unreadable-output failure, charged to the program, and it keeps what the run printed.
 #[test]
 fn a_report_short_of_the_targets_is_unexpected_output() {
     let _serialised = crate::serialised();
 
     let workspace = Workspace::new();
     let target = workspace.write("target.bin", "irrelevant\n");
-    let bin = fake_codesign(&workspace, "exit 0");
+    let bin = fake_codesign(&workspace, "echo noise; echo warning >&2; exit 0");
 
     let result = {
         let _path = ScopedPath::to(&bin);
@@ -125,11 +130,12 @@ fn a_report_short_of_the_targets_is_unexpected_output() {
     };
 
     match result.unwrap_err() {
-        Error::Process(ProcessError::UnexpectedOutput {
-            program, detail, ..
-        }) => {
-            assert_eq!(program, "codesign");
+        Error::Process(ProcessError::UnexpectedOutput { detail, output, .. }) => {
             assert!(!detail.is_empty(), "the error does not say what was wrong");
+            assert_eq!(output.program, "codesign");
+            assert!(output.status.success());
+            assert_eq!(output.stdout, "noise");
+            assert_eq!(output.stderr, "warning");
         }
         other => panic!("expected UnexpectedOutput, got {other:?}"),
     }
@@ -150,18 +156,21 @@ fn a_silent_failure_still_reports_its_exit_code() {
 
     let error = result.unwrap_err();
     match &error {
-        Error::Process(ProcessError::Failed {
-            program: "codesign",
-            code,
-            stdout,
-            stderr,
-            ..
-        }) => {
-            assert_eq!(*code, 3);
-            assert!(stdout.is_empty(), "the stand-in said something: {stdout}");
-            assert!(stderr.is_empty(), "the stand-in said something: {stderr}");
+        Error::Process(ProcessError::Failed { output, .. }) => {
+            assert_eq!(output.program, "codesign");
+            assert_eq!(output.status.code(), Some(3));
+            assert!(
+                output.stdout.is_empty(),
+                "the stand-in said something: {}",
+                output.stdout
+            );
+            assert!(
+                output.stderr.is_empty(),
+                "the stand-in said something: {}",
+                output.stderr
+            );
         }
-        other => panic!("expected Codesign, got {other:?}"),
+        other => panic!("expected Failed, got {other:?}"),
     }
     // The exit code is all there is to report, so it had better survive into
     // the message the caller ends up printing.
@@ -193,16 +202,11 @@ fn a_failure_keeps_what_codesign_printed_on_both_streams() {
 
     let error = result.unwrap_err();
     match &error {
-        Error::Process(ProcessError::Failed {
-            program: "codesign",
-            code,
-            stdout,
-            stderr,
-            ..
-        }) => {
-            assert_eq!(*code, 5);
-            assert_eq!(stdout, "to stdout \u{FFFD}");
-            assert_eq!(stderr, "to stderr");
+        Error::Process(ProcessError::Failed { output, .. }) => {
+            assert_eq!(output.program, "codesign");
+            assert_eq!(output.status.code(), Some(5));
+            assert_eq!(output.stdout, "to stdout \u{FFFD}");
+            assert_eq!(output.stderr, "to stderr");
         }
         other => panic!("expected Failed, got {other:?}"),
     }
@@ -225,18 +229,21 @@ fn a_killed_codesign_keeps_what_it_printed_on_both_streams() {
         crate::runtime().block_on(sign(&target, "-").into_future())
     };
 
-    match result.unwrap_err() {
-        Error::Process(ProcessError::Terminated {
-            program: "codesign",
-            stdout,
-            stderr,
-            ..
-        }) => {
-            assert_eq!(stdout, "partial");
-            assert_eq!(stderr, "warning");
+    let error = result.unwrap_err();
+    match &error {
+        Error::Process(ProcessError::Failed { output, .. }) => {
+            assert_eq!(output.status.code(), None);
+            assert_eq!(output.stdout, "partial");
+            assert_eq!(output.stderr, "warning");
         }
-        other => panic!("expected Terminated, got {other:?}"),
+        other => panic!("expected Failed, got {other:?}"),
     }
+    assert_eq!(error.stdout(), Some("partial"));
+    assert_eq!(error.stderr(), Some("warning"));
+    assert_eq!(
+        error.to_string(),
+        "`codesign` was killed (signal: 9 (SIGKILL)): warning"
+    );
 }
 
 #[test]
@@ -382,14 +389,10 @@ fn per_target_failures_keep_the_order_of_the_targets_not_of_the_exits() {
     assert_eq!(failed, targets.iter().collect::<Vec<_>>());
     for (path, error) in &failures {
         match error {
-            Error::Process(ProcessError::Failed {
-                program: "codesign",
-                code,
-                stderr,
-                ..
-            }) => {
-                assert_eq!(*code, 4);
-                assert_eq!(*stderr, format!("refused {}", path.display()));
+            Error::Process(ProcessError::Failed { output, .. }) => {
+                assert_eq!(output.program, "codesign");
+                assert_eq!(output.status.code(), Some(4));
+                assert_eq!(output.stderr, format!("refused {}", path.display()));
             }
             other => panic!("expected Failed, got {other:?}"),
         }
@@ -427,18 +430,16 @@ fn a_per_target_process_killed_by_a_signal_is_charged_to_its_target() {
     };
     assert_eq!(*path, targets[1]);
     match error {
-        Error::Process(ProcessError::Terminated {
-            program: "codesign",
-            status,
-            ..
-        }) => {
+        Error::Process(ProcessError::Failed { output, .. }) => {
+            let status = output.status;
+            assert_eq!(output.program, "codesign");
             assert_eq!(
                 status.signal(),
                 Some(9),
                 "killed by something else: {status}"
             )
         }
-        other => panic!("expected Terminated, got {other:?}"),
+        other => panic!("expected Failed, got {other:?}"),
     }
 }
 
