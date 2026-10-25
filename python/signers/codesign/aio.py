@@ -118,13 +118,13 @@ async def remove_signature(
         EmptyTargetError: A target is an empty path.
         PathNotFoundError: A target doesn't exist.
         PathAccessError: Whether a target exists couldn't be checked.
-        ProcessFailedError: `codesign` rejected a target. The targets before it have
-            already changed.
+        ProcessFailedError: `codesign` rejected a target or was killed. The targets
+            before it have already changed.
         BatchError: With `per_target=True`, every target that failed, each with its own
             error.
         CodesignNotFoundError: No `codesign` was found on `PATH`.
-        ProcessError: `codesign` couldn't start or was killed (`SpawnError`,
-            `RunError`, `TerminatedError`), or printed output that couldn't be read.
+        ProcessError: `codesign` couldn't start or be waited on (`SpawnError`,
+            `RunError`), or printed output that couldn't be read.
         asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
             already started still runs to the end.
 
@@ -373,13 +373,13 @@ async def sign(
         PathAccessError: Whether a target exists couldn't be checked.
         StdioPathError: `requirements` or `file_list` is `"-"`.
         SharedOutputPerTargetError: `per_target` is true with `detached` or `file_list`.
-        ProcessFailedError: `codesign` rejected a target. The targets before it have
-            already changed.
+        ProcessFailedError: `codesign` rejected a target or was killed. The targets
+            before it have already changed.
         BatchError: With `per_target=True`, every target that failed, each with its own
             error.
         CodesignNotFoundError: No `codesign` was found on `PATH`.
-        ProcessError: `codesign` couldn't start or was killed (`SpawnError`,
-            `RunError`, `TerminatedError`), or printed output that couldn't be read.
+        ProcessError: `codesign` couldn't start or be waited on (`SpawnError`,
+            `RunError`), or printed output that couldn't be read.
         asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
             already started still runs to the end.
 
@@ -653,13 +653,13 @@ async def sign_adhoc(
         PathAccessError: Whether a target exists couldn't be checked.
         StdioPathError: `requirements` or `file_list` is `"-"`.
         SharedOutputPerTargetError: `per_target` is true with `detached` or `file_list`.
-        ProcessFailedError: `codesign` rejected a target. The targets before it have
-            already changed.
+        ProcessFailedError: `codesign` rejected a target or was killed. The targets
+            before it have already changed.
         BatchError: With `per_target=True`, every target that failed, each with its own
             error.
         CodesignNotFoundError: No `codesign` was found on `PATH`.
-        ProcessError: `codesign` couldn't start or was killed (`SpawnError`,
-            `RunError`, `TerminatedError`), or printed output that couldn't be read.
+        ProcessError: `codesign` couldn't start or be waited on (`SpawnError`,
+            `RunError`), or printed output that couldn't be read.
         asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
             already started still runs to the end.
 
@@ -942,13 +942,13 @@ async def sign_for_distribution(
         PathAccessError: Whether a target exists couldn't be checked.
         StdioPathError: `requirements` or `file_list` is `"-"`.
         SharedOutputPerTargetError: `per_target` is true with `detached` or `file_list`.
-        ProcessFailedError: `codesign` rejected a target. The targets before it have
-            already changed.
+        ProcessFailedError: `codesign` rejected a target or was killed. The targets
+            before it have already changed.
         BatchError: With `per_target=True`, every target that failed, each with its own
             error.
         CodesignNotFoundError: No `codesign` was found on `PATH`.
-        ProcessError: `codesign` couldn't start or was killed (`SpawnError`,
-            `RunError`, `TerminatedError`), or printed output that couldn't be read.
+        ProcessError: `codesign` couldn't start or be waited on (`SpawnError`,
+            `RunError`), or printed output that couldn't be read.
         asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
             already started still runs to the end.
 
@@ -1136,8 +1136,8 @@ async def verify(
             `per_target=False`, the first target `codesign` rejects raises its own error
             instead.
         CodesignNotFoundError: No `codesign` was found on `PATH`.
-        ProcessError: `codesign` couldn't start or was killed (`SpawnError`,
-            `RunError`, `TerminatedError`).
+        ProcessError: `codesign` couldn't start or be waited on (`SpawnError`,
+            `RunError`).
         asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
             already started still runs to the end.
 
@@ -1232,8 +1232,8 @@ async def validate_constraint(
             `per_target=False`, the first target `codesign` rejects raises its own error
             instead.
         CodesignNotFoundError: No `codesign` was found on `PATH`.
-        ProcessError: `codesign` couldn't start or was killed (`SpawnError`,
-            `RunError`, `TerminatedError`).
+        ProcessError: `codesign` couldn't start or be waited on (`SpawnError`,
+            `RunError`).
         asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
             already started still runs to the end.
 
@@ -1355,8 +1355,8 @@ async def display(
             `per_target=False`, the first target `codesign` rejects raises its own error
             instead.
         CodesignNotFoundError: No `codesign` was found on `PATH`.
-        ProcessError: `codesign` couldn't start or was killed (`SpawnError`,
-            `RunError`, `TerminatedError`).
+        ProcessError: `codesign` couldn't start or be waited on (`SpawnError`,
+            `RunError`).
         asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
             already started still runs to the end.
 
@@ -1440,8 +1440,8 @@ async def requirements(
         UnexpectedOutputError: A line couldn't be read as a requirement.
         BatchError: With a sequence, every target that failed, each with its own error.
         CodesignNotFoundError: No `codesign` was found on `PATH`.
-        ProcessError: `codesign` couldn't start or was killed (`SpawnError`,
-            `RunError`, `TerminatedError`).
+        ProcessError: `codesign` couldn't start or be waited on (`SpawnError`,
+            `RunError`).
         asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
             already started still runs to the end.
 
@@ -1523,8 +1523,8 @@ async def extract_certificates(
         ProcessFailedError: The target is unsigned (exit code 1).
         BatchError: With a sequence, every target that failed, each with its own error.
         CodesignNotFoundError: No `codesign` was found on `PATH`.
-        ProcessError: `codesign` couldn't start or was killed (`SpawnError`,
-            `RunError`, `TerminatedError`).
+        ProcessError: `codesign` couldn't start or be waited on (`SpawnError`,
+            `RunError`).
         asyncio.CancelledError: The awaiting task was cancelled. A `codesign` that
             already started still runs to the end.
 

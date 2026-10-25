@@ -19,8 +19,11 @@ fn main() -> anyhow::Result<()> {
     // A patched binary fails verification; any other error is a real problem.
     match codesign::blocking::verify(BINARY).run() {
         Ok(()) => println!("the signature is still valid"),
-        Err(Error::Codesign(CodesignError::VerificationFailed { stderr, .. })) => {
-            println!("invalid, as expected: {stderr}");
+        Err(error @ Error::Codesign(CodesignError::VerificationFailed { .. })) => {
+            println!(
+                "invalid, as expected: {}",
+                error.stderr().unwrap_or_default()
+            );
         }
         Err(error) => return Err(error.into()),
     }

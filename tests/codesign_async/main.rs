@@ -33,16 +33,12 @@ use signers::{Error, ProcessError};
 /// outside is a property of the backend, not of the action that triggered it.
 fn codesign_error(error: Error) -> String {
     match error {
-        Error::Process(ProcessError::Failed {
-            program: "codesign",
-            stderr,
-            ..
-        }) => {
+        Error::Process(ProcessError::Failed { output, .. }) if output.program == "codesign" => {
             assert!(
-                !stderr.is_empty(),
+                !output.stderr.is_empty(),
                 "the failure was reported with no diagnostics"
             );
-            stderr
+            output.stderr
         }
         other => panic!("expected the `codesign` run to fail, got {other:?}"),
     }

@@ -27,19 +27,14 @@ from signers._errors import _call, _from_native
         ({"kind": "Spawn", "process": True, "program": "codesign", "errno": 1}, signers.SpawnError, {"program": "codesign", "errno": 1}),
         ({"kind": "Run", "process": True, "program": "codesign", "errno": None}, signers.RunError, {"program": "codesign", "errno": None}),
         (
-            {"kind": "Failed", "process": True, "program": "codesign", "code": 3, "stdout": "o", "stderr": "e"},
+            {"kind": "Failed", "process": True, "program": "codesign", "returncode": 3, "stdout": "o", "stderr": "e"},
             signers.ProcessFailedError,
-            {"program": "codesign", "code": 3, "stdout": "o", "stderr": "e"},
+            {"program": "codesign", "returncode": 3, "stdout": "o", "stderr": "e"},
         ),
         (
-            {"kind": "Terminated", "process": True, "program": "codesign", "signal": 9, "stdout": "o", "stderr": "e"},
-            signers.TerminatedError,
-            {"program": "codesign", "signal": 9, "stdout": "o", "stderr": "e"},
-        ),
-        (
-            {"kind": "Terminated", "process": True, "program": "codesign", "signal": None, "stdout": "", "stderr": ""},
-            signers.TerminatedError,
-            {"signal": None},
+            {"kind": "Failed", "process": True, "program": "codesign", "returncode": -9, "stdout": "o", "stderr": "e"},
+            signers.ProcessFailedError,
+            {"program": "codesign", "returncode": -9, "stdout": "o", "stderr": "e"},
         ),
         (
             {"kind": "UnexpectedOutput", "process": True, "program": "codesign", "detail": "d", "stdout": "o", "stderr": "e"},
@@ -115,7 +110,7 @@ def test_from_native_builds_batch_failures_recursively_in_order() -> None:
             "failures": [
                 (
                     "/t/a",
-                    {"kind": "Failed", "process": True, "program": "codesign", "message": "a", "code": 1, "stdout": "", "stderr": "e"},
+                    {"kind": "Failed", "process": True, "program": "codesign", "message": "a", "returncode": 1, "stdout": "", "stderr": "e"},
                 ),
                 ("/t/b", {"kind": "Batch", "message": "b", "failures": [("/t/c", {"kind": "NoTargets", "message": "c"})]}),
             ],
@@ -149,7 +144,6 @@ def test_process_errors_are_not_codesign_errors() -> None:
         signers.SpawnError,
         signers.RunError,
         signers.ProcessFailedError,
-        signers.TerminatedError,
         signers.UnexpectedOutputError,
     ):
         assert issubclass(cls, signers.ProcessError), cls
@@ -193,7 +187,6 @@ def test_the_process_errors_are_reached_through_the_codesign_module() -> None:
         "SpawnError",
         "RunError",
         "ProcessFailedError",
-        "TerminatedError",
         "UnexpectedOutputError",
         "PathNotFoundError",
         "PathAccessError",
