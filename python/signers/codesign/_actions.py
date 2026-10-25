@@ -1,5 +1,6 @@
 # pyright: reportPrivateUsage=false
 import os
+import warnings
 from collections.abc import Sequence
 from enum import Flag
 from typing import TYPE_CHECKING, Any, overload
@@ -55,6 +56,12 @@ def _sign_options(
     detached_database: bool,
     file_list: StrPath | None,
 ) -> "SignOptions":
+    if deep:
+        warnings.warn(
+            "deep is deprecated for signing since macOS 13; sign nested code first",
+            DeprecationWarning,
+            stacklevel=3,
+        )
     return {
         "identifier": identifier,
         "requirements": requirements,
