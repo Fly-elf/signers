@@ -15,17 +15,6 @@ impl Tool for Codesign {
     }
 }
 
-impl Codesign {
-    pub(crate) fn unexpected_output(detail: impl Into<String>) -> Error {
-        Self::error(ProcessError::UnexpectedOutput {
-            program: Self::PROGRAM,
-            detail: detail.into(),
-            stdout: String::new(),
-            stderr: String::new(),
-        })
-    }
-}
-
 #[cfg(test)]
 #[path = "unit_tests/tool.rs"]
 mod tests;

@@ -4,8 +4,7 @@ use std::str::FromStr;
 use bitflags::bitflags;
 
 use super::options::SigningFlags;
-use crate::codesign::tool::Codesign;
-use crate::errors::{Error, Result};
+use crate::engine::Rejection;
 
 /// The signature of one target, as `codesign --display` reports it.
 ///
@@ -422,7 +421,7 @@ bitflags! {
     }
 }
 
-pub(crate) fn parse_report(report: &str) -> Result<Signature> {
+pub(crate) fn parse_report(report: &str) -> Result<Signature, Rejection> {
     let mut executable = None;
     let mut identifier = None;
     let mut format = None;
@@ -635,7 +634,7 @@ impl Format {
 impl CodeDirectory {
     // `location` is last and may hold a space (`explicit detached`), so it's
     // split off before the rest is read as space-separated `key=value` tokens.
-    fn parse(line: &str) -> Result<Self> {
+    fn parse(line: &str) -> Result<Self, Rejection> {
         let (head, location) = line
             .split_once(" location=")
             .ok_or_else(|| unreadable(line))?;
@@ -697,7 +696,7 @@ impl OsVersion {
         }
     }
 
-    fn parse_dotted(line: &str, value: &str) -> Result<Self> {
+    fn parse_dotted(line: &str, value: &str) -> Result<Self, Rejection> {
         let mut parts = value.split('.');
         let (Some(major), Some(minor), Some(patch), None) =
             (parts.next(), parts.next(), parts.next(), parts.next())
@@ -724,7 +723,7 @@ impl HashType {
     }
 }
 
-fn token<'a>(line: &str, text: &'a str, key: &str) -> Result<&'a str> {
+fn token<'a>(line: &str, text: &'a str, key: &str) -> Result<&'a str, Rejection> {
     text.split_whitespace()
         .find_map(|token| {
             token
@@ -734,23 +733,23 @@ fn token<'a>(line: &str, text: &'a str, key: &str) -> Result<&'a str> {
         .ok_or_else(|| unreadable(line))
 }
 
-fn number<T: FromStr>(line: &str, value: &str) -> Result<T> {
+fn number<T: FromStr>(line: &str, value: &str) -> Result<T, Rejection> {
     value.parse().map_err(|_| unreadable(line))
 }
 
-fn hex<T: TryFrom<u64>>(line: &str, digits: &str) -> Result<T> {
+fn hex<T: TryFrom<u64>>(line: &str, digits: &str) -> Result<T, Rejection> {
     u64::from_str_radix(digits, 16)
         .ok()
         .and_then(|value| T::try_from(value).ok())
         .ok_or_else(|| unreadable(line))
 }
 
-fn unreadable(line: &str) -> Error {
-    Codesign::unexpected_output(format!("unreadable report line {line:?}"))
+fn unreadable(line: &str) -> Rejection {
+    Rejection::Unreadable(format!("unreadable report line {line:?}"))
 }
 
-fn missing(key: &str) -> Error {
-    Codesign::unexpected_output(format!("the report has no {key} line"))
+fn missing(key: &str) -> Rejection {
+    Rejection::Unreadable(format!("the report has no {key} line"))
 }
 
 #[cfg(test)]

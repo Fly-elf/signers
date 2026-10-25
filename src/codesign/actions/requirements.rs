@@ -5,8 +5,8 @@ use std::path::PathBuf;
 use crate::codesign::Requirement;
 use crate::codesign::action::action;
 use crate::codesign::tool::Codesign;
-use crate::engine::{Operation, PushArgs};
-use crate::errors::Result;
+use crate::engine::{Operation, PushArgs, Rejection};
+use crate::errors::Output;
 
 action! {
     /// Builder of a run that reads requirements, returned by
@@ -70,14 +70,14 @@ impl Operation for Options {
     fn output(
         &self,
         _targets: &[PathBuf],
-        stdout: String,
-        _stderr: String,
-    ) -> Result<Vec<Vec<Requirement>>> {
-        let requirements = stdout
+        output: &Output,
+    ) -> Result<Vec<Vec<Requirement>>, Rejection> {
+        let requirements = output
+            .stdout
             .lines()
             .filter(|line| !line.starts_with(['\t', '[']) && !line.trim().is_empty())
             .map(Requirement::parse)
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
         Ok(vec![requirements])
     }
 }

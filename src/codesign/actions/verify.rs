@@ -6,8 +6,8 @@ use crate::codesign::action::action;
 use crate::codesign::tool::Codesign;
 use crate::codesign::{Change, CodesignError, ResourceChange};
 use crate::codesign::{SignatureSlot, Strict};
-use crate::engine::{Operation, PushArgs, SharedRun, Tool};
-use crate::errors::Error;
+use crate::engine::{Operation, PushArgs, Rejection, SharedRun, Tool};
+use crate::errors::{Error, Output};
 
 action! {
     /// Builder of a verification run, returned by [`verify`](crate::codesign::verify).
@@ -210,28 +210,19 @@ impl Operation for Options {
         args
     }
 
-    fn output(
-        &self,
-        targets: &[PathBuf],
-        _stdout: String,
-        _stderr: String,
-    ) -> crate::errors::Result<Vec<()>> {
+    fn output(&self, targets: &[PathBuf], _: &Output) -> Result<Vec<()>, Rejection> {
         Ok(vec![(); targets.len()])
     }
 
-    fn failure(&self, code: i32, stdout: String, stderr: String) -> Error {
+    fn failure(&self, code: i32, output: Output) -> Error {
         match code {
-            1 => {
-                let resources = resource_changes(&stdout);
-                CodesignError::VerificationFailed {
-                    stdout,
-                    stderr,
-                    resources,
-                }
-                .into()
+            1 => CodesignError::VerificationFailed {
+                resources: resource_changes(&output.stdout),
+                output,
             }
-            3 => CodesignError::RequirementUnsatisfied { stdout, stderr }.into(),
-            _ => Codesign::failed(code, stdout, stderr),
+            .into(),
+            3 => CodesignError::RequirementUnsatisfied { output }.into(),
+            _ => Codesign::failed(output),
         }
     }
 }
