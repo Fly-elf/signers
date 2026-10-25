@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
-use crate::errors::diagnostics;
+use crate::errors::{Output, diagnostics};
 
 /// What only `codesign` reports: a missing executable, and the verdicts of some actions.
 ///
@@ -33,11 +33,10 @@ pub enum CodesignError {
     /// stays empty when the damage is to nested code (see
     /// [`deep`](crate::codesign::Verify::deep)) or when nothing was altered. The message lists them
     /// after the diagnostics, as `(modified: /path; added: /path)`.
-    #[error("verification failed: {}{}", diagnostics(.stderr), changes(.resources))]
+    #[error("verification failed: {}{}", diagnostics(&.output.stderr), changes(.resources))]
     #[non_exhaustive]
     VerificationFailed {
-        stdout: String,
-        stderr: String,
+        output: Output,
         resources: Vec<ResourceChange>,
     },
 
@@ -49,9 +48,9 @@ pub enum CodesignError {
     /// [`check_designated_requirement`](crate::codesign::Verify::check_designated_requirement), the
     /// code's own. `stderr` holds the diagnostics `codesign` printed on standard error and `stdout`
     /// what it printed on standard output, both trimmed. Only `stderr` is part of the message.
-    #[error("validly signed, but the requirement isn't satisfied: {}", diagnostics(.stderr))]
+    #[error("validly signed, but the requirement isn't satisfied: {}", diagnostics(&.output.stderr))]
     #[non_exhaustive]
-    RequirementUnsatisfied { stdout: String, stderr: String },
+    RequirementUnsatisfied { output: Output },
 
     /// [`validate_constraint`](crate::codesign::validate_constraint) found a constraint that
     /// isn't valid.
@@ -63,9 +62,9 @@ pub enum CodesignError {
     /// On macOS 27 `codesign` exits 0 and prints "Constraint validation failed" even for a valid
     /// plist, so the exit code says nothing here. A plist is rejected only when `codesign` also
     /// reports an error for it, and that report is what `stderr` keeps.
-    #[error("invalid constraint: {}", diagnostics(.stderr))]
+    #[error("invalid constraint: {}", diagnostics(&.output.stderr))]
     #[non_exhaustive]
-    ConstraintInvalid { stdout: String, stderr: String },
+    ConstraintInvalid { output: Output },
 
     /// [`display`](crate::codesign::display) found no signature in the
     /// [`signature_slot`](crate::codesign::Display::signature_slot) it was asked for.
@@ -76,39 +75,31 @@ pub enum CodesignError {
     /// `stderr` and `stdout` hold what `codesign` printed on each stream during the whole run,
     /// trimmed, so with one run over several targets they also cover targets that read fine. Only
     /// `stderr` is part of the message.
-    #[error("no signature: {}", diagnostics(.stderr))]
+    #[error("no signature: {}", diagnostics(&.output.stderr))]
     #[non_exhaustive]
-    NoSignature { stdout: String, stderr: String },
+    NoSignature { output: Output },
 }
 
 #[cfg(feature = "__test-constructors")]
 impl CodesignError {
     #[doc(hidden)]
-    pub fn verification_failed(
-        stdout: String,
-        stderr: String,
-        resources: Vec<ResourceChange>,
-    ) -> Self {
-        Self::VerificationFailed {
-            stdout,
-            stderr,
-            resources,
-        }
+    pub fn verification_failed(output: Output, resources: Vec<ResourceChange>) -> Self {
+        Self::VerificationFailed { output, resources }
     }
 
     #[doc(hidden)]
-    pub fn requirement_unsatisfied(stdout: String, stderr: String) -> Self {
-        Self::RequirementUnsatisfied { stdout, stderr }
+    pub fn requirement_unsatisfied(output: Output) -> Self {
+        Self::RequirementUnsatisfied { output }
     }
 
     #[doc(hidden)]
-    pub fn constraint_invalid(stdout: String, stderr: String) -> Self {
-        Self::ConstraintInvalid { stdout, stderr }
+    pub fn constraint_invalid(output: Output) -> Self {
+        Self::ConstraintInvalid { output }
     }
 
     #[doc(hidden)]
-    pub fn no_signature(stdout: String, stderr: String) -> Self {
-        Self::NoSignature { stdout, stderr }
+    pub fn no_signature(output: Output) -> Self {
+        Self::NoSignature { output }
     }
 }
 

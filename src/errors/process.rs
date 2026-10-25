@@ -1,3 +1,4 @@
+use std::fmt;
 use std::process::ExitStatus;
 
 use thiserror::Error;
@@ -59,41 +60,18 @@ pub enum ProcessError {
     ///
     /// When one run covers several targets, the targets before the rejected one may already have
     /// changed.
-    #[error("`{program}` exited with code {code}: {}", diagnostics(.stderr))]
+    #[error(fmt = failed)]
     #[non_exhaustive]
-    Failed {
-        program: &'static str,
-        code: i32,
-        stdout: String,
-        stderr: String,
-    },
-
-    /// `program` was killed by a signal before it could exit.
-    ///
-    /// `status` holds the signal (`ExitStatusExt::signal`). `stderr` is usually empty. `stdout`
-    /// holds what `program` printed on standard output, trimmed; it isn't part of the message.
-    #[error("the `{program}` process terminated abnormally ({status}): {}", diagnostics(.stderr))]
-    #[non_exhaustive]
-    Terminated {
-        program: &'static str,
-        status: ExitStatus,
-        stdout: String,
-        stderr: String,
-    },
+    Failed { output: Output },
 
     /// `program` exited 0, but its output couldn't be read as the action's result.
     ///
     /// `detail` says what didn't match, e.g. the number of results against the number of
     /// targets. `stdout` and `stderr` hold what the run printed, trimmed; with one run over several
     /// targets they cover all of them. Neither is part of the message.
-    #[error("`{program}` produced output this crate can't read: {detail}")]
+    #[error("`{}` produced output this crate can't read: {detail}", .output.program)]
     #[non_exhaustive]
-    UnexpectedOutput {
-        program: &'static str,
-        detail: String,
-        stdout: String,
-        stderr: String,
-    },
+    UnexpectedOutput { detail: String, output: Output },
 }
 
 #[non_exhaustive]
@@ -136,43 +114,34 @@ impl ProcessError {
     }
 
     #[doc(hidden)]
-    pub fn failed(program: &'static str, code: i32, stdout: String, stderr: String) -> Self {
-        Self::Failed {
-            program,
-            code,
-            stdout,
-            stderr,
-        }
+    pub fn failed(output: Output) -> Self {
+        Self::Failed { output }
     }
 
     #[doc(hidden)]
-    pub fn terminated(
-        program: &'static str,
-        status: ExitStatus,
-        stdout: String,
-        stderr: String,
-    ) -> Self {
-        Self::Terminated {
-            program,
-            status,
-            stdout,
-            stderr,
-        }
+    pub fn unexpected_output(detail: String, output: Output) -> Self {
+        Self::UnexpectedOutput { detail, output }
     }
+}
 
-    #[doc(hidden)]
-    pub fn unexpected_output(
-        program: &'static str,
-        detail: String,
-        stdout: String,
-        stderr: String,
-    ) -> Self {
-        Self::UnexpectedOutput {
-            program,
-            detail,
-            stdout,
-            stderr,
-        }
+fn failed(output: &Output, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let Output {
+        program,
+        status,
+        stderr,
+        ..
+    } = output;
+    match status.code() {
+        Some(code) => write!(
+            f,
+            "`{program}` exited with code {code}: {}",
+            diagnostics(stderr)
+        ),
+        None => write!(
+            f,
+            "`{program}` was killed ({status}): {}",
+            diagnostics(stderr)
+        ),
     }
 }
 
