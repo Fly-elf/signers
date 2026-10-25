@@ -4,7 +4,7 @@
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
-use futures_util::StreamExt;
+use futures_util::{FutureExt, StreamExt};
 
 use super::operation::{Operation, Rejection};
 use super::process::{RunError, exit, spawn};
@@ -52,20 +52,36 @@ pub(crate) async fn execute<O: Operation>(
 
     let cap = std::thread::available_parallelism().map_or(1, NonZeroUsize::get);
     tracing::debug!(target: "signers", program = O::Tool::PROGRAM, runs = targets.len(), concurrency = cap, "batch");
+    run_per_target(op, targets, cap).await
+}
+
+/// Runs the tool once per target, `cap` at a time. A finished run frees its slot at once, whatever
+/// the runs before it are doing; the results still come back in input order.
+async fn run_per_target<O: Operation>(
+    op: &O,
+    targets: &[PathBuf],
+    cap: usize,
+) -> Result<Vec<O::Output>> {
     // The runs are built before they are buffered: mapping the stream
     // itself doesn't compile inside a `Send` boxed future (higher-ranked
     // lifetime limitation).
     let runs: Vec<_> = targets
         .iter()
-        .map(|target| run_once(op, std::slice::from_ref(target)))
+        .enumerate()
+        .map(|(index, target)| {
+            run_once(op, std::slice::from_ref(target)).map(move |result| (index, result))
+        })
         .collect();
-    let results: Vec<std::result::Result<Vec<O::Output>, RunError>> =
-        futures_util::stream::iter(runs)
-            .buffered(cap)
-            .collect()
-            .await;
+    let mut results = futures_util::stream::iter(runs)
+        .buffer_unordered(cap)
+        .collect::<Vec<_>>()
+        .await;
+    results.sort_unstable_by_key(|(index, _)| *index);
 
-    collect(targets, results)
+    collect(
+        targets,
+        results.into_iter().map(|(_, result)| result).collect(),
+    )
 }
 
 /// Folds the runs of a batch into the outputs, or into the failures of every target.
@@ -125,6 +141,10 @@ mod execute_collect;
 #[cfg(test)]
 #[path = "unit_tests/execute_stream.rs"]
 mod execute_stream;
+
+#[cfg(test)]
+#[path = "unit_tests/execute_per_target.rs"]
+mod execute_per_target;
 
 /// The runner's side of its contract with an operation, which no shipped action
 /// can show from outside: both yield `()`, keep the default `failure` and
