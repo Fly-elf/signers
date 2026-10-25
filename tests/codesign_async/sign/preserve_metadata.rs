@@ -57,3 +57,20 @@ async fn preserved_metadata_survives_a_re_sign() {
     );
     assert!(inspect::entitlements(&discarded).is_empty());
 }
+
+/// A set with only unnamed bits must act as an empty one: rendered as
+/// `--preserve-metadata=`, `codesign` would read the empty list as a prefix
+/// of its first name and keep the old identifier.
+#[tokio::test]
+async fn a_preserve_set_with_only_unnamed_bits_preserves_nothing() {
+    let workspace = Workspace::new();
+    let target = workspace.presigned("hello", &["-i", "com.example.original"]);
+
+    sign(&target, "-")
+        .force(true)
+        .preserve_metadata(PreserveMetadata::from_bits_retain(0x80))
+        .await
+        .unwrap();
+
+    assert_ne!(Signature::of(&target).identifier(), "com.example.original");
+}

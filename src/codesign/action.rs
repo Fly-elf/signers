@@ -6,7 +6,7 @@ use bitflags::Flags;
 /// Comma-joins the `flag_name` tokens of the flags set in `flags`, in declaration order.
 ///
 /// Not `bitflags`' `Display`, which separates with ` | `.
-pub(crate) fn joined<F: Flags + Copy>(flags: F) -> String {
+pub(crate) fn joined<F: Flags + Copy>(flags: F) -> Option<String> {
     let mut tokens = String::new();
     for flag in F::FLAGS.iter().filter(|flag| flags.contains(*flag.value())) {
         if !tokens.is_empty() {
@@ -14,7 +14,7 @@ pub(crate) fn joined<F: Flags + Copy>(flags: F) -> String {
         }
         tokens.push_str(flag.name());
     }
-    tokens
+    (!tokens.is_empty()).then_some(tokens)
 }
 
 // Emits an action's public type over the engine's `Job`, its private `Options`, a private `new`, one setter
@@ -90,6 +90,11 @@ macro_rules! action {
             /// The runs overlap in no fixed order. A bundle in the same batch as the code nested in it
             /// can be sealed before that code is signed, which leaves the bundle's signature invalid.
             /// Sign the nested code in an earlier run.
+            ///
+            /// For the actions that change their targets, [`sign`](crate::codesign::sign) and its presets
+            /// and [`remove_signature`](crate::codesign::remove_signature), the same file must not appear
+            /// twice, under any spelling, symlink or hard link: two `codesign` runs then replace it at once,
+            /// some fail and the file can be left with an invalid signature.
             ///
             /// </div>
             ///

@@ -200,6 +200,9 @@ def remove_signature(
             changes the targets in order and stops at the first it rejects. With `True`
             every target runs and the failures come together in a `BatchError`, but the
             runs overlap in no fixed order.
+            The same file must not appear twice, under any spelling, symlink or hard link:
+            two `codesign` runs then replace it at once, some fail and the file can be left
+            with an invalid signature.
         bundle_version: Removes the signature from this version of a versioned bundle
             only. The version names a directory under the bundle's `Versions`. Without
             it, `codesign` uses the version that `Current` points to
@@ -365,6 +368,9 @@ def sign(
             runs overlap in no fixed order. A bundle in the same call as the code nested
             in it can then be sealed before that code is signed, which leaves the
             bundle's signature invalid: sign the nested code in an earlier call.
+            The same file must not appear twice, under any spelling, symlink or hard link:
+            two `codesign` runs then replace it at once, some fail and the file can be left
+            with an invalid signature.
         identifier: Seals this identifier instead of deriving one from `Info.plist` or
             the file name. Every target in the batch gets it, and each program should
             have its own (`--identifier`).
@@ -388,7 +394,8 @@ def sign(
         generate_entitlement_der: Embeds the entitlements as DER as well as XML. This
             has been the default since macOS 12 (`--generate-entitlement-der`).
         options: The `SigningFlags` to seal. This replaces the whole set, including the
-            one from `sign_for_distribution`; `None` keeps it (`--options`).
+            one from `sign_for_distribution`; `None` keeps it. Bits without a name are ignored
+            (`--options`).
         runtime_version: Records this hardened runtime version instead of the SDK's.
             Only takes effect with `SigningFlags.RUNTIME`; without that flag, `codesign`
             ignores it (`--runtime-version`).
@@ -415,8 +422,8 @@ def sign(
         preserve_metadata: The `PreserveMetadata` parts of the signature being replaced
             to reuse. Needs `force`, since without it there is nothing to replace.
             Values you set explicitly win over preserved ones, and `codesign` ignores
-            this option when the old signature came from the linker
-            (`--preserve-metadata`).
+            this option when the old signature came from the linker.
+            Bits without a name are ignored (`--preserve-metadata`).
         page_size: Sets the signing page size in bytes, or `0` for a single page.
             Anything but a power of two or `0` makes `codesign` fail. Only the main
             executable is affected, not resources (`--pagesize`).
@@ -632,6 +639,9 @@ def sign_adhoc(
             runs overlap in no fixed order. A bundle in the same call as the code nested
             in it can then be sealed before that code is signed, which leaves the
             bundle's signature invalid: sign the nested code in an earlier call.
+            The same file must not appear twice, under any spelling, symlink or hard link:
+            two `codesign` runs then replace it at once, some fail and the file can be left
+            with an invalid signature.
         identifier: Seals this identifier instead of deriving one from `Info.plist` or
             the file name. Every target in the batch gets it, and each program should
             have its own (`--identifier`).
@@ -655,7 +665,8 @@ def sign_adhoc(
         generate_entitlement_der: Embeds the entitlements as DER as well as XML. This
             has been the default since macOS 12 (`--generate-entitlement-der`).
         options: The `SigningFlags` to seal. This replaces the whole set, including the
-            one from `sign_for_distribution`; `None` keeps it (`--options`).
+            one from `sign_for_distribution`; `None` keeps it. Bits without a name are ignored
+            (`--options`).
         runtime_version: Records this hardened runtime version instead of the SDK's.
             Only takes effect with `SigningFlags.RUNTIME`; without that flag, `codesign`
             ignores it (`--runtime-version`).
@@ -682,8 +693,8 @@ def sign_adhoc(
         preserve_metadata: The `PreserveMetadata` parts of the signature being replaced
             to reuse. Needs `force`, since without it there is nothing to replace.
             Values you set explicitly win over preserved ones, and `codesign` ignores
-            this option when the old signature came from the linker
-            (`--preserve-metadata`).
+            this option when the old signature came from the linker.
+            Bits without a name are ignored (`--preserve-metadata`).
         page_size: Sets the signing page size in bytes, or `0` for a single page.
             Anything but a power of two or `0` makes `codesign` fail. Only the main
             executable is affected, not resources (`--pagesize`).
@@ -908,6 +919,9 @@ def sign_for_distribution(
             runs overlap in no fixed order. A bundle in the same call as the code nested
             in it can then be sealed before that code is signed, which leaves the
             bundle's signature invalid: sign the nested code in an earlier call.
+            The same file must not appear twice, under any spelling, symlink or hard link:
+            two `codesign` runs then replace it at once, some fail and the file can be left
+            with an invalid signature.
         identifier: Seals this identifier instead of deriving one from `Info.plist` or
             the file name. Every target in the batch gets it, and each program should
             have its own (`--identifier`).
@@ -931,7 +945,8 @@ def sign_for_distribution(
         generate_entitlement_der: Embeds the entitlements as DER as well as XML. This
             has been the default since macOS 12 (`--generate-entitlement-der`).
         options: The `SigningFlags` to seal. This replaces the whole set, including the
-            one from `sign_for_distribution`; `None` keeps it (`--options`).
+            one from `sign_for_distribution`; `None` keeps it. Bits without a name are ignored
+            (`--options`).
         runtime_version: Records this hardened runtime version instead of the SDK's.
             Only takes effect with `SigningFlags.RUNTIME`; without that flag, `codesign`
             ignores it (`--runtime-version`).
@@ -958,8 +973,8 @@ def sign_for_distribution(
         preserve_metadata: The `PreserveMetadata` parts of the signature being replaced
             to reuse. Needs `force`, since without it there is nothing to replace.
             Values you set explicitly win over preserved ones, and `codesign` ignores
-            this option when the old signature came from the linker
-            (`--preserve-metadata`).
+            this option when the old signature came from the linker.
+            Bits without a name are ignored (`--preserve-metadata`).
         page_size: Sets the signing page size in bytes, or `0` for a single page.
             Anything but a power of two or `0` makes `codesign` fail. Only the main
             executable is affected, not resources (`--pagesize`).

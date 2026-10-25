@@ -105,7 +105,8 @@ action! {
         /// Sets the code signing flags to seal (`--options`).
         ///
         /// This replaces the whole set, including the one from
-        /// [`sign_for_distribution`](crate::codesign::sign_for_distribution).
+        /// [`sign_for_distribution`](crate::codesign::sign_for_distribution). Bits without a name are
+        /// ignored, so a set with only unnamed bits acts as an empty one.
         options: SigningFlags,
         /// Records this hardened runtime version instead of the SDK's (`--runtime-version`).
         ///
@@ -159,7 +160,8 @@ action! {
         ///
         /// Needs [`force`](Self::force), since without it there is no replacing.
         /// Values you set explicitly win over preserved ones. `codesign` ignores this option when the
-        /// old signature came from the linker.
+        /// old signature came from the linker. Bits without a name are ignored, so a set with only
+        /// unnamed bits acts as an empty one.
         preserve_metadata: PreserveMetadata,
         /// Sets the signing page size in bytes, or `0` for a single page (`--pagesize`).
         ///
@@ -294,9 +296,9 @@ impl Operation for Options {
         if self.generate_entitlement_der {
             args.flag("--generate-entitlement-der");
         }
-        if !self.options.is_empty() {
+        if let Some(list) = joined(self.options) {
             args.flag("--options");
-            args.built(joined(self.options));
+            args.built(list);
         }
         if let Some(runtime_version) = &self.runtime_version {
             args.option("--runtime-version", runtime_version);
@@ -325,8 +327,7 @@ impl Operation for Options {
         }
         // `--preserve-metadata` and `--timestamp` take an optional value, so
         // getopt only accepts the `=` form for them.
-        if !self.preserve_metadata.is_empty() {
-            let list = joined(self.preserve_metadata);
+        if let Some(list) = joined(self.preserve_metadata) {
             args.built(format!("--preserve-metadata={list}"));
         }
         if let Some(page_size) = self.page_size {
