@@ -96,6 +96,28 @@ pub enum ProcessError {
     },
 }
 
+#[non_exhaustive]
+#[derive(Debug, Clone)]
+pub struct Output {
+    pub program: &'static str,
+    pub status: ExitStatus,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+#[cfg(feature = "__test-constructors")]
+impl Output {
+    #[doc(hidden)]
+    pub fn new(program: &'static str, status: ExitStatus, stdout: String, stderr: String) -> Self {
+        Self {
+            program,
+            status,
+            stdout,
+            stderr,
+        }
+    }
+}
+
 #[cfg(feature = "__test-constructors")]
 impl ProcessError {
     #[doc(hidden)]

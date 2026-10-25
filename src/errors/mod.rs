@@ -8,7 +8,7 @@ use thiserror::Error;
 
 mod process;
 
-pub use process::ProcessError;
+pub use process::{Output, ProcessError};
 
 /// A `Result` whose error is this crate's [`Error`](enum@Error).
 pub type Result<T> = std::result::Result<T, Error>;
