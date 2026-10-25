@@ -84,6 +84,26 @@ async fn an_empty_flag_set_seals_nothing() {
     assert_eq!(Signature::of(&target).flags(), super::ADHOC);
 }
 
+/// The bits `codesign -d` reports for an ad hoc signature (`0x2`) have no
+/// name to hand back to `--options`. Passed through as an empty list,
+/// `codesign` would read it as `host` and seal `0x3`.
+#[tokio::test]
+async fn a_flag_set_with_only_unnamed_bits_seals_nothing() {
+    let workspace = Workspace::new();
+    let target = workspace.adhoc_signed("hello");
+    let reported = SigningFlags::from_bits_retain(Signature::of(&target).flags());
+
+    sign(&target, "-")
+        .force(true)
+        .options(reported)
+        .await
+        .unwrap();
+
+    let signature = Signature::of(&target);
+    assert_eq!(signature.flags(), super::ADHOC);
+    assert_eq!(signature.flag_names(), ["adhoc"]);
+}
+
 #[tokio::test]
 async fn the_hardened_runtime_version_is_recorded() {
     let workspace = Workspace::new();

@@ -176,22 +176,50 @@ fn every_option_renders_exactly_once() {
 #[test]
 fn flag_tokens_are_joined_in_declaration_order() {
     assert_eq!(
-        joined(SigningFlags::all()),
-        "host,hard,kill,expires,library,runtime,linker-signed"
+        joined(SigningFlags::all()).as_deref(),
+        Some("host,hard,kill,expires,library,runtime,linker-signed"),
     );
     assert_eq!(
-        joined(PreserveMetadata::all()),
-        "identifier,entitlements,requirements,flags,runtime,launch-constraints,library-constraints",
+        joined(PreserveMetadata::all()).as_deref(),
+        Some(
+            "identifier,entitlements,requirements,flags,runtime,launch-constraints,library-constraints"
+        ),
     );
 }
 
 #[test]
+fn flag_sets_without_a_named_bit_have_no_tokens() {
+    assert_eq!(joined(SigningFlags::empty()), None);
+    assert_eq!(joined(SigningFlags::from_bits_retain(0x2)), None);
+    assert_eq!(joined(PreserveMetadata::empty()), None);
+    assert_eq!(joined(PreserveMetadata::from_bits_retain(0x80)), None);
+}
+
+#[test]
 fn empty_flag_sets_render_no_argument_at_all() {
-    // Not `--options ""`, which `codesign` rejects: the option is dropped.
+    // Not `--options ""`, which `codesign` reads as a prefix of its first
+    // name (`host`): the option is dropped.
     let action = sign("app", "-")
         .options(SigningFlags::empty())
         .preserve_metadata(PreserveMetadata::empty());
     assert_eq!(args_of(&action), os(&["--sign", "-", "--", "app"]));
+}
+
+#[test]
+fn flag_sets_with_only_unnamed_bits_render_no_argument() {
+    let action = sign("app", "-")
+        .options(SigningFlags::from_bits_retain(0x2))
+        .preserve_metadata(PreserveMetadata::from_bits_retain(0x80));
+    assert_eq!(args_of(&action), os(&["--sign", "-", "--", "app"]));
+}
+
+#[test]
+fn unnamed_bits_are_dropped_from_a_mixed_flag_set() {
+    let action = sign("app", "-").options(SigningFlags::HARD | SigningFlags::from_bits_retain(0x2));
+    assert_eq!(
+        args_of(&action),
+        os(&["--sign", "-", "--options", "hard", "--", "app"])
+    );
 }
 
 #[test]
