@@ -34,6 +34,9 @@
 //! several statements, clone or drop. The future it turns into is `Send + 'static`, so you can
 //! spawn it.
 //!
+//! Dropping the future, e.g. through `tokio::time::timeout` or `select!`, doesn't stop a `codesign`
+//! that has started: it runs to the end and may still change its targets.
+//!
 //! ```no_run
 //! # async fn run(hardened: bool) -> signers::Result<()> {
 //! use signers::codesign::{self, SigningFlags};

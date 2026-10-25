@@ -324,8 +324,8 @@ async def sign(
             Setting it on an unsigned target does no harm (`--force`).
         deep: Signs the nested code too, applying every option to it as well. Apple
             deprecated this for signing in macOS 13, because the options rarely suit the
-            nested code: sign the nested code first and the bundle last instead
-            (`--deep`).
+            nested code: sign the nested code first and the bundle last instead. Emits a
+            `DeprecationWarning` (`--deep`).
         preserve_metadata: The `PreserveMetadata` parts of the signature being replaced
             to reuse. Needs `force`, since without it there is nothing to replace.
             Values you set explicitly win over preserved ones, and `codesign` ignores
@@ -604,8 +604,8 @@ async def sign_adhoc(
             Setting it on an unsigned target does no harm (`--force`).
         deep: Signs the nested code too, applying every option to it as well. Apple
             deprecated this for signing in macOS 13, because the options rarely suit the
-            nested code: sign the nested code first and the bundle last instead
-            (`--deep`).
+            nested code: sign the nested code first and the bundle last instead. Emits a
+            `DeprecationWarning` (`--deep`).
         preserve_metadata: The `PreserveMetadata` parts of the signature being replaced
             to reuse. Needs `force`, since without it there is nothing to replace.
             Values you set explicitly win over preserved ones, and `codesign` ignores
@@ -893,8 +893,8 @@ async def sign_for_distribution(
             Setting it on an unsigned target does no harm (`--force`).
         deep: Signs the nested code too, applying every option to it as well. Apple
             deprecated this for signing in macOS 13, because the options rarely suit the
-            nested code: sign the nested code first and the bundle last instead
-            (`--deep`).
+            nested code: sign the nested code first and the bundle last instead. Emits a
+            `DeprecationWarning` (`--deep`).
         preserve_metadata: The `PreserveMetadata` parts of the signature being replaced
             to reuse. Needs `force`, since without it there is nothing to replace.
             Values you set explicitly win over preserved ones, and `codesign` ignores

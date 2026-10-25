@@ -86,7 +86,7 @@ gh workflow run tests.yml -f macos=26
 ## Pull requests
 
 Pull requests are welcome. Before opening one, run `cargo fmt`, make sure
-`cargo clippy --all-targets --all-features -- -D warnings` is clean, and check that the tests pass.
+`cargo clippy --workspace --all-targets --all-features -- -D warnings` is clean, and check that the tests pass.
 
 ## License
 
