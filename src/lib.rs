@@ -86,6 +86,8 @@ pub mod errors;
 mod target;
 
 #[cfg(target_os = "macos")]
-pub use errors::{CodesignError, Error, ProcessError, Result};
+pub use codesign::CodesignError;
+#[cfg(target_os = "macos")]
+pub use errors::{Error, ProcessError, Result};
 #[cfg(target_os = "macos")]
 pub use target::IntoTargets;

@@ -2,10 +2,10 @@ use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 
+use crate::codesign::CodesignError;
 use crate::codesign::action::action;
 use crate::codesign::tool::Codesign;
 use crate::engine::{Operation, PushArgs, SharedRun};
-use crate::errors::CodesignError;
 
 action! {
     /// Builder of a constraint check, returned by

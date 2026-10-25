@@ -2,7 +2,7 @@ use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use signers::errors::{Change, ResourceChange};
+use signers::codesign::{Change, ResourceChange};
 use signers::{CodesignError, Error, ProcessError};
 
 create_exception!(_native, NativeError, PyException);

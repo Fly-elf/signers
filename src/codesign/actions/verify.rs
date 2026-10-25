@@ -4,9 +4,10 @@ use std::path::PathBuf;
 
 use crate::codesign::action::action;
 use crate::codesign::tool::Codesign;
+use crate::codesign::{Change, CodesignError, ResourceChange};
 use crate::codesign::{SignatureSlot, Strict};
 use crate::engine::{Operation, PushArgs, SharedRun, Tool};
-use crate::errors::{Change, CodesignError, Error, ResourceChange};
+use crate::errors::Error;
 
 action! {
     /// Builder of a verification run, returned by [`verify`](crate::codesign::verify).

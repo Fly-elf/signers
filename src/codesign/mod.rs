@@ -112,6 +112,7 @@ mod actions;
 mod asynchronous;
 #[cfg(feature = "blocking")]
 pub mod blocking;
+mod error;
 mod tool;
 mod types;
 
@@ -123,6 +124,7 @@ pub use asynchronous::{
     display, extract_certificates, remove_signature, requirements, sign, sign_adhoc,
     sign_for_distribution, validate_constraint, verify,
 };
+pub use error::{Change, CodesignError, ResourceChange};
 pub use types::{
     Authority, CdHash, Certificate, CmsDigest, CodeDirectory, CodeHashes, Constraints,
     ExecutableSegment, Format, HashType, InfoPlist, Location, OsVersion, Platform,
