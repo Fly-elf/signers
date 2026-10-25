@@ -53,9 +53,10 @@ def _restore(
 class SignersError(Exception):
     """Base class of every error that an action raises.
 
-    `str(error)` is the message. Catch it to handle any failure of an action. Mistakes
-    in the call itself, such as a target that is not a path, raise Python's own
-    `TypeError` instead. Some subclasses are also built-in exceptions (`ValueError`,
+    `str(error)` is the message, including the underlying cause when there is one
+    (`could not access /x: Permission denied`). Catch it to handle any failure of an
+    action. Mistakes in the call itself, such as a target that is not a path, raise
+    Python's own `TypeError` instead. Some subclasses are also built-in exceptions (`ValueError`,
     `FileNotFoundError`, `OSError`), so code that catches those keeps working.
 
     Every error can be pickled with its attributes, so it crosses `multiprocessing` and

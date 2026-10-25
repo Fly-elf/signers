@@ -19,7 +19,7 @@ pub(crate) fn to_py(err: Error) -> PyErr {
 
 fn payload<'py>(py: Python<'py>, err: &Error) -> PyResult<Bound<'py, PyDict>> {
     let d = PyDict::new(py);
-    d.set_item("message", err.to_string())?;
+    d.set_item("message", chain(err))?;
     let kind = match err {
         Error::NoTargets => "NoTargets",
         Error::EmptyTarget(index) => {
@@ -68,6 +68,18 @@ fn payload<'py>(py: Python<'py>, err: &Error) -> PyResult<Bound<'py, PyDict>> {
     };
     d.set_item("kind", kind)?;
     Ok(d)
+}
+
+// The error followed by each of its sources, as `error: cause: ...`.
+fn chain(err: &dyn std::error::Error) -> String {
+    let mut text = err.to_string();
+    let mut source = err.source();
+    while let Some(cause) = source {
+        text.push_str(": ");
+        text.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    text
 }
 
 fn codesign_fields(d: &Bound<'_, PyDict>, err: &CodesignError) -> PyResult<&'static str> {

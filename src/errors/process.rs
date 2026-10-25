@@ -38,8 +38,9 @@ pub enum ProcessError {
 
     /// `program` was found but couldn't start, e.g. because it isn't executable.
     ///
-    /// The blocking `.run()` also returns it when it can't create its runtime.
-    #[error("failed to spawn the `{program}` process or the Tokio runtime: {source}")]
+    /// The blocking `.run()` also returns it when it can't create its runtime; the cause then
+    /// says so. The I/O error is [`source()`](std::error::Error::source), not part of the message.
+    #[error("could not start `{program}`")]
     #[non_exhaustive]
     Spawn {
         program: &'static str,
@@ -48,8 +49,9 @@ pub enum ProcessError {
 
     /// Waiting for `program` or reading its output failed.
     ///
-    /// The outcome is unknown, so the targets may or may not have changed.
-    #[error("failed while running the `{program}` process: {source}")]
+    /// The outcome is unknown, so the targets may or may not have changed. The I/O error is
+    /// [`source()`](std::error::Error::source), not part of the message.
+    #[error("failed while running the `{program}` process")]
     #[non_exhaustive]
     Run {
         program: &'static str,

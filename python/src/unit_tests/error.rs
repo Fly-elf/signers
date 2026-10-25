@@ -39,12 +39,21 @@ fn payload<'py>(py: Python<'py>, err: Error) -> Bound<'py, PyDict> {
         .expect("the payload is a dict in args[0]")
 }
 
+/// The Display text followed by each `source()`, as `error: cause: ...`.
+fn walked(err: &Error) -> String {
+    std::iter::successors(Some(err as &dyn std::error::Error), |e| e.source())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(": ")
+}
+
 /// Every key of `expected` (a Python dict literal) has that value in the
-/// payload, `None` meaning absent or `None`; `message` is the Display text.
+/// payload, `None` meaning absent or `None`; `message` is the Display text
+/// followed by its causes.
 fn assert_payload(err: Error, expected: &str) {
     Python::initialize();
     Python::attach(|py| {
-        let message = err.to_string();
+        let message = walked(&err);
         let payload = payload(py, err);
         let expected = CString::new(expected).unwrap();
         let expected = py.eval(&expected, None, None).unwrap();
@@ -198,5 +207,45 @@ fn batch_failures_are_path_payload_pairs_in_order_and_nest() {
                 .unwrap();
         let expected = py.eval(&expected, None, None).unwrap();
         assert!(shape.eq(&expected).unwrap(), "{shape}");
+    });
+}
+
+/// Python shows only the message, so it carries the causes Display leaves to
+/// `source()`, at every level of a batch.
+#[test]
+fn the_message_carries_the_causes_of_the_error() {
+    let access = || Error::path_access("/t/x".into(), io::Error::other("denied"));
+    let spawn = || process(ProcessError::spawn("codesign", io::Error::other("no fork")));
+    let batch = Error::Batch(vec![("/t/x".into(), access()), ("/t/y".into(), spawn())]);
+    let cases = [
+        (access(), "could not access /t/x: denied"),
+        (spawn(), "could not start `codesign`: no fork"),
+        (
+            batch,
+            "2 target(s) failed: /t/x: could not access /t/x: denied; /t/y: could not start `codesign`: no fork",
+        ),
+    ];
+    Python::initialize();
+    Python::attach(|py| {
+        for (err, expected) in cases {
+            let payload = payload(py, err);
+            let message: String = payload
+                .get_item("message")
+                .unwrap()
+                .unwrap()
+                .extract()
+                .unwrap();
+            assert_eq!(message, expected);
+        }
+        let nested = payload(py, Error::Batch(vec![("/t/x".into(), access())]));
+        let failures = nested.get_item("failures").unwrap().unwrap();
+        let locals = PyDict::new(py);
+        locals.set_item("failures", failures).unwrap();
+        let message: String = py
+            .eval(c"failures[0][1]['message']", None, Some(&locals))
+            .unwrap()
+            .extract()
+            .unwrap();
+        assert_eq!(message, "could not access /t/x: denied");
     });
 }
